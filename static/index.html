@@ -110,6 +110,14 @@ textarea{resize:vertical;min-height:110px}
 .chip.done{background:rgba(34,197,94,.18);color:#6fdc98}
 .chip.failed,.chip.blocked{background:rgba(239,68,68,.2);color:#ff8a8a}
 .chip.waiting_approval{background:rgba(245,158,11,.2);color:#ffc062}
+.chip.waiting_subtasks{background:rgba(168,85,247,.2);color:#d3a6ff}
+.tree{margin:8px 0 0 4px;border-left:2px solid var(--line);padding-left:10px}
+.tree details{margin:5px 0}
+.tree summary{cursor:pointer;display:flex;gap:6px;align-items:center;font-size:12px}
+.tree summary .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree .who{color:var(--mute)}
+.tree pre{font-size:11px;max-height:200px}
+.tlabel{font-size:11px;letter-spacing:.06em;color:var(--mute);text-transform:uppercase;margin-top:10px}
 .chip.queued{background:rgba(234,179,8,.18);color:#f0cd5a}
 .logrow{font-size:12px;border-bottom:1px solid var(--line);padding:6px 0}
 .logrow .ts{color:var(--mute)}
@@ -177,13 +185,17 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const W = 200, H = 86;
 const COLORS = ['#ec4899','#3b82f6','#22c55e','#a855f7','#f59e0b','#06b6d4'];
-const STATUS = {todo:'Offen',queued:'Wartet',running:'Läuft',waiting_approval:'Freigabe nötig',done:'Fertig',failed:'Fehler',blocked:'Blockiert'};
+const STATUS = {todo:'Offen',queued:'Wartet',running:'Läuft',waiting_subtasks:'Wartet auf Team',waiting_approval:'Freigabe nötig',done:'Fertig',failed:'Fehler',blocked:'Blockiert'};
+const fmtTok = n => n>=1000 ? (n/1000).toFixed(1)+'k Tok' : n+' Tok';
+const MGR = {delegate:true,judge:true,auto_run:true};
 
 const TPL = {
-  ceo:{name:'CEO',role:'Chief Executive Officer',perms:{delegate:true},
-    prompt:'Du führst das Team. Zerlege das Projektziel in klare Teilaufgaben, delegiere sie an die passenden Mitarbeiter und fasse deren Berichte knapp zusammen. Antworte auf Deutsch.'},
-  cto:{name:'CTO',role:'Chief Technology Officer',perms:{delegate:true},
-    prompt:'Du verantwortest die Technik. Plane die Umsetzung, delegiere Programmieraufgaben an Entwickler und prüfe deren Ergebnisse. Antworte auf Deutsch.'},
+  ceo:{name:'CEO',role:'Chief Executive Officer',perms:MGR,
+    prompt:'Du führst das Unternehmen. Zerlege das Projektziel in klare Aufträge, verteile sie an die passenden Mitarbeiter, prüfe deren Berichte kritisch und gib unzureichende Arbeit mit konkretem Feedback zurück. Dein Endergebnis fasst alles verständlich zusammen. Antworte auf Deutsch.'},
+  cto:{name:'CTO',role:'Chief Technology Officer',perms:MGR,
+    prompt:'Du verantwortest die Technik. Plane die Umsetzung, verteile Programmieraufgaben, prüfe die Ergebnisse auf Korrektheit und Vollständigkeit und gib Mängel zurück. Antworte auf Deutsch.'},
+  lead:{name:'Teamleiter',role:'Teamleiter',perms:MGR,
+    prompt:'Du leitest ein Team. Teile deinen Auftrag in Teilaufgaben für deine Mitarbeiter auf, prüfe ihre Berichte und fasse sie zu einem sauberen Ergebnis für deinen Vorgesetzten zusammen. Antworte auf Deutsch.'},
   dev:{name:'Entwickler',role:'Software Engineer',perms:{write_files:true},
     prompt:'Du schreibst sauberen, lauffähigen Python-Code mit kurzen Kommentaren. Speichere Code mit write_file. Erkläre kurz, was du getan hast.'},
   mkt:{name:'Marketing',role:'Chief Marketing Officer',perms:{write_files:true},
@@ -192,7 +204,7 @@ const TPL = {
     prompt:'Du sammelst Fakten und fasst sie strukturiert zusammen. Kennzeichne Unsicheres als unsicher.'},
   custom:{name:'Neuer Agent',role:'',perms:{},prompt:''}
 };
-const PAL = [['ceo','👑 CEO'],['cto','🧠 CTO'],['dev','</> Entwickler'],['mkt','📣 Marketing'],['res','🔎 Recherche'],['custom','＋ Leer']];
+const PAL = [['ceo','👑 CEO'],['cto','🧠 CTO'],['lead','👥 Teamleiter'],['dev','</> Entwickler'],['mkt','📣 Marketing'],['res','🔎 Recherche'],['custom','＋ Leer']];
 
 const S = {projects:[], pid:null, graph:null, sel:null, providers:[], tab:'set', openTasks:new Set(), logs:[], info:{auth:false,allow_shell:false,allow_cli:false}};
 const V = {x:80,y:40,s:1};
@@ -262,16 +274,14 @@ function render(){
     const el = document.createElement('div');
     el.className = 'node'+(a.id===S.sel?' sel':'');
     el.dataset.id = a.id; el.style.left=a.x+'px'; el.style.top=a.y+'px';
-    const c = a.counts||{}; const running = (c.running||0)+(c.queued||0);
-    const over = a.budget_tokens>0 && a.used_tokens>=a.budget_tokens;
-    const cls = a.paused?'paused':over?'over':(c.waiting_approval?'wait':running?'run':'');
-    const pct = a.budget_tokens>0 ? Math.min(100,a.used_tokens/a.budget_tokens*100) : 0;
+    const c = a.counts||{}; const running = (c.running||0)+(c.queued||0)+(c.waiting_subtasks||0);
+    const cls = a.paused?'paused':(c.waiting_approval?'wait':running?'run':'');
     const prov = (S.providers.find(p=>p.id===a.provider)||{}).label || a.provider;
     el.innerHTML = `<div class="port top"></div>
       <div class="n-head"><div class="n-ico">${esc((a.name||'?')[0].toUpperCase())}</div>
         <div class="n-txt"><div class="n-name">${esc(a.name)}</div><div class="n-role">${esc(a.role||'—')}</div><div class="n-prov">${esc(prov)}</div></div>
         <span class="dot ${cls}"></span></div>
-      <div class="n-foot"><span>▶${running} ✓${c.done||0}${c.todo?` ·${c.todo} offen`:''}</span><div class="n-bar"><i style="width:${pct}%"></i></div></div>
+      <div class="n-foot"><span>▶${running} ✓${c.done||0}${c.todo?` ·${c.todo} offen`:''}${c.failed?` ·${c.failed} ✗`:''}</span><span style="margin-left:auto">${fmtTok(a.used_tokens||0)}</span></div>
       <div class="port bot" title="Ziehen, um einen Mitarbeiter zu verbinden"></div>`;
     nodes.appendChild(el);
   });
@@ -405,7 +415,6 @@ function drawSettings(a){
   const others=S.graph.agents.filter(x=>x.id!==a.id);
   const prov=S.providers.map(p=>`<option value="${p.id}" ${p.id===a.provider?'selected':''}>${esc(p.label)}${p.configured?'':' — kein Key'}</option>`).join('');
   const par=`<option value="">— keiner (oberste Ebene) —</option>`+others.map(o=>`<option value="${o.id}" ${o.id===a.parent_id?'selected':''}>${esc(o.name)}</option>`).join('');
-  const pct=a.budget_tokens>0?Math.min(100,a.used_tokens/a.budget_tokens*100):0;
   const pm=a.perms;
   $('#pbody').innerHTML=`
     <label>Name</label><input type="text" id="f_name" value="${esc(a.name)}">
@@ -419,14 +428,13 @@ function drawSettings(a){
     <label>Arbeitsanweisung – wie soll er arbeiten, was kann er?</label>
     <textarea id="f_sys">${esc(a.system_prompt)}</textarea>
     <label>Rechte</label>
+    <div style="color:var(--mute);font-size:12px;margin-bottom:6px">Chefs lesen immer die Berichte ihrer Mitarbeiter und arbeiten damit weiter.</div>
     <div class="chk"><input type="checkbox" id="p_delegate" ${pm.delegate?'checked':''}><div>Darf Aufgaben an direkte Mitarbeiter delegieren</div></div>
+    <div class="chk"><input type="checkbox" id="p_judge" ${pm.judge?'checked':''}><div>Darf Ergebnisse beurteilen und zurückgeben<small>Abnehmen oder mit Feedback zur Überarbeitung zurückschicken</small></div></div>
     <div class="chk"><input type="checkbox" id="p_auto" ${pm.auto_run?'checked':''}><div>Delegierte Aufgaben starten automatisch<small>aus = du startest sie selbst (sicherer)</small></div></div>
     <div class="chk"><input type="checkbox" id="p_files" ${pm.write_files?'checked':''}><div>Darf Dateien schreiben<small>nur im Projektordner auf dem Pi</small></div></div>
     <div class="chk"><input type="checkbox" id="p_shell" ${pm.shell?'checked':''} ${S.info.allow_shell?'':'disabled'}><div>Darf Shell-Befehle vorschlagen<small>${S.info.allow_shell?'läuft erst nach deiner Freigabe (Sidebar „Freigaben“)':'auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env)'}</small></div></div>
-    <label>Monatsbudget (Tokens, 0 = unbegrenzt)</label>
-    <input type="number" id="f_bud" min="0" value="${a.budget_tokens}">
-    <div class="bud"><i style="width:${pct}%"></i></div>
-    <small style="color:var(--mute)">${a.used_tokens.toLocaleString('de-AT')} Tokens diesen Monat verbraucht. Bei 100 % stoppt der Agent.</small>
+    <small style="color:var(--mute)">${(a.used_tokens||0).toLocaleString('de-AT')} Tokens diesen Monat verbraucht (nur zur Info, kein Limit).</small>
     <div class="chk" style="margin-top:12px"><input type="checkbox" id="f_pause" ${a.paused?'checked':''}><div>Agent pausiert</div></div>
     <div class="row">
       <button class="btn pri" id="saveAg">Speichern</button>
@@ -435,8 +443,8 @@ function drawSettings(a){
   $('#f_prov').onchange=e=>$('#cliwrap').style.display=e.target.value==='cli'?'block':'none';
   $('#saveAg').onclick=async()=>{
     const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,provider:$('#f_prov').value,model:$('#f_model').value.trim(),
-      system_prompt:$('#f_sys').value,budget_tokens:+$('#f_bud').value||0,paused:$('#f_pause').checked,
-      perms:{delegate:$('#p_delegate').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,shell:$('#p_shell').checked}};
+      system_prompt:$('#f_sys').value,paused:$('#f_pause').checked,
+      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,shell:$('#p_shell').checked}};
     if($('#cliwrap').style.display!=='none') body.cli_command=$('#f_cli').value;
     const np=$('#f_parent').value; body.parent_id=np?+np:null;
     await api('/agents/'+a.id,'PUT',body); toast('Gespeichert'); $('#toast').style.borderColor='var(--green)';
@@ -446,6 +454,13 @@ function drawSettings(a){
   $('#delAg').onclick=async()=>{ if(confirm('Agent „'+a.name+'“ mit seinen Aufgaben löschen?')){ await api('/agents/'+a.id,'DELETE'); closePanel(); refresh(true);} };
 }
 
+function treeHtml(list){
+  return list.map(c=>`<details ${S.openTasks.has('c'+c.id)?'open':''} data-cid="${c.id}">
+    <summary><span class="chip ${c.status}">${STATUS[c.status]||c.status}</span><span class="t">${esc(c.title)}</span><span class="who">${esc(c.agent_name||'?')}${c.rounds?` · ${c.rounds}× überarbeitet`:''}</span></summary>
+    ${c.result?`<pre>${esc(c.result)}</pre>`:''}
+    ${(c.children&&c.children.length)?`<div class="tree">${treeHtml(c.children)}</div>`:''}
+  </details>`).join('');
+}
 async function loadTasks(){
   const a=agentById(S.sel); if(!a) return;
   const list=$('#tlist'); if(!list) return;
@@ -456,14 +471,16 @@ async function loadTasks(){
       <div class="tb">
         ${t.description?`<div style="color:var(--mute);font-size:12px;white-space:pre-wrap">${esc(t.description)}</div>`:''}
         ${t.result?`<pre>${esc(t.result)}</pre>`:''}
+        ${(t.children&&t.children.length)?`<div class="tlabel">Team-Arbeit</div><div class="tree">${treeHtml(t.children)}</div>`:''}
         <div class="row" style="margin-top:6px">
-          ${['todo','failed','blocked','done'].includes(t.status)?`<button class="btn sm pri" data-run="${t.id}">▶ ${t.status==='done'?'Nochmal':'Starten'}</button>`:''}
+          ${['todo','failed','blocked','done'].includes(t.status)?`<button class="btn sm pri" data-run="${t.id}" data-kids="${(t.children&&t.children.length)?1:0}">▶ ${t.status==='done'?'Nochmal':'Starten'}</button>`:''}
           <button class="btn sm danger" data-del="${t.id}">Löschen</button>
         </div>
       </div>
     </details>`).join(''):'<div style="color:var(--mute)">Noch keine Aufgaben.</div>';
-  list.querySelectorAll('details').forEach(d=>d.addEventListener('toggle',()=>{ d.open?S.openTasks.add(+d.dataset.id):S.openTasks.delete(+d.dataset.id); }));
-  list.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{ await api('/tasks/'+b.dataset.run+'/run','POST',{}); refresh(true); });
+  list.querySelectorAll('details.task').forEach(d=>d.addEventListener('toggle',()=>{ d.open?S.openTasks.add(+d.dataset.id):S.openTasks.delete(+d.dataset.id); }));
+  list.querySelectorAll('.tree details').forEach(d=>d.addEventListener('toggle',e=>{ e.stopPropagation(); const k='c'+d.dataset.cid; d.open?S.openTasks.add(k):S.openTasks.delete(k); }));
+  list.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{ if(b.dataset.kids==='1' && !confirm('Die bisherigen Aufgaben des Teams werden gelöscht und alles startet neu. Fortfahren?')) return; await api('/tasks/'+b.dataset.run+'/run','POST',{}); refresh(true); });
   list.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ if(confirm('Aufgabe löschen?')){ await api('/tasks/'+b.dataset.del,'DELETE'); refresh(true);} });
 }
 function drawTasks(a){

@@ -46,7 +46,7 @@ DB_PATH = os.environ.get("PCL_DB", str(BASE / "data.db"))
 WORKSPACE = Path(os.environ.get("PCL_WORKSPACE", str(BASE / "workspace"))).resolve()
 WORKSPACE.mkdir(parents=True, exist_ok=True)
 TOKEN = os.environ.get("APP_TOKEN", "")  # = Passwort fuer die Login-Seite
-MAX_DEPTH = int(os.environ.get("PCL_MAX_DEPTH", "4"))
+MAX_DEPTH = int(os.environ.get("PCL_MAX_DEPTH", "8"))
 ALLOW_CLI = os.environ.get("PCL_ALLOW_CLI", "0") == "1"
 # Shell-Ausfuehrung ist standardmaessig AUS (auch nach Freigabe). Nur bewusst aktivieren.
 ALLOW_SHELL = os.environ.get("PCL_ALLOW_SHELL", "0") == "1"
@@ -96,7 +96,15 @@ PROVIDERS = {
     "mock": {"label": "Mock (Test, kostenlos)", "url": None, "key_env": None, "model": "mock"},
 }
 
-DEFAULT_PERMS = {"delegate": False, "auto_run": False, "write_files": False, "shell": False}
+# delegate  = darf Aufgaben an direkte Mitarbeiter verteilen (Chefs lesen danach IMMER deren Berichte)
+# judge     = darf Ergebnisse beurteilen und zur Ueberarbeitung zurueckgeben
+# auto_run  = verteilte Aufgaben starten sofort (wie in einer Firma: Auftrag erteilt = es geht los)
+DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False}
+
+MAX_REVISIONS = int(os.environ.get("PCL_MAX_REVISIONS", "2"))   # wie oft ein Chef dieselbe Aufgabe zurueckgeben darf
+MAX_REVIEW_PASSES = int(os.environ.get("PCL_MAX_REVIEW_PASSES", "4"))  # Pruefrunden pro Chef-Aufgabe
+MAX_CONTEXT_CHARS = int(os.environ.get("PCL_MAX_CONTEXT", "24000"))   # Platz fuer Mitarbeiterberichte im Prompt
+FINISHED = ("done", "failed", "blocked")
 
 # ------------------------------------------------------------------ Datenbank
 SCHEMA = """
@@ -111,7 +119,8 @@ CREATE TABLE IF NOT EXISTS agents(
 CREATE TABLE IF NOT EXISTS tasks(
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, agent_id INTEGER NOT NULL,
   parent_task_id INTEGER, title TEXT NOT NULL, description TEXT DEFAULT '',
-  status TEXT DEFAULT 'todo', result TEXT DEFAULT '', created REAL, updated REAL);
+  status TEXT DEFAULT 'todo', result TEXT DEFAULT '', created REAL, updated REAL,
+  feedback TEXT DEFAULT '', prev_result TEXT DEFAULT '', rounds INTEGER DEFAULT 0, passes INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS approvals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, task_id INTEGER, agent_id INTEGER,
   kind TEXT, payload TEXT, status TEXT DEFAULT 'pending', output TEXT DEFAULT '', created REAL);
@@ -133,10 +142,22 @@ def init_db():
     with closing(conn()) as c:
         c.execute("PRAGMA journal_mode=WAL")
         c.executescript(SCHEMA)
+        # Migration alter Datenbanken (Spalten nachruesten)
+        have = {r["name"] for r in c.execute("PRAGMA table_info(tasks)")}
+        for col, ddl in (("feedback", "TEXT DEFAULT ''"), ("prev_result", "TEXT DEFAULT ''"),
+                         ("rounds", "INTEGER DEFAULT 0"), ("passes", "INTEGER DEFAULT 0")):
+            if col not in have:
+                c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {ddl}")
         c.execute(
             "UPDATE tasks SET status='failed', result=result||'\n\n(Abgebrochen: Neustart)' "
             "WHERE status='running'"
         )
+        # Chefs, die auf ihr Team warten, nach einem Neustart pruefen: ist das Team schon fertig?
+        for t in c.execute("SELECT id FROM tasks WHERE status='waiting_subtasks'").fetchall():
+            open_kids = c.execute("SELECT COUNT(*) FROM tasks WHERE parent_task_id=? AND status NOT IN "
+                                  "('done','failed','blocked')", (t["id"],)).fetchone()[0]
+            if open_kids == 0:
+                c.execute("UPDATE tasks SET status='queued' WHERE id=?", (t["id"],))
         c.commit()
 
 
@@ -169,9 +190,7 @@ def perms_of(agent):
         p = json.loads(agent.get("perms") or "{}")
     except Exception:
         p = {}
-    out = dict(DEFAULT_PERMS)
-    out.update({k: bool(p.get(k)) for k in DEFAULT_PERMS})
-    return out
+    return {k: (bool(p[k]) if k in p else d) for k, d in DEFAULT_PERMS.items()}
 
 
 def month_start():
@@ -283,46 +302,84 @@ def call_llm(agent, messages):
     raise RuntimeError(last or "Unbekannter Fehler")
 
 
+REVIEW_MARKER = "BERICHTE DEINER MITARBEITER"
+STATUS_DE = {"done": "fertig", "failed": "FEHLGESCHLAGEN", "blocked": "BLOCKIERT (Agent pausiert)",
+             "todo": "noch nicht gestartet", "queued": "wartet", "running": "laeuft",
+             "waiting_subtasks": "wartet auf Team", "waiting_approval": "wartet auf Freigabe"}
+
+
 def mock_llm(agent, messages):
-    """Offline-Test: delegiert an alle direkten Mitarbeiter, wenn erlaubt."""
+    """Offline-Test ohne Key: Chefs delegieren an alle Mitarbeiter, pruefen danach und melden hoch."""
     user = messages[-1]["content"]
-    out = {"result": f"[Mock {agent['name']}] Auftrag bearbeitet: {user[:120]}"}
+    p = perms_of(agent)
     kids = q("SELECT name FROM agents WHERE parent_id=?", (agent["id"],))
-    if perms_of(agent)["delegate"] and kids and "[Teilaufgabe]" not in user:
-        out["delegate"] = [
-            {"to": k["name"], "title": "[Teilaufgabe] " + user.split("\n")[0][:60],
-             "description": "Bitte uebernehmen: " + user[:200]} for k in kids]
-    if perms_of(agent)["write_files"]:
-        out["write_file"] = [{"path": f"{agent['name'].lower()}_notiz.txt",
-                              "content": "Mock-Datei\n" + user[:200]}]
+    title = user.split("\n")[0].replace("Aufgabe: ", "")
+    redo = "ÜBERARBEITUNGSAUFTRAG" in user
+    pre = "Ueberarbeitet: " if redo else ""
+    if user.startswith(REVIEW_MARKER):
+        out = {"result": f"[Mock {agent['name']}] {pre}Gesamtbericht nach Pruefung der Mitarbeiterberichte."}
+        if p["judge"] and "REVISE" in user and "Ueberarbeitet" not in user:
+            ids = re.findall(r"\[Aufgabe #(\d+)\]", user)
+            if ids:
+                out["review"] = [{"task_id": int(ids[0]), "verdict": "revise", "feedback": "Bitte praezisieren."}]
+        return json.dumps(out, ensure_ascii=False), 50
+    out = {"result": f"[Mock {agent['name']}] {pre}Auftrag bearbeitet: {title[:100]}"}
+    if p["delegate"] and kids:
+        out["result"] = f"[Mock {agent['name']}] Plan: Aufgabe an Team verteilt."
+        out["delegate"] = [{"to": k["name"], "title": title[:80],
+                            "description": "Bitte uebernehmen: " + user[:200]} for k in kids]
+    if p["write_files"]:
+        out["write_file"] = [{"path": f"{agent['name'].lower()}_notiz.txt", "content": "Mock-Datei\n" + user[:200]}]
     return json.dumps(out, ensure_ascii=False), 50
 
 
 # ---------------------------------------------------------------- Prompt bauen
-def build_system(agent, project):
+def team_of(agent):
+    return q("SELECT id, name, role FROM agents WHERE parent_id=? ORDER BY id", (agent["id"],))
+
+
+def build_system(agent, project, mode, final_only=False):
+    """mode: 'work' = selbst erledigen, 'plan' = Chef plant/verteilt, 'review' = Chef liest Berichte und beurteilt."""
     perms = perms_of(agent)
     parent = q1("SELECT name, role FROM agents WHERE id=?", (agent["parent_id"],)) if agent["parent_id"] else None
-    kids = q("SELECT name, role FROM agents WHERE parent_id=?", (agent["id"],))
-    s = [f"Du bist '{agent['name']}' (Rolle: {agent['role'] or 'Agent'}) in einem KI-Team.",
+    kids = team_of(agent)
+    s = [f"Du bist '{agent['name']}' (Rolle: {agent['role'] or 'Agent'}) in einem KI-Unternehmen, das wie eine echte Firma arbeitet.",
          f"Projekt: {project['name']}", f"Projektziel: {project['goal'] or '(nicht gesetzt)'}"]
     if parent:
-        s.append(f"Dein Vorgesetzter: {parent['name']} ({parent['role']}).")
+        s.append(f"Dein Vorgesetzter: {parent['name']} ({parent['role']}). Er prueft dein Ergebnis und kann es zur Ueberarbeitung zurueckgeben.")
     if kids:
-        s.append("Deine direkten Mitarbeiter: " + ", ".join(f"{k['name']} ({k['role']})" for k in kids))
+        s.append("Dein Team (direkte Mitarbeiter): " + ", ".join(f"{k['name']} ({k['role']})" for k in kids))
     if agent["system_prompt"].strip():
         s.append("\nArbeitsanweisung:\n" + agent["system_prompt"].strip())
 
-    fields = ['"result": "dein Ergebnis / Bericht als Text"']
+    fields = ['"result": "Text"']
     rules = []
-    if perms["delegate"] and kids:
+    if mode == "plan":
+        fields[0] = '"result": "dein kurzer Plan ODER, wenn du ohne Team arbeitest, das vollstaendige Ergebnis"'
         fields.append('"delegate": [{"to": "Name des Mitarbeiters", "title": "...", "description": "..."}]')
-        rules.append("delegate nur an deine direkten Mitarbeiter (exakter Name).")
-    if perms["write_files"]:
-        fields.append('"write_file": [{"path": "relativer/pfad.txt", "content": "..."}]')
-        rules.append("write_file schreibt nur in dein Projekt-Arbeitsverzeichnis.")
-    if perms["shell"]:
-        fields.append('"shell": ["befehl"]')
-        rules.append("shell-Befehle werden erst nach menschlicher Freigabe ausgefuehrt.")
+        rules.append("Du bist Fuehrungskraft: Entweder verteilst du Teilaufgaben an dein Team (delegate) oder du erledigst die Aufgabe selbst "
+                     "(dann kein delegate). Mitarbeiter kennen NUR ihre Aufgabe, nicht deine: gib in description alles mit, was sie brauchen "
+                     "(Ziel, Umfang, gewuenschtes Format, Qualitaetskriterien). Delegiere nur an exakt benannte Mitarbeiter.")
+    elif mode == "review":
+        fields[0] = '"result": "konsolidiertes Gesamtergebnis, das an deinen Vorgesetzten bzw. als Endergebnis geht"'
+        rules.append("Du hast die Berichte deines Teams gelesen. Pruefe sie kritisch gegen die urspruengliche Aufgabe, fasse zusammen und entscheide.")
+        if final_only:
+            rules.append("Das ist deine LETZTE Pruefrunde: gib jetzt das Gesamtergebnis ab, ohne weitere Aufgaben oder Rueckgaben.")
+        else:
+            if perms["judge"]:
+                fields.append('"review": [{"task_id": 12, "verdict": "approve oder revise", "feedback": "konkret, was besser werden muss"}]')
+                rules.append("Mit review gibst du unzureichende Arbeit mit konkretem Feedback zurueck (verdict revise). Was ausreicht, laesst du weg "
+                             "oder markierst approve. Gibst du nichts zurueck, ist deine Aufgabe mit dem Gesamtergebnis abgeschlossen.")
+            if perms["delegate"] and kids:
+                fields.append('"delegate": [{"to": "Name", "title": "...", "description": "..."}]')
+                rules.append("delegate ist hier optional und nur fuer Folgeaufgaben gedacht.")
+    if mode in ("work", "review"):
+        if perms["write_files"]:
+            fields.append('"write_file": [{"path": "relativer/pfad.txt", "content": "..."}]')
+            rules.append("write_file schreibt nur in dein Projekt-Arbeitsverzeichnis.")
+        if perms["shell"]:
+            fields.append('"shell": ["befehl"]')
+            rules.append("shell-Befehle werden erst nach menschlicher Freigabe ausgefuehrt.")
     s.append("\nAntworte AUSSCHLIESSLICH mit einem JSON-Objekt, ohne Text davor oder danach:\n{"
              + ", ".join(fields) + "}\nNur 'result' ist Pflicht. " + " ".join(rules)
              + " Alles ausser den hier genannten Aktionen ist dir nicht erlaubt.")
@@ -351,8 +408,40 @@ def task_depth(task):
     return d
 
 
+def clip(text, n):
+    text = text or ""
+    return text if len(text) <= n else text[:n] + f"\n[... gekuerzt, {len(text) - n} Zeichen weggelassen]"
+
+
+def work_prompt(t):
+    parts = [f"Aufgabe: {t['title']}\n\n{t['description']}".strip()]
+    if t.get("parent_task_id"):
+        pt = q1("SELECT t.title, a.name, a.role FROM tasks t LEFT JOIN agents a ON a.id=t.agent_id WHERE t.id=?",
+                (t["parent_task_id"],))
+        if pt:
+            parts.append(f"Auftraggeber: {pt['name']} ({pt['role']}). Dessen uebergeordnete Aufgabe: {pt['title']}")
+    if t.get("feedback"):
+        parts.append("ÜBERARBEITUNGSAUFTRAG deines Vorgesetzten:\n" + t["feedback"]
+                     + "\n\nDein bisheriges Ergebnis (verbessere es gezielt):\n" + clip(t.get("prev_result", ""), 6000))
+    return "\n\n".join(parts)
+
+
+def review_prompt(t, child_tasks):
+    parts = [f"{REVIEW_MARKER} (du hast alle Berichte gelesen, sie stehen unten).",
+             f"Urspruengliche Aufgabe: {t['title']}\n{t['description']}".strip()]
+    if t.get("feedback"):
+        parts.append("ÜBERARBEITUNGSAUFTRAG deines Vorgesetzten an dich:\n" + t["feedback"])
+    per = min(6000, max(800, MAX_CONTEXT_CHARS // max(1, len(child_tasks))))
+    for c in child_tasks:
+        ag = q1("SELECT name, role FROM agents WHERE id=?", (c["agent_id"],)) or {"name": "?", "role": ""}
+        parts.append(f"--- [Aufgabe #{c['id']}] {c['title']} | Mitarbeiter: {ag['name']} ({ag['role']}) | "
+                     f"Status: {STATUS_DE.get(c['status'], c['status'])} | Rueckgaben: {c['rounds']}/{MAX_REVISIONS}\n"
+                     + clip(c["result"], per))
+    return "\n\n".join(parts)
+
+
 # -------------------------------------------------------------- Task ausfuehren
-def set_task(tid, status=None, result=None):
+def set_task(tid, status=None, result=None, **extra):
     sets, args = ["updated=?"], [time.time()]
     if status is not None:
         sets.append("status=?")
@@ -360,20 +449,33 @@ def set_task(tid, status=None, result=None):
     if result is not None:
         sets.append("result=?")
         args.append(result)
+    for k, v in extra.items():
+        sets.append(f"{k}=?")
+        args.append(v)
     args.append(tid)
     ex(f"UPDATE tasks SET {', '.join(sets)} WHERE id=?", args)
 
 
-def report_up(task):
-    pt = task.get("parent_task_id")
+def wake_parent(t):
+    """Wenn alle Mitarbeiter-Aufgaben fertig sind, kommt der Chef wieder dran (Pruefen + Bericht)."""
+    pt = (t or {}).get("parent_task_id")
     if not pt:
         return
     parent = q1("SELECT * FROM tasks WHERE id=?", (pt,))
-    ag = q1("SELECT name FROM agents WHERE id=?", (task["agent_id"],))
-    cur = q1("SELECT result FROM tasks WHERE id=?", (task["id"],))
-    if parent and ag and cur:
-        add = f"\n\n--- Bericht von {ag['name']}: {task['title']} ---\n{cur['result'][:2000]}"
-        set_task(pt, result=(parent["result"] + add)[:20000])
+    if not parent or parent["status"] != "waiting_subtasks":
+        return
+    open_kids = q1("SELECT COUNT(*) c FROM tasks WHERE parent_task_id=? AND status NOT IN ('done','failed','blocked')",
+                   (pt,))["c"]
+    if open_kids == 0:
+        set_task(pt, "queued")
+        log("review_wakeup", "Alle Mitarbeiter fertig - Chef prueft die Berichte", parent["project_id"], parent["agent_id"], pt)
+
+
+def finish(tid, status, result=None):
+    set_task(tid, status, result)
+    if status in FINISHED:
+        set_task(tid, feedback="", prev_result="")
+        wake_parent(q1("SELECT * FROM tasks WHERE id=?", (tid,)))
 
 
 def execute_task(tid):
@@ -383,52 +485,87 @@ def execute_task(tid):
     a = q1("SELECT * FROM agents WHERE id=?", (t["agent_id"],))
     p = q1("SELECT * FROM projects WHERE id=?", (t["project_id"],))
     if not a or not p:
-        set_task(tid, "failed", "Agent oder Projekt existiert nicht mehr.")
+        finish(tid, "failed", "Agent oder Projekt existiert nicht mehr.")
         return
     pid, aid = p["id"], a["id"]
     if a["paused"]:
-        set_task(tid, "blocked", "Agent ist pausiert.")
+        finish(tid, "blocked", "Agent ist pausiert.")
         log("blocked", "Agent pausiert", pid, aid, tid)
         return
-    used = used_tokens(aid)
-    if a["budget_tokens"] > 0 and used >= a["budget_tokens"]:
-        set_task(tid, "blocked", "Monatsbudget erreicht. Budget erhoehen oder naechsten Monat abwarten.")
-        log("budget_stop", f"{used}/{a['budget_tokens']}", pid, aid, tid)
-        return
 
-    set_task(tid, "running", "")
-    log("task_start", t["title"], pid, aid, tid)
     perms = perms_of(a)
-    user = f"Aufgabe: {t['title']}\n\n{t['description']}".strip()
-    messages = [{"role": "system", "content": build_system(a, p)},
+    kids = team_of(a)
+    manager = perms["delegate"] and bool(kids)
+    child_tasks = q("SELECT * FROM tasks WHERE parent_task_id=? ORDER BY id", (tid,))
+    depth = task_depth(t)
+    can_delegate = manager and depth < MAX_DEPTH
+    if child_tasks:
+        mode = "review"
+    elif can_delegate:
+        mode = "plan"
+    else:
+        mode = "work"
+    final_only = mode == "review" and t["passes"] >= MAX_REVIEW_PASSES
+
+    set_task(tid, "running")
+    log("task_start", f"{t['title']} [{mode}]", pid, aid, tid)
+    user = review_prompt(t, child_tasks) if mode == "review" else work_prompt(t)
+    messages = [{"role": "system", "content": build_system(a, p, mode, final_only)},
                 {"role": "user", "content": user}]
     try:
         text, tokens = call_llm(a, messages)
     except Exception as e:
-        set_task(tid, "failed", f"Fehler: {e}")
+        finish(tid, "failed", f"Fehler: {e}")
         log("task_failed", e, pid, aid, tid)
         return
-
     ex("INSERT INTO usage(agent_id,ts,tokens) VALUES(?,?,?)", (aid, time.time(), tokens))
-    if a["budget_tokens"] > 0 and used < 0.8 * a["budget_tokens"] <= used + tokens:
-        log("budget_warn", f"80% erreicht ({used + tokens}/{a['budget_tokens']})", pid, aid, tid)
 
     data = parse_output(text)
     result = str(data.get("result") or text).strip()
     notes = []
+    revised = created = 0
 
-    # --- delegieren
+    # --- Urteil: Arbeit zur Ueberarbeitung zurueckgeben (nur mit Recht 'judge')
+    rv = data.get("review")
+    if rv:
+        if mode != "review" or final_only:
+            notes.append("Rueckgabe nur in einer Pruefrunde moeglich - ignoriert.")
+        elif not perms["judge"]:
+            notes.append("Beurteilen/Zurueckgeben nicht erlaubt - ignoriert.")
+            log("denied", "review", pid, aid, tid)
+        else:
+            by_id = {c["id"]: c for c in child_tasks}
+            for item in (rv if isinstance(rv, list) else [])[:20]:
+                try:
+                    ct = by_id.get(int(item.get("task_id")))
+                except (TypeError, ValueError):
+                    ct = None
+                if not ct or str(item.get("verdict", "")).lower() != "revise":
+                    continue
+                feedback = str(item.get("feedback") or "Bitte ueberarbeiten.")[:3000]
+                cag = q1("SELECT name FROM agents WHERE id=?", (ct["agent_id"],)) or {"name": "?"}
+                if ct["rounds"] >= MAX_REVISIONS:
+                    notes.append(f"{cag['name']}: maximale Rueckgaben ({MAX_REVISIONS}) erreicht - Ergebnis uebernommen.")
+                    continue
+                set_task(ct["id"], "queued", feedback=feedback, prev_result=ct["result"], rounds=ct["rounds"] + 1)
+                log("revision_requested", f"an {cag['name']}: {feedback}", pid, aid, ct["id"])
+                notes.append(f"Zur Ueberarbeitung zurueckgegeben an {cag['name']}: {feedback[:120]}")
+                revised += 1
+
+    # --- Delegieren
     dele = data.get("delegate")
     if dele:
         if not perms["delegate"]:
             notes.append("Delegieren nicht erlaubt - ignoriert.")
             log("denied", "delegate", pid, aid, tid)
-        elif task_depth(t) >= MAX_DEPTH:
-            notes.append(f"Max. Delegationstiefe ({MAX_DEPTH}) erreicht - ignoriert.")
+        elif final_only:
+            notes.append("Letzte Pruefrunde: keine neuen Aufgaben - ignoriert.")
+        elif not can_delegate:
+            notes.append(f"Keine Mitarbeiter bzw. max. Delegationstiefe ({MAX_DEPTH}) erreicht - ignoriert.")
         else:
-            kids = {k["name"].lower(): k for k in q("SELECT id,name FROM agents WHERE parent_id=?", (aid,))}
-            for item in (dele if isinstance(dele, list) else [])[:5]:
-                kid = kids.get(str(item.get("to", "")).lower())
+            by_name = {k["name"].lower(): k for k in kids}
+            for item in (dele if isinstance(dele, list) else [])[:8]:
+                kid = by_name.get(str(item.get("to", "")).lower())
                 if not kid:
                     notes.append(f"Unbekannter Mitarbeiter '{item.get('to')}' - ignoriert.")
                     continue
@@ -437,11 +574,22 @@ def execute_task(tid):
                     "INSERT INTO tasks(project_id,agent_id,parent_task_id,title,description,status,created,updated)"
                     " VALUES(?,?,?,?,?,?,?,?)",
                     (pid, kid["id"], tid, str(item.get("title", "Aufgabe"))[:200],
-                     str(item.get("description", ""))[:4000], st, time.time(), time.time()))
+                     str(item.get("description", ""))[:6000], st, time.time(), time.time()))
                 log("delegated", f"an {kid['name']}: {item.get('title')}", pid, aid, nid)
-                notes.append(f"Delegiert an {kid['name']}: {item.get('title')} ({'startet automatisch' if st == 'queued' else 'wartet auf Start'})")
+                notes.append(f"Delegiert an {kid['name']}: {item.get('title')}"
+                             + ("" if st == "queued" else " (wartet auf manuellen Start)"))
+                created += 1
 
-    # --- Dateien schreiben
+    # --- Team arbeitet (wieder): Chef wartet, bis alle fertig sind
+    if revised or created:
+        if data.get("write_file") or data.get("shell"):
+            notes.append("Dateien/Shell werden erst im Abschluss ausgefuehrt - jetzt ignoriert.")
+        set_task(tid, "waiting_subtasks", result + "\n\n" + "\n".join(notes),
+                 passes=t["passes"] + (1 if mode == "review" else 0))
+        log("waiting_team", f"{created} neue, {revised} zurueckgegebene Aufgaben", pid, aid, tid)
+        return
+
+    # --- Abschluss: Dateien schreiben
     wf = data.get("write_file")
     if wf:
         if not perms["write_files"]:
@@ -485,9 +633,24 @@ def execute_task(tid):
     if pending:
         set_task(tid, "waiting_approval", final)
     else:
-        set_task(tid, "done", final)
-        report_up(q1("SELECT * FROM tasks WHERE id=?", (tid,)))
-        log("task_done", t["title"], pid, aid, tid)
+        finish(tid, "done", final)
+        log("task_done", f"{t['title']} [{mode}]", pid, aid, tid)
+
+
+def delete_subtree(tid):
+    for c in q("SELECT id FROM tasks WHERE parent_task_id=?", (tid,)):
+        delete_subtree(c["id"])
+    ex("DELETE FROM approvals WHERE task_id=?", (tid,))
+    ex("DELETE FROM tasks WHERE id=?", (tid,))
+
+
+def task_tree(tid, depth=0):
+    rows = q("SELECT t.id, t.title, t.status, t.result, t.rounds, t.agent_id, a.name AS agent_name, a.role AS agent_role "
+             "FROM tasks t LEFT JOIN agents a ON a.id=t.agent_id WHERE t.parent_task_id=? ORDER BY t.id", (tid,))
+    for r in rows:
+        r["result"] = clip(r["result"], 4000)
+        r["children"] = task_tree(r["id"], depth + 1) if depth < 10 else []
+    return rows
 
 
 # ----------------------------------------------------------------- Worker
@@ -721,12 +884,11 @@ def api_agent_new(pid):
     perms.update({k: bool(v) for k, v in (d.get("perms") or {}).items() if k in DEFAULT_PERMS})
     prov = d.get("provider") if d.get("provider") in PROVIDERS else "mock"
     aid = ex(
-        "INSERT INTO agents(project_id,name,role,x,y,provider,model,system_prompt,perms,budget_tokens,created)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO agents(project_id,name,role,x,y,provider,model,system_prompt,perms,created)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?)",
         (pid, str(d.get("name") or "Agent")[:60], str(d.get("role", ""))[:100],
          float(d.get("x", 0)), float(d.get("y", 0)), prov, str(d.get("model", ""))[:100],
-         str(d.get("system_prompt", ""))[:8000], json.dumps(perms),
-         int(d.get("budget_tokens") or 0), time.time()))
+         str(d.get("system_prompt", ""))[:8000], json.dumps(perms), time.time()))
     log("agent_created", d.get("name"), pid, aid)
     return jsonify({"id": aid})
 
@@ -762,9 +924,6 @@ def api_agent_put(aid):
             abort(400, "Unbekannter Anbieter")
         ex("UPDATE agents SET provider=? WHERE id=?", (d["provider"], aid))
         changed.append("provider")
-    if "budget_tokens" in d:
-        ex("UPDATE agents SET budget_tokens=? WHERE id=?", (max(0, int(d["budget_tokens"] or 0)), aid))
-        changed.append("budget")
     if "paused" in d:
         ex("UPDATE agents SET paused=? WHERE id=?", (1 if d["paused"] else 0, aid))
         changed.append("paused" if d["paused"] else "resumed")
@@ -792,7 +951,10 @@ def api_agent_del(aid):
 
 @app.get("/api/agents/<int:aid>/tasks")
 def api_tasks(aid):
-    return jsonify(q("SELECT * FROM tasks WHERE agent_id=? ORDER BY id DESC LIMIT 100", (aid,)))
+    rows = q("SELECT * FROM tasks WHERE agent_id=? ORDER BY id DESC LIMIT 100", (aid,))
+    for r in rows:
+        r["children"] = task_tree(r["id"])  # Team-Arbeit unter dieser Aufgabe (rekursiv ueber alle Ebenen)
+    return jsonify(rows)
 
 
 @app.post("/api/agents/<int:aid>/tasks")
@@ -816,9 +978,13 @@ def api_task_run(tid):
     t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
     if not t:
         abort(404)
-    if t["status"] in ("running", "queued", "waiting_approval"):
-        abort(400, "Aufgabe laeuft bereits bzw. wartet auf Freigabe.")
-    set_task(tid, "queued")
+    if t["status"] in ("running", "queued", "waiting_approval", "waiting_subtasks"):
+        abort(400, "Aufgabe laeuft bereits bzw. wartet auf Freigabe oder das Team.")
+    # Neustart einer Chef-Aufgabe = von vorn planen: alte Team-Aufgaben werden verworfen
+    for c in q("SELECT id FROM tasks WHERE parent_task_id=?", (tid,)):
+        delete_subtree(c["id"])
+    set_task(tid, "queued", feedback="", prev_result="", rounds=0, passes=0)
+    log("task_restarted", t["title"], t["project_id"], t["agent_id"], tid)
     return jsonify({"ok": True})
 
 
@@ -826,9 +992,16 @@ def api_task_run(tid):
 def api_task_del(tid):
     t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
     if t:
-        ex("DELETE FROM approvals WHERE task_id=? AND status='pending'", (tid,))
-        ex("DELETE FROM tasks WHERE id=?", (tid,))
+        delete_subtree(tid)
         log("task_deleted", t["title"], t["project_id"], t["agent_id"], tid)
+        # War das die letzte offene Aufgabe eines wartenden Chefs? Dann darf er weitermachen.
+        pt = t.get("parent_task_id")
+        if pt and not q1("SELECT 1 FROM tasks WHERE parent_task_id=?", (pt,)):
+            parent = q1("SELECT * FROM tasks WHERE id=?", (pt,))
+            if parent and parent["status"] == "waiting_subtasks":
+                set_task(pt, "queued")
+        elif pt:
+            wake_parent({"parent_task_id": pt})
     return jsonify({"ok": True})
 
 
@@ -874,8 +1047,7 @@ def api_approval_decide(aid):
         set_task(t["id"], result=(t["result"] + add)[:20000])
         left = q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending'", (t["id"],))["c"]
         if left == 0:
-            set_task(t["id"], "done")
-            report_up(q1("SELECT * FROM tasks WHERE id=?", (t["id"],)))
+            finish(t["id"], "done")  # meldet das Ergebnis weiter: weckt den Chef, falls er wartet
     return jsonify({"ok": True})
 
 

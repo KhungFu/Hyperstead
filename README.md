@@ -2,7 +2,7 @@
 
 Ein Agenten-Team als Knoten-Editor, selbst gehostet, leicht genug für den Raspberry Pi.
 Projekt anlegen, Agenten per Drag & Drop auf die Fläche ziehen, verbinden (Chef → Mitarbeiter),
-pro Knoten KI-Anbieter, Arbeitsanweisung, Rechte und Budget einstellen und Aufgaben zuweisen.
+pro Knoten KI-Anbieter, Arbeitsanweisung und Rechte einstellen und Aufgaben zuweisen.
 
 ## Installation (Pi / Linux)
 
@@ -60,13 +60,21 @@ Mit `TRUST_PROXY=1` startet die App nur, wenn `APP_TOKEN` mindestens 12 Zeichen 
 | Aufgabe zuweisen | Panel → Tab „Aufgaben" |
 | Freigeben | Sidebar „Freigaben" |
 
+## Wie das Unternehmen arbeitet
+
+Ein Chef bekommt eine Aufgabe und **plant** (verteilt Teilaufgaben) oder erledigt sie selbst. Sobald alle
+Mitarbeiter fertig sind, wacht er wieder auf, **liest ihre Berichte**, gibt Mängel mit Feedback zurück oder
+fasst alles zusammen und berichtet an seinen Chef. So wandert das Ergebnis über beliebig viele Ebenen nach oben.
+Status „Wartet auf Team“ heißt: der Chef wartet auf seine Leute. Im Aufgaben-Tab siehst du den ganzen Baum.
+
 ## Rechte pro Agent
 
-- **Delegieren**: darf Aufgaben an *direkte* Mitarbeiter verteilen. Optional starten sie automatisch,
-  sonst startest du sie selbst. Berichte der Mitarbeiter wandern in die Aufgabe des Chefs.
+- **Delegieren**: darf Aufgaben an *direkte* Mitarbeiter verteilen (bis `PCL_MAX_DEPTH` Ebenen, Standard 8).
+  Optional starten sie automatisch, sonst startest du sie selbst.
+- **Ergebnisse beurteilen**: der Chef darf Arbeit mit Feedback zur Überarbeitung zurückgeben (max. 2 Runden je Mitarbeiter).
+- **Lesen**: Chefs sehen immer die Berichte ihrer Mitarbeiter, dafür ist kein eigenes Recht nötig.
 - **Dateien schreiben**: nur in `workspace/<projekt-id>/`, Pfade außerhalb werden abgelehnt.
 - **Shell vorschlagen**: nur wenn der Server `PCL_ALLOW_SHELL=1` hat, und dann immer erst nach Freigabe.
-- **Budget**: Tokens pro Monat. Bei 80 % Eintrag im Verlauf, ab 100 % werden neue Aufgaben blockiert.
 - **Pause**: blockiert alle neuen Aufgaben des Agenten.
 
 Die Rechte werden **serverseitig** geprüft. Schreibt ein Modell eine nicht erlaubte Aktion in seine
@@ -97,6 +105,6 @@ meldest dich einmalig mit der offiziellen CLI an. Dafür `PCL_ALLOW_CLI=1` in `.
 - Ein Worker, Aufgaben laufen nacheinander.
 - Kein automatischer Heartbeat nach Zeitplan (Aufgaben starten manuell oder per Delegation).
 - Agenten haben kein Web-Browsing und kein Dateilesen, nur Schreiben.
-- Das Budget wird vor jedem Lauf geprüft, ein einzelner Lauf kann es also leicht überschreiten.
+- Kein Budget: Tokens werden nur gezählt. Die Rundenlimits (Überarbeitungen, Prüfdurchgänge, Tiefe) verhindern Endlosschleifen.
 - Sitzungen sind einfache signierte Cookies, ein einzelnes Gerät lässt sich nicht gezielt abmelden
   (Passwort ändern macht alle Sitzungen ungültig).

@@ -16,12 +16,18 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - Keys nur in `.env`, nie ins Repo. Audit-Log ist append-only (nur Insert).
 - Anbieter `mock` liefert Testantworten ohne Key und delegiert an Mitarbeiter, praktisch für Tests.
 
+## Unternehmens-Workflow (`execute_task`)
+- Modi: `work` (Blatt), `plan` (Chef delegiert), `review` (Chef nach Abschluss aller Kinder: liest Berichte, kann per `review`
+  zurückgeben, weiter delegieren oder abschließen). Status `waiting_subtasks`; `finish`/`wake_parent` wecken den Chef.
+- Limits: `MAX_REVISIONS` 2 je Kind, `MAX_REVIEW_PASSES` 4 (danach `final_only`), `PCL_MAX_DEPTH` 8. Kein Budget.
+- Rechte: delegate, judge, auto_run, write_files, shell.
+
 ## Starten und testen
 ```bash
 ./install.sh && ./venv/bin/python app.py      # http://127.0.0.1:8787
 ```
 Backend-Tests liefen bisher als Skripte mit Flask-`test_client` und Playwright (nicht im Repo).
-Gute nächste Schritte: `tests/` mit pytest anlegen (Zyklussperre, Budget, Pfadschutz, Login-Sperre).
+Gute nächste Schritte: `tests/` mit pytest anlegen (Zyklussperre, Workflow plan/review/work, Überarbeitungslimit, Pfadschutz, Login-Sperre).
 
 ## Roadmap (Reihenfolge nach Wunsch des Besitzers)
 1. Betrieb stabilisieren: echte Provider-Keys testen, Tunnel (Tailscale) einrichten.
