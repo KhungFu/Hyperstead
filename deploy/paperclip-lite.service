@@ -1,0 +1,19 @@
+[Unit]
+Description=PaperclipLite (Agenten-Team Knoten-Editor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+# Haertung: App darf nur ihren eigenen Ordner beschreiben
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=__DIR__
+
+[Install]
+WantedBy=multi-user.target

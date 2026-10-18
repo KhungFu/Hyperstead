@@ -1,0 +1,12 @@
+# Geheimnisse und lokale Daten - niemals committen
+.env
+.session_secret
+data.db
+data.db-*
+workspace/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
