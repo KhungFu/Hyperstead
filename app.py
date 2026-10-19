@@ -58,6 +58,9 @@ load_env()
 DB_PATH = os.environ.get("PCL_DB", str(BASE / "data.db"))
 WORKSPACE = Path(os.environ.get("PCL_WORKSPACE", str(BASE / "workspace"))).resolve()
 WORKSPACE.mkdir(parents=True, exist_ok=True)
+if os.environ.get("PCL_TZ"):  # z. B. Europe/Vienna, falls die Systemzeit des Pi nicht stimmt
+    os.environ["TZ"] = os.environ["PCL_TZ"]
+    getattr(time, "tzset", lambda: None)()
 TOKEN = os.environ.get("APP_TOKEN", "")  # = Passwort fuer die Login-Seite
 MAX_DEPTH = int(os.environ.get("PCL_MAX_DEPTH", "8"))
 ALLOW_CLI = os.environ.get("PCL_ALLOW_CLI", "0") == "1"
@@ -190,6 +193,10 @@ CREATE TABLE IF NOT EXISTS tasks(
   feedback TEXT DEFAULT '', prev_result TEXT DEFAULT '', rounds INTEGER DEFAULT 0, passes INTEGER DEFAULT 0,
   inbox TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS schedules(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, agent_id INTEGER NOT NULL,
+  title TEXT NOT NULL, description TEXT DEFAULT '', at TEXT DEFAULT '09:00', days TEXT DEFAULT '0,1,2,3,4,5,6',
+  enabled INTEGER DEFAULT 1, last_run TEXT DEFAULT '', created REAL);
 CREATE TABLE IF NOT EXISTS chats(
   id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, ts REAL);
 CREATE TABLE IF NOT EXISTS tg_msgs(
@@ -219,7 +226,8 @@ def init_db():
         have = {r["name"] for r in c.execute("PRAGMA table_info(tasks)")}
         for col, ddl in (("feedback", "TEXT DEFAULT ''"), ("prev_result", "TEXT DEFAULT ''"),
                          ("rounds", "INTEGER DEFAULT 0"), ("passes", "INTEGER DEFAULT 0"),
-                         ("inbox", "TEXT DEFAULT ''")):
+                         ("inbox", "TEXT DEFAULT ''"), ("schedule_id", "INTEGER DEFAULT 0"),
+                         ("resumed", "INTEGER DEFAULT 0")):
             if col not in have:
                 c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {ddl}")
         c.execute(
@@ -1403,14 +1411,124 @@ def start_telegram():
 
 
 # ----------------------------------------------------------------- Worker
+# ------------------------------------------------- Oeffnungszeiten + Zeitplaene
+MAX_RESUMES = int(os.environ.get("PCL_MAX_RESUMES", "2"))   # Wiederaufnahmen je fehlgeschlagener Aufgabe
+HOURS_DEFAULT = {"enabled": False, "start": "08:00", "end": "17:00", "days": [0, 1, 2, 3, 4], "gate_all": False, "resume": True}
+
+
+def _hm(v, default):
+    m = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", str(v or "").strip())
+    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else default
+
+
+def _mins(hm):
+    return int(hm[:2]) * 60 + int(hm[3:5])
+
+
+def _days(v, default):
+    out = sorted({int(x) for x in (v if isinstance(v, list) else str(v or "").split(",")) if str(x).strip().isdigit() and 0 <= int(x) <= 6})
+    return out or default
+
+
+def hours_of(pid):
+    try:
+        h = json.loads(get_setting(f"hours:{pid}", "") or "{}")
+    except Exception:
+        h = {}
+    return {"enabled": bool(h.get("enabled", False)), "start": _hm(h.get("start"), "08:00"), "end": _hm(h.get("end"), "17:00"),
+            "days": _days(h.get("days"), [0, 1, 2, 3, 4]), "gate_all": bool(h.get("gate_all", False)),
+            "resume": bool(h.get("resume", True))}
+
+
+def is_open(pid, now=None):
+    h = hours_of(pid)
+    if not h["enabled"]:
+        return True
+    now = now or time.localtime()
+    m = now.tm_hour * 60 + now.tm_min
+    return now.tm_wday in h["days"] and _mins(h["start"]) <= m < _mins(h["end"])
+
+
+def fire_schedule(s, manual=False):
+    """Legt die Aufgabe eines Zeitplans an. Gibt (ok, Hinweis) zurueck."""
+    a = q1("SELECT * FROM agents WHERE id=?", (s["agent_id"],))
+    if not a:
+        return False, "Agent existiert nicht mehr."
+    if not a["provider"]:
+        return False, f"{a['name']} hat noch keine KI."
+    if a["paused"]:
+        return False, f"{a['name']} ist pausiert."
+    if q1("SELECT 1 AS x FROM tasks WHERE schedule_id=? AND status NOT IN ('done','failed','blocked')", (s["id"],)):
+        return False, "Die letzte Aufgabe dieses Zeitplans laeuft noch."
+    tid = ex("INSERT INTO tasks(project_id,agent_id,title,description,status,created,updated,schedule_id) VALUES(?,?,?,?,?,?,?,?)",
+             (s["project_id"], s["agent_id"], ("⏰ " + s["title"])[:200], s["description"], "queued", time.time(), time.time(), s["id"]))
+    log("schedule_fired", f"{s['title']} ({'manuell' if manual else s['at']})", s["project_id"], s["agent_id"], tid)
+    return True, tid
+
+
+def resume_open_tasks(pid):
+    """Arbeitsbeginn: liegengebliebene Aufgaben wieder aufnehmen (todo -> starten, gescheiterte oberste Aufgaben -> erneut versuchen)."""
+    n = 0
+    for t in q("SELECT t.*, a.provider AS prov, a.paused AS pau FROM tasks t JOIN agents a ON a.id=t.agent_id "
+               "WHERE t.project_id=? AND t.status IN ('todo','failed') AND t.schedule_id=0", (pid,)):
+        if not t["prov"] or t["pau"]:
+            continue
+        if t["status"] == "todo":
+            set_task(t["id"], "queued")
+        elif t["parent_task_id"] or t["resumed"] >= MAX_RESUMES or "noch keine KI" in (t["result"] or ""):
+            continue
+        else:
+            set_task(t["id"], "queued", feedback="Arbeitsbeginn: Dein letzter Versuch ist gescheitert (siehe bisheriges Ergebnis). "
+                     "Mach dort weiter und schliesse die Aufgabe jetzt ab.", prev_result=t["result"], resumed=t["resumed"] + 1, inbox="")
+        n += 1
+    return n
+
+
+def schedule_tick():
+    now = time.localtime()
+    today, nm = time.strftime("%Y-%m-%d", now), now.tm_hour * 60 + now.tm_min
+    # Arbeitsbeginn je Projekt
+    for p in q("SELECT id, name FROM projects"):
+        h = hours_of(p["id"])
+        if h["enabled"] and h["resume"] and is_open(p["id"], now) and get_setting(f"opened:{p['id']}", "") != today:
+            set_setting(f"opened:{p['id']}", today)
+            n = resume_open_tasks(p["id"])
+            if n:
+                log("work_resumed", f"{n} Aufgaben wieder aufgenommen", p["id"])
+                tg_notify(f"🌅 Arbeitsbeginn ({p['name']}): {n} liegengebliebene Aufgabe(n) werden wieder aufgenommen.")
+    # Zeitplaene
+    for s in q("SELECT * FROM schedules WHERE enabled=1 AND last_run!=?", (today,)):
+        h = hours_of(s["project_id"])
+        if now.tm_wday not in _days(s["days"], list(range(7))):
+            continue
+        if h["enabled"] and now.tm_wday not in h["days"]:
+            continue  # Firma hat heute zu
+        at = h["start"] if s["at"] == "open" else h["end"] if s["at"] == "close" else _hm(s["at"], "09:00")
+        if nm < _mins(at) or nm - _mins(at) > 360:  # noch nicht faellig / zu spaet (Nachholfenster 6 h)
+            continue
+        if s["at"] not in ("open", "close") and not is_open(s["project_id"], now):
+            continue  # feste Uhrzeit ausserhalb der Oeffnungszeiten: wartet bis zur Oeffnung (am selben Tag)
+        ok, info = fire_schedule(s)
+        ex("UPDATE schedules SET last_run=? WHERE id=?", (today, s["id"]))
+        if not ok:
+            log("schedule_skipped", f"{s['title']}: {info}", s["project_id"], s["agent_id"])
+
+
 def worker():
-    next_check = time.time() + 30  # erste Modellpruefung kurz nach dem Start
+    next_check = time.time() + 30
+    next_tick = 0  # erste Modellpruefung kurz nach dem Start
     while True:
         try:
             if MODEL_CHECK_HOURS > 0 and time.time() >= next_check:
                 next_check = time.time() + MODEL_CHECK_HOURS * 3600
                 model_check_and_notify()
-            nxt = q1("SELECT id FROM tasks WHERE status='queued' ORDER BY id LIMIT 1")
+            if time.time() >= next_tick:
+                next_tick = time.time() + 20
+                schedule_tick()
+            closed = [p["id"] for p in q("SELECT id FROM projects") if hours_of(p["id"])["gate_all"] and not is_open(p["id"])]
+            nxt = q1("SELECT id FROM tasks WHERE status='queued'"
+                     + (f" AND project_id NOT IN ({','.join(str(int(c)) for c in closed)})" if closed else "")
+                     + " ORDER BY id LIMIT 1")
             if nxt:
                 execute_task(nxt["id"])
             else:
@@ -1652,6 +1770,7 @@ def api_project_del(pid):
     ex("DELETE FROM tasks WHERE project_id=?", (pid,))
     ex("DELETE FROM approvals WHERE project_id=?", (pid,))
     ex("DELETE FROM agents WHERE project_id=?", (pid,))
+    ex("DELETE FROM schedules WHERE project_id=?", (pid,))
     ex("DELETE FROM projects WHERE id=?", (pid,))
     log("project_deleted", pid, pid)  # Audit bleibt erhalten
     return jsonify({"ok": True})
@@ -1673,7 +1792,8 @@ def api_graph(pid):
     pend = q1("SELECT COUNT(*) c FROM approvals WHERE status='pending'")["c"]
     inbox_new = q1("SELECT COUNT(*) c FROM tasks WHERE parent_task_id IS NULL AND inbox='new'")["c"]
     return jsonify({"project": proj, "agents": agents, "pending_approvals": pend, "inbox_new": inbox_new,
-                    "model_problems": len(model_health(cached_only=True))})
+                    "model_problems": len(model_health(cached_only=True)),
+                    "closed": hours_of(pid)["gate_all"] and not is_open(pid)})
 
 
 def has_cycle(agent_id, new_parent):
@@ -1754,6 +1874,7 @@ def api_agent_del(aid):
         abort(404)
     ex("UPDATE agents SET parent_id=NULL WHERE parent_id=?", (aid,))
     ex("DELETE FROM tasks WHERE agent_id=?", (aid,))
+    ex("DELETE FROM schedules WHERE agent_id=?", (aid,))
     ex("DELETE FROM agents WHERE id=?", (aid,))
     log("agent_deleted", a["name"], a["project_id"], aid)
     return jsonify({"ok": True})
@@ -1781,6 +1902,90 @@ def api_task_new(aid):
              (a["project_id"], aid, title[:200], str(d.get("description", ""))[:8000], st, time.time(), time.time()))
     log("task_created", title, a["project_id"], aid, tid)
     return jsonify({"id": tid})
+
+
+def _sched_out(r):
+    r = dict(r)
+    r["days"] = _days(r["days"], list(range(7)))
+    r["agent"] = (q1("SELECT name FROM agents WHERE id=?", (r["agent_id"],)) or {"name": "?"})["name"]
+    return r
+
+
+@app.get("/api/projects/<int:pid>/hours")
+def api_hours_get(pid):
+    return jsonify({**hours_of(pid), "open_now": is_open(pid), "now": time.strftime("%H:%M"), "weekday": time.localtime().tm_wday})
+
+
+@app.put("/api/projects/<int:pid>/hours")
+def api_hours_put(pid):
+    d = request.get_json(force=True)
+    old = hours_of(pid)
+    h = {"enabled": bool(d.get("enabled", old["enabled"])), "start": _hm(d.get("start"), old["start"]),
+         "end": _hm(d.get("end"), old["end"]), "days": _days(d.get("days", old["days"]), old["days"]),
+         "gate_all": bool(d.get("gate_all", old["gate_all"])), "resume": bool(d.get("resume", old["resume"]))}
+    if _mins(h["end"]) <= _mins(h["start"]):
+        abort(400, "Feierabend muss nach dem Arbeitsbeginn liegen.")
+    set_setting(f"hours:{pid}", json.dumps(h))
+    log("hours_changed", json.dumps(h), pid)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/projects/<int:pid>/schedules")
+def api_sched_list(pid):
+    return jsonify([_sched_out(r) for r in q("SELECT * FROM schedules WHERE project_id=? ORDER BY id", (pid,))])
+
+
+@app.post("/api/projects/<int:pid>/schedules")
+def api_sched_new(pid):
+    d = request.get_json(force=True)
+    a = q1("SELECT * FROM agents WHERE id=? AND project_id=?", (int(d.get("agent_id") or 0), pid))
+    if not a:
+        abort(400, "Agent fehlt")
+    title = str(d.get("title") or "").strip()
+    if not title:
+        abort(400, "Titel fehlt")
+    at = str(d.get("at") or "")
+    at = at if at in ("open", "close") else _hm(at, "")
+    if not at:
+        abort(400, "Uhrzeit fehlt (HH:MM)")
+    days = ",".join(str(x) for x in _days(d.get("days"), list(range(7))))
+    sid = ex("INSERT INTO schedules(project_id,agent_id,title,description,at,days,created) VALUES(?,?,?,?,?,?,?)",
+             (pid, a["id"], title[:200], str(d.get("description") or "")[:6000], at, days, time.time()))
+    log("schedule_created", f"{a['name']}: {title} um {at}", pid, a["id"])
+    return jsonify({"id": sid})
+
+
+@app.put("/api/schedules/<int:sid>")
+def api_sched_put(sid):
+    s = q1("SELECT * FROM schedules WHERE id=?", (sid,))
+    if not s:
+        abort(404)
+    d = request.get_json(force=True)
+    if "enabled" in d:
+        ex("UPDATE schedules SET enabled=? WHERE id=?", (1 if d["enabled"] else 0, sid))
+    log("schedule_updated", json.dumps(d)[:300], s["project_id"], s["agent_id"])
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/schedules/<int:sid>")
+def api_sched_del(sid):
+    s = q1("SELECT * FROM schedules WHERE id=?", (sid,))
+    if not s:
+        abort(404)
+    ex("DELETE FROM schedules WHERE id=?", (sid,))
+    log("schedule_deleted", s["title"], s["project_id"], s["agent_id"])
+    return jsonify({"ok": True})
+
+
+@app.post("/api/schedules/<int:sid>/run")
+def api_sched_run(sid):
+    s = q1("SELECT * FROM schedules WHERE id=?", (sid,))
+    if not s:
+        abort(404)
+    ok, info = fire_schedule(s, manual=True)
+    if not ok:
+        abort(400, info)
+    return jsonify({"ok": True, "task_id": info})
 
 
 @app.post("/api/tasks/<int:tid>/run")

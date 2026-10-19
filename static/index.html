@@ -152,6 +152,7 @@ a.btn.pri{color:#fff}
       <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnModels" title="Agenten, deren KI-Modell nicht mehr existiert, auf ein anderes umstellen">⚠ Modelle <span class="badge" id="mdbadge" style="display:none">0</span></button>
+      <button class="side-btn" id="btnSched" title="Öffnungszeiten der Firma und tägliche Aufgaben je Mitarbeiter">🕘 Zeitplan <span class="badge" id="schbadge" style="display:none">zu</span></button>
       <button class="side-btn" id="btnFiles">📁 Dateien dieses Projekts</button>
       <button class="side-btn" id="btnAudit">📜 Verlauf (Audit-Log)</button>
       <button class="side-btn" id="btnLogout" style="display:none" onclick="location.href='/logout'">🚪 Abmelden</button>
@@ -271,6 +272,7 @@ async function refresh(force){
   const ib = $('#inbadge'); ib.textContent = ni; ib.style.display = ni? '' : 'none';
   const nm = S.graph.model_problems||0;
   const mb = $('#mdbadge'); mb.textContent = nm; mb.style.display = nm? '' : 'none';
+  $('#schbadge').style.display = S.graph.closed ? '' : 'none';
   render();
   if(S.sel && S.tab==='tasks') loadTasks();
 }
@@ -661,6 +663,45 @@ $('#btnModels').onclick=()=>{
     const rf=$('#mdref'); if(rf) rf.onclick=e=>{ e.preventDefault(); load(true); };
   }
   load(false);
+};
+$('#btnSched').onclick=()=>{
+  if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+  openOv('Zeitplan & Öffnungszeiten'); const body=$('#ovbody');
+  const DN=['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const dchk=(sel,cls)=>DN.map((d,i)=>`<label style="display:inline-flex;gap:4px;align-items:center;margin:0 10px 0 0;font-size:13px"><input type="checkbox" class="${cls}" value="${i}" ${sel.includes(i)?'checked':''}> ${d}</label>`).join('');
+  const dtxt=l=>l.length===7?'täglich':(l.join(',')==='0,1,2,3,4'?'Mo–Fr':l.map(i=>DN[i]).join(' '));
+  async function load(){
+    const [h,list]=await Promise.all([api('/projects/'+S.pid+'/hours'),api('/projects/'+S.pid+'/schedules')]);
+    const ags=S.graph?S.graph.agents:[];
+    body.innerHTML=`
+      <div class="task" style="padding:10px;margin-bottom:12px"><b>Öffnungszeiten der Firma</b>
+        <span style="color:var(--mute);font-size:12px"> · Serverzeit jetzt ${esc(h.now)} · ${h.enabled?(h.open_now?'🟢 geöffnet':'🔴 geschlossen'):'aus'}</span>
+        <div class="chk" style="margin-top:6px"><input type="checkbox" id="h_en" ${h.enabled?'checked':''}><div>Öffnungszeiten verwenden</div></div>
+        <div class="row" style="gap:8px;align-items:center">Arbeitsbeginn <input type="time" id="h_start" value="${h.start}"> Feierabend <input type="time" id="h_end" value="${h.end}"></div>
+        <div style="margin:6px 0">${dchk(h.days,'hday')}</div>
+        <div class="chk"><input type="checkbox" id="h_res" ${h.resume?'checked':''}><div>Bei Arbeitsbeginn liegengebliebene Aufgaben wieder aufnehmen<small>noch nicht gestartete Aufgaben starten, gescheiterte oberste Aufgaben bis zu 2× erneut versuchen</small></div></div>
+        <div class="chk"><input type="checkbox" id="h_gate" ${h.gate_all?'checked':''}><div>Auch Aufträge nur in den Öffnungszeiten bearbeiten<small>außerhalb ruht die Firma; laufende Arbeiten werden noch beendet</small></div></div>
+        <div class="row"><button class="btn pri sm" id="h_save">Öffnungszeiten speichern</button></div></div>
+      <b>Tägliche Aufgaben</b>
+      ${list.length?list.map(s=>`<div class="task" style="padding:10px;margin:6px 0"><b>${esc(s.agent)}</b> · ${s.at==='open'?'bei Arbeitsbeginn':s.at==='close'?'bei Feierabend':esc(s.at)+' Uhr'} · ${dtxt(s.days)} ${s.enabled?'':'<span style="color:var(--mute)">(aus)</span>'}
+        <div style="margin:2px 0">${esc(s.title)}</div><div style="color:var(--mute);font-size:12px">${esc((s.description||'').slice(0,160))}${s.last_run?' · zuletzt '+esc(s.last_run):''}</div>
+        <div class="row"><button class="btn sm" data-srun="${s.id}">▶ Jetzt ausführen</button><button class="btn sm" data-stog="${s.id}" data-en="${s.enabled?0:1}">${s.enabled?'⏸ Ausschalten':'▶ Einschalten'}</button><button class="btn sm danger" data-sdel="${s.id}">Löschen</button></div></div>`).join(''):'<div style="color:var(--mute);margin:6px 0">Noch keine. Unten anlegen.</div>'}
+      <div class="task" style="padding:10px;margin-top:10px"><b>Neue tägliche Aufgabe</b>
+        <label>Mitarbeiter</label><select id="s_ag">${ags.map(a=>`<option value="${a.id}">${esc(a.name)}${a.role?' – '+esc(a.role):''}</option>`).join('')}</select>
+        <label>Wann</label><div class="row" style="gap:8px"><select id="s_kind"><option value="time">Uhrzeit</option><option value="open">Bei Arbeitsbeginn</option><option value="close">Bei Feierabend</option></select><input type="time" id="s_time" value="15:00"></div>
+        <div style="margin:6px 0">${dchk([0,1,2,3,4,5,6],'sday')}</div>
+        <label>Titel</label><input type="text" id="s_title" placeholder="z. B. Website kontrollieren">
+        <label>Auftrag</label><textarea id="s_desc" placeholder="Was genau soll er tun und berichten?"></textarea>
+        <div class="row"><button class="btn pri sm" id="s_add">Hinzufügen</button></div></div>`;
+    const days=cls=>[...document.querySelectorAll('.'+cls+':checked')].map(c=>+c.value);
+    $('#s_kind').onchange=e=>{ $('#s_time').style.display=e.target.value==='time'?'':'none'; };
+    $('#h_save').onclick=async()=>{ await api('/projects/'+S.pid+'/hours','PUT',{enabled:$('#h_en').checked,start:$('#h_start').value,end:$('#h_end').value,days:days('hday'),resume:$('#h_res').checked,gate_all:$('#h_gate').checked}); toast('Gespeichert'); load(); refresh(true); };
+    $('#s_add').onclick=async()=>{ const k=$('#s_kind').value; await api('/projects/'+S.pid+'/schedules','POST',{agent_id:+$('#s_ag').value,title:$('#s_title').value,description:$('#s_desc').value,at:k==='time'?$('#s_time').value:k,days:days('sday')}); load(); };
+    body.querySelectorAll('[data-srun]').forEach(b=>b.onclick=async()=>{ try{ await api('/schedules/'+b.dataset.srun+'/run','POST',{}); toast('Aufgabe gestartet – Ergebnis kommt in die Post'); }catch(_){} });
+    body.querySelectorAll('[data-stog]').forEach(b=>b.onclick=async()=>{ await api('/schedules/'+b.dataset.stog,'PUT',{enabled:+b.dataset.en===1}); load(); });
+    body.querySelectorAll('[data-sdel]').forEach(b=>b.onclick=async()=>{ if(confirm('Zeitplan löschen?')){ await api('/schedules/'+b.dataset.sdel,'DELETE'); load(); } });
+  }
+  load();
 };
 $('#btnInbox').onclick=()=>{
   openOv('Post'); const body=$('#ovbody');
