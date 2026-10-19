@@ -682,21 +682,29 @@ $('#btnSched').onclick=()=>{
         <div class="chk"><input type="checkbox" id="h_res" ${h.resume?'checked':''}><div>Bei Arbeitsbeginn liegengebliebene Aufgaben wieder aufnehmen<small>noch nicht gestartete Aufgaben starten, gescheiterte oberste Aufgaben bis zu 2× erneut versuchen</small></div></div>
         <div class="chk"><input type="checkbox" id="h_gate" ${h.gate_all?'checked':''}><div>Auch Aufträge nur in den Öffnungszeiten bearbeiten<small>außerhalb ruht die Firma; laufende Arbeiten werden noch beendet</small></div></div>
         <div class="row"><button class="btn pri sm" id="h_save">Öffnungszeiten speichern</button></div></div>
+      <div class="row" style="margin:4px 0 8px"><button class="btn sm" id="s_insp" title="Der oberste Chef kontrolliert bei Feierabend: Ist alles fertig? Öffnungszeiten eingehalten? Haben die Mitarbeiter gearbeitet?">👑 CEO-Kontrollgang einrichten (bei Feierabend)</button><button class="btn sm" id="s_rep">📋 Statusbericht ansehen</button></div>
       <b>Tägliche Aufgaben</b>
-      ${list.length?list.map(s=>`<div class="task" style="padding:10px;margin:6px 0"><b>${esc(s.agent)}</b> · ${s.at==='open'?'bei Arbeitsbeginn':s.at==='close'?'bei Feierabend':esc(s.at)+' Uhr'} · ${dtxt(s.days)} ${s.enabled?'':'<span style="color:var(--mute)">(aus)</span>'}
+      ${list.length?list.map(s=>`<div class="task" style="padding:10px;margin:6px 0"><b>${s.kind==='inspect'?'🔍 Kontrollgang · ':''}${esc(s.agent)}</b> · ${s.at==='open'?'bei Arbeitsbeginn':s.at==='close'?'bei Feierabend':esc(s.at)+' Uhr'} · ${dtxt(s.days)} ${s.enabled?'':'<span style="color:var(--mute)">(aus)</span>'}
         <div style="margin:2px 0">${esc(s.title)}</div><div style="color:var(--mute);font-size:12px">${esc((s.description||'').slice(0,160))}${s.last_run?' · zuletzt '+esc(s.last_run):''}</div>
         <div class="row"><button class="btn sm" data-srun="${s.id}">▶ Jetzt ausführen</button><button class="btn sm" data-stog="${s.id}" data-en="${s.enabled?0:1}">${s.enabled?'⏸ Ausschalten':'▶ Einschalten'}</button><button class="btn sm danger" data-sdel="${s.id}">Löschen</button></div></div>`).join(''):'<div style="color:var(--mute);margin:6px 0">Noch keine. Unten anlegen.</div>'}
       <div class="task" style="padding:10px;margin-top:10px"><b>Neue tägliche Aufgabe</b>
         <label>Mitarbeiter</label><select id="s_ag">${ags.map(a=>`<option value="${a.id}">${esc(a.name)}${a.role?' – '+esc(a.role):''}</option>`).join('')}</select>
         <label>Wann</label><div class="row" style="gap:8px"><select id="s_kind"><option value="time">Uhrzeit</option><option value="open">Bei Arbeitsbeginn</option><option value="close">Bei Feierabend</option></select><input type="time" id="s_time" value="15:00"></div>
         <div style="margin:6px 0">${dchk([0,1,2,3,4,5,6],'sday')}</div>
+        <div class="chk"><input type="checkbox" id="s_inspk"><div>Kontrollgang<small>der Statusbericht (wer hat was erledigt, Öffnungszeiten, offene Aufgaben) wird automatisch beigelegt</small></div></div>
         <label>Titel</label><input type="text" id="s_title" placeholder="z. B. Website kontrollieren">
         <label>Auftrag</label><textarea id="s_desc" placeholder="Was genau soll er tun und berichten?"></textarea>
         <div class="row"><button class="btn pri sm" id="s_add">Hinzufügen</button></div></div>`;
     const days=cls=>[...document.querySelectorAll('.'+cls+':checked')].map(c=>+c.value);
     $('#s_kind').onchange=e=>{ $('#s_time').style.display=e.target.value==='time'?'':'none'; };
     $('#h_save').onclick=async()=>{ await api('/projects/'+S.pid+'/hours','PUT',{enabled:$('#h_en').checked,start:$('#h_start').value,end:$('#h_end').value,days:days('hday'),resume:$('#h_res').checked,gate_all:$('#h_gate').checked}); toast('Gespeichert'); load(); refresh(true); };
-    $('#s_add').onclick=async()=>{ const k=$('#s_kind').value; await api('/projects/'+S.pid+'/schedules','POST',{agent_id:+$('#s_ag').value,title:$('#s_title').value,description:$('#s_desc').value,at:k==='time'?$('#s_time').value:k,days:days('sday')}); load(); };
+    $('#s_add').onclick=async()=>{ const k=$('#s_kind').value; await api('/projects/'+S.pid+'/schedules','POST',{agent_id:+$('#s_ag').value,title:$('#s_title').value,description:$('#s_desc').value,at:k==='time'?$('#s_time').value:k,days:days('sday'),kind:$('#s_inspk').checked?'inspect':''}); load(); };
+    $('#s_insp').onclick=async()=>{
+      const roots=ags.filter(a=>!a.parent_id), cnt=a=>ags.filter(x=>x.parent_id===a.id).length;
+      const boss=roots.sort((x,y)=>cnt(y)-cnt(x))[0]; if(!boss){ toast('Erst Agenten anlegen.'); return; }
+      await api('/projects/'+S.pid+'/schedules','POST',{agent_id:boss.id,kind:'inspect',title:'Kontrollgang',at:'close',days:h.days});
+      toast('Kontrollgang für '+boss.name+' eingerichtet (bei Feierabend, Arbeitstage der Firma)'); load(); };
+    $('#s_rep').onclick=async()=>{ const r=await api('/projects/'+S.pid+'/report'); body.insertAdjacentHTML('afterbegin','<pre style="white-space:pre-wrap;font-size:12px;background:#0004;padding:10px;border-radius:6px;margin-bottom:10px">'+esc(r.report)+'</pre>'); };
     body.querySelectorAll('[data-srun]').forEach(b=>b.onclick=async()=>{ try{ await api('/schedules/'+b.dataset.srun+'/run','POST',{}); toast('Aufgabe gestartet – Ergebnis kommt in die Post'); }catch(_){} });
     body.querySelectorAll('[data-stog]').forEach(b=>b.onclick=async()=>{ await api('/schedules/'+b.dataset.stog,'PUT',{enabled:+b.dataset.en===1}); load(); });
     body.querySelectorAll('[data-sdel]').forEach(b=>b.onclick=async()=>{ if(confirm('Zeitplan löschen?')){ await api('/schedules/'+b.dataset.sdel,'DELETE'); load(); } });

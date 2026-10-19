@@ -196,7 +196,7 @@ CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS schedules(
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, agent_id INTEGER NOT NULL,
   title TEXT NOT NULL, description TEXT DEFAULT '', at TEXT DEFAULT '09:00', days TEXT DEFAULT '0,1,2,3,4,5,6',
-  enabled INTEGER DEFAULT 1, last_run TEXT DEFAULT '', created REAL);
+  enabled INTEGER DEFAULT 1, last_run TEXT DEFAULT '', created REAL, kind TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS chats(
   id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, ts REAL);
 CREATE TABLE IF NOT EXISTS tg_msgs(
@@ -230,6 +230,8 @@ def init_db():
                          ("resumed", "INTEGER DEFAULT 0")):
             if col not in have:
                 c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {ddl}")
+        if "kind" not in {r["name"] for r in c.execute("PRAGMA table_info(schedules)")}:
+            c.execute("ALTER TABLE schedules ADD COLUMN kind TEXT DEFAULT ''")
         c.execute(
             "UPDATE tasks SET status='failed', result=result||'\n\n(Abgebrochen: Neustart)' "
             "WHERE status='running'"
@@ -840,7 +842,7 @@ def execute_task(tid):
     can_delegate = manager and depth < MAX_DEPTH
     if child_tasks:
         mode = "review"
-    elif perms["recruit"] and not kids and not t["parent_task_id"]:
+    elif perms["recruit"] and not kids and not t["parent_task_id"] and not t["schedule_id"]:
         mode = "recruit"
     elif can_delegate:
         mode = "plan"
@@ -1449,6 +1451,88 @@ def is_open(pid, now=None):
     return now.tm_wday in h["days"] and _mins(h["start"]) <= m < _mins(h["end"])
 
 
+OPEN_ST = ("todo", "queued", "running", "waiting_subtasks", "waiting_approval")
+
+
+def inspection_report(pid):
+    """Vom System erzeugte Faktenlage fuer den Kontrollgang des CEO (nicht vom Modell erfunden)."""
+    p = q1("SELECT * FROM projects WHERE id=?", (pid,)) or {"name": "?"}
+    h, now = hours_of(pid), time.localtime()
+    day0 = time.mktime((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, 0, 0, -1))
+    DN = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    L = [f"STATUSBERICHT (vom System erzeugt, {time.strftime('%d.%m.%Y %H:%M')}, Projekt {p['name']})"]
+    if h["enabled"]:
+        L.append(f"Oeffnungszeiten: {h['start']}-{h['end']} ({', '.join(DN[d] for d in h['days'])}); jetzt: "
+                 f"{'geoeffnet' if is_open(pid, now) else 'geschlossen'}.")
+    else:
+        L.append("Oeffnungszeiten: nicht festgelegt.")
+
+    def in_hours(ts):
+        t = time.localtime(ts)
+        return (not h["enabled"]) or (t.tm_wday in h["days"] and _mins(h["start"]) <= t.tm_hour * 60 + t.tm_min < _mins(h["end"]))
+    starts = {}
+    outside = {}
+    for r in q("SELECT agent_id, ts FROM audit WHERE project_id=? AND event='task_start' AND ts>=?", (pid, day0)):
+        starts[r["agent_id"]] = starts.get(r["agent_id"], 0) + 1
+        if not in_hours(r["ts"]):
+            outside[r["agent_id"]] = outside.get(r["agent_id"], 0) + 1
+    L.append("\nMITARBEITER HEUTE:")
+    for a in q("SELECT * FROM agents WHERE project_id=? ORDER BY id", (pid,)):
+        ts = q("SELECT status, created, updated FROM tasks WHERE agent_id=?", (a["id"],))
+        opn = [t for t in ts if t["status"] in OPEN_ST]
+        done = sum(1 for t in ts if t["status"] == "done" and t["updated"] >= day0)
+        fail = sum(1 for t in ts if t["status"] == "failed" and t["updated"] >= day0)
+        line = f"- {a['name']} ({a['role'] or 'Agent'}): heute gestartet {starts.get(a['id'], 0)}, fertig {done}, fehlgeschlagen {fail}, offen {len(opn)}"
+        flags = []
+        if not a["provider"]:
+            flags.append("KEINE KI ZUGEWIESEN")
+        if a["paused"]:
+            flags.append("pausiert")
+        if opn and not starts.get(a["id"]) and is_open(pid, now):
+            flags.append("hat offene Aufgaben, aber heute keine Arbeit begonnen")
+        if outside.get(a["id"]):
+            flags.append(f"{outside[a['id']]} Arbeitsstart(s) ausserhalb der Oeffnungszeiten")
+        old = [t for t in opn if t["created"] < day0 - 86400]
+        if old:
+            flags.append(f"{len(old)} offene Aufgabe(n) seit mehr als einem Tag")
+        L.append(line + (" | ACHTUNG: " + "; ".join(flags) if flags else ""))
+    L.append("\nOFFENE OBERSTE AUFTRAEGE:")
+    top = q("SELECT t.id, t.title, t.status, t.created, a.name FROM tasks t LEFT JOIN agents a ON a.id=t.agent_id "
+            "WHERE t.project_id=? AND t.parent_task_id IS NULL AND t.status IN (%s) ORDER BY t.id LIMIT 12" % ",".join("'%s'" % x for x in OPEN_ST), (pid,))
+    L += [f"- #{t['id']} {t['title'][:80]} ({t['name']}, {STATUS_DE.get(t['status'], t['status'])}, seit {int((time.time() - t['created']) / 3600)} h)" for t in top] or ["- keine"]
+    bad = q("SELECT t.id, t.title, a.name FROM tasks t LEFT JOIN agents a ON a.id=t.agent_id WHERE t.project_id=? AND t.parent_task_id IS NULL "
+            "AND t.status='failed' AND t.updated>=? ORDER BY t.id LIMIT 8", (pid, day0 - 86400))
+    if bad:
+        L.append("GESCHEITERTE OBERSTE AUFTRAEGE (letzte 24 h):")
+        L += [f"- #{t['id']} {t['title'][:80]} ({t['name']})" for t in bad]
+    sc = q("SELECT * FROM schedules WHERE project_id=? AND enabled=1 AND kind!='inspect' ORDER BY id", (pid,))
+    if sc:
+        L.append("\nTAEGLICHE AUFGABEN HEUTE:")
+        for s_ in sc:
+            if now.tm_wday not in _days(s_["days"], list(range(7))):
+                continue
+            who = (q1("SELECT name FROM agents WHERE id=?", (s_["agent_id"],)) or {"name": "?"})["name"]
+            at = h["start"] if s_["at"] == "open" else h["end"] if s_["at"] == "close" else s_["at"]
+            t = q1("SELECT status FROM tasks WHERE schedule_id=? AND created>=? ORDER BY id DESC LIMIT 1", (s_["id"], day0))
+            if t:
+                st = "erledigt" if t["status"] == "done" else STATUS_DE.get(t["status"], t["status"])
+            elif now.tm_hour * 60 + now.tm_min < _mins(_hm(at, "00:00")):
+                st = f"noch nicht faellig (um {at})"
+            else:
+                sk = q1("SELECT detail FROM audit WHERE project_id=? AND event='schedule_skipped' AND ts>=? AND detail LIKE ? ORDER BY id DESC LIMIT 1",
+                        (pid, day0, s_["title"] + ":%"))
+                st = "NICHT gestartet" + (f" ({sk['detail'].split(': ', 1)[-1]})" if sk else "")
+            L.append(f"- {who}: {s_['title']} um {at} -> {st}")
+    return "\n".join(L)
+
+
+INSPECT_TASK = ("Du machst deinen Kontrollgang als Fuehrungskraft. Oben steht der vom System erzeugte Statusbericht (Fakten, nicht Vermutungen). "
+                "Pruefe: 1. Ist alles Anstehende fertig oder was fehlt noch? 2. Wurden die Oeffnungszeiten eingehalten? "
+                "3. Haben die Mitarbeiter waehrend der Oeffnungszeiten ihre Arbeit erledigt, und wer nicht (und warum)? "
+                "Wenn etwas liegen geblieben ist und du Mitarbeiter hast, verteile konkrete Folgeaufgaben an die zustaendigen Mitarbeiter. "
+                "Schliesse mit einem kurzen Kontrollbericht fuer den Besitzer: Was ist fertig, was fehlt, Auffaelligkeiten, deine Massnahmen.")
+
+
 def fire_schedule(s, manual=False):
     """Legt die Aufgabe eines Zeitplans an. Gibt (ok, Hinweis) zurueck."""
     a = q1("SELECT * FROM agents WHERE id=?", (s["agent_id"],))
@@ -1460,8 +1544,11 @@ def fire_schedule(s, manual=False):
         return False, f"{a['name']} ist pausiert."
     if q1("SELECT 1 AS x FROM tasks WHERE schedule_id=? AND status NOT IN ('done','failed','blocked')", (s["id"],)):
         return False, "Die letzte Aufgabe dieses Zeitplans laeuft noch."
+    desc = s["description"]
+    if s.get("kind") == "inspect":
+        desc = inspection_report(s["project_id"]) + "\n\n" + INSPECT_TASK + ("\n\nZusaetzliche Hinweise des Besitzers:\n" + desc if desc.strip() else "")
     tid = ex("INSERT INTO tasks(project_id,agent_id,title,description,status,created,updated,schedule_id) VALUES(?,?,?,?,?,?,?,?)",
-             (s["project_id"], s["agent_id"], ("⏰ " + s["title"])[:200], s["description"], "queued", time.time(), time.time(), s["id"]))
+             (s["project_id"], s["agent_id"], ("⏰ " + s["title"])[:200], desc[:14000], "queued", time.time(), time.time(), s["id"]))
     log("schedule_fired", f"{s['title']} ({'manuell' if manual else s['at']})", s["project_id"], s["agent_id"], tid)
     return True, tid
 
@@ -1930,6 +2017,11 @@ def api_hours_put(pid):
     return jsonify({"ok": True})
 
 
+@app.get("/api/projects/<int:pid>/report")
+def api_report(pid):
+    return jsonify({"report": inspection_report(pid)})
+
+
 @app.get("/api/projects/<int:pid>/schedules")
 def api_sched_list(pid):
     return jsonify([_sched_out(r) for r in q("SELECT * FROM schedules WHERE project_id=? ORDER BY id", (pid,))])
@@ -1941,7 +2033,8 @@ def api_sched_new(pid):
     a = q1("SELECT * FROM agents WHERE id=? AND project_id=?", (int(d.get("agent_id") or 0), pid))
     if not a:
         abort(400, "Agent fehlt")
-    title = str(d.get("title") or "").strip()
+    kind = "inspect" if d.get("kind") == "inspect" else ""
+    title = str(d.get("title") or "").strip() or ("Kontrollgang" if kind else "")
     if not title:
         abort(400, "Titel fehlt")
     at = str(d.get("at") or "")
@@ -1949,8 +2042,8 @@ def api_sched_new(pid):
     if not at:
         abort(400, "Uhrzeit fehlt (HH:MM)")
     days = ",".join(str(x) for x in _days(d.get("days"), list(range(7))))
-    sid = ex("INSERT INTO schedules(project_id,agent_id,title,description,at,days,created) VALUES(?,?,?,?,?,?,?)",
-             (pid, a["id"], title[:200], str(d.get("description") or "")[:6000], at, days, time.time()))
+    sid = ex("INSERT INTO schedules(project_id,agent_id,title,description,at,days,created,kind) VALUES(?,?,?,?,?,?,?,?)",
+             (pid, a["id"], title[:200], str(d.get("description") or "")[:6000], at, days, time.time(), kind))
     log("schedule_created", f"{a['name']}: {title} um {at}", pid, a["id"])
     return jsonify({"id": sid})
 
