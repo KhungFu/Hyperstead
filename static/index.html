@@ -425,7 +425,7 @@ function drawPanel(){
 
 function drawSettings(a){
   const others=S.graph.agents.filter(x=>x.id!==a.id);
-  const prov=S.providers.map(p=>`<option value="${p.id}" ${p.id===a.provider?'selected':''}>${esc(p.label)}${p.configured?'':' — kein Key'}</option>`).join('');
+  const prov=S.providers.map(p=>`<option value="${p.id}" ${p.id===a.provider?'selected':''}>${esc(p.label)}${p.configured?'':(p.id==='ollama'?' — nicht erreichbar':' — kein Key')}</option>`).join('');
   const par=`<option value="">— keiner (oberste Ebene) —</option>`+others.map(o=>`<option value="${o.id}" ${o.id===a.parent_id?'selected':''}>${esc(o.name)}</option>`).join('');
   const pm=a.perms;
   $('#pbody').innerHTML=`
@@ -659,7 +659,7 @@ async function showFiles(){
 $('#btnFiles').onclick=showFiles;
 
 /* ---------- Firma aus Vorlage ---------- */
-function provOptions(def){ return S.providers.map(p=>`<option value="${p.id}" ${p.id===def?'selected':''}>${esc(p.label)}${p.configured?'':' — kein Key'}</option>`).join(''); }
+function provOptions(def){ return S.providers.map(p=>`<option value="${p.id}" ${p.id===def?'selected':''}>${esc(p.label)}${p.configured?'':(p.id==='ollama'?' — nicht erreichbar':' — kein Key')}</option>`).join(''); }
 async function wirePicker(id){
   const ps=$('#'+id+'_p'), ms=$('#'+id+'_m');
   async function load(){
@@ -686,9 +686,19 @@ $('#btnTplProj').onclick=async()=>{
       <select id="tp_lead_p">${provOptions(defProv)}</select><select id="tp_lead_m" style="margin-top:6px"></select>
       <label>KI-Modell für die Mitarbeiter (Texte, Code, Recherche …)</label>
       <select id="tp_team_p">${provOptions(defProv)}</select><select id="tp_team_m" style="margin-top:6px"></select>
+      <div class="row"><button class="btn sm" id="tp_loc_all">🖥️ Alles lokal (Ollama)</button><button class="btn sm" id="tp_loc_team">🖥️ Nur Mitarbeiter lokal (Ollama)</button></div>
+      <div id="tp_loc_hint" style="color:var(--mute);font-size:12px;margin-top:4px"></div>
       <div style="color:var(--mute);font-size:12px;margin-top:6px">Tipp: Chefs brauchen das stärkste Modell (Planen, Prüfen, Denken), Mitarbeiter je nach Aufgabe ein gutes Text-, Code- oder schnelles Modell. Du kannst jeden Agenten später einzeln umstellen und testen.</div>
       <div class="row"><button class="btn pri" id="tp_go">Firma gründen</button><button class="btn" id="tp_back">Zurück</button></div>`;
     wirePicker('tp_lead'); wirePicker('tp_team');
+    const setLocal=(ids)=>{
+      const ol=S.providers.find(p=>p.id==='ollama');
+      $('#tp_loc_hint').textContent = ol&&ol.configured ? 'Ollama ausgewählt – Modell in der Liste wählen. Kleine lokale Modelle sind auf dem Pi langsam; für Chefs besser ein starkes Modell.'
+        : 'Ollama ist gerade nicht erreichbar (läuft „ollama serve“? Adresse OLLAMA_URL in .env). Du kannst es trotzdem schon zuweisen.';
+      ids.forEach(id=>{ const e=$('#'+id+'_p'); e.value='ollama'; e.dispatchEvent(new Event('change')); });
+    };
+    $('#tp_loc_all').onclick=()=>setLocal(['tp_lead','tp_team']);
+    $('#tp_loc_team').onclick=()=>setLocal(['tp_team']);
     $('#tp_back').onclick=()=>$('#btnTplProj').onclick();
     $('#tp_go').onclick=async()=>{
       $('#tp_go').disabled=true;

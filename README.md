@@ -111,7 +111,11 @@ Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem P
 **Eigene Dateien** (Videos zum Bearbeiten, PDFs, Bilder, Texte) lädst du in „📁 Dateien dieses Projekts“ hoch, sie landen in
 `input/`; fertige Ergebnisse liegen in `output/`, Bilder in `assets/`. Ehrliche Grenzen: Es gibt **keine KI-Videogenerierung**
 (Text-zu-Video). „Animation“ heißt hier: Szenenbilder per Bild-KI + Zoom/Schwenk + Sprecher + Schnitt. Auf dem Raspberry Pi
-rechnet ffmpeg langsam (eine Minute 720p-Video kann mehrere Minuten dauern), Zeitlimit `PCL_FFMPEG_TIMEOUT`.
+rechnet ffmpeg langsam (eine Minute 720p-Video kann mehrere Minuten dauern), Zeitlimit `PCL_FFMPEG_TIMEOUT` (Standard 1 Stunde je Schritt).
+
+**Gescannte PDFs und Bilder (OCR):** `read_file` liest Scans automatisch per `tesseract` (`sudo apt install tesseract-ocr tesseract-ocr-deu poppler-utils`). Das ist langsam (ca. 5–15 s je Seite auf dem Pi, Limit `PCL_OCR_MAX_PAGES`) und kann Fehler enthalten.
+
+**Gute Sprecherstimme:** `./install.sh --piper` richtet Piper mit deutscher Stimme ein; sie wird danach automatisch für deutsche Texte genutzt (andere Sprachen: espeak-ng).
 
 ## Chat und Vorlagen
 
@@ -197,3 +201,18 @@ bezahlten APIs und vielen Werkzeug-Runden können Kosten entstehen, die Tokens s
 - Kein Budget: Tokens werden nur gezählt. Die Rundenlimits (Überarbeitungen, Prüfdurchgänge, Tiefe) verhindern Endlosschleifen.
 - Sitzungen sind einfache signierte Cookies, ein einzelnes Gerät lässt sich nicht gezielt abmelden
   (Passwort ändern macht alle Sitzungen ungültig).
+
+
+## Selbsttest auf dem Pi
+
+Nach Installation und Eintragen der Keys prüft `./venv/bin/python selftest.py` alles Echte, was sich ohne Internet nicht testen ließ:
+Websuche, Seiten lesen, Bildsuche und Bildgenerator, SSRF-Schutz, jeder KI-Anbieter mit Mini-Anfrage (inkl. Ollama), Telegram
+(Bot-Token und Testnachricht an deine Chat-ID), ffmpeg, Sprachausgabe, PDF mit Umlauten, OCR. Einzelne Gruppen:
+`selftest.py web | llm | telegram | media | ocr`. Jede Zeile zeigt OK, FEHLT (optional) oder FEHLER mit konkretem Hinweis.
+
+## Ollama (lokale Modelle)
+
+Anbieter „Ollama (lokal)“: kein Key nötig, die Modellliste kommt direkt von Ollama (`ollama pull qwen2.5:3b`). Im Dialog „Firma aus Vorlage“
+gibt es die Knöpfe „Alles lokal“ und „Nur Mitarbeiter lokal“; sonst wählst du Ollama je Agent. Läuft Ollama auf einem anderen Rechner
+(z. B. dem Laptop), setze `OLLAMA_URL` auf dessen Adresse. Kleine Modelle (3B) sind auf dem Pi langsam und halten das Werkzeug-Protokoll
+oft schlecht ein; für Chefs ein starkes Modell, lokal eher für einfache Mitarbeiter oder den Chat.

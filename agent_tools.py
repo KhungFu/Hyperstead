@@ -21,6 +21,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import zipfile
@@ -391,6 +392,13 @@ def read_file(root, path, offset=0):
     if not f.is_file():
         raise ToolError(f"Datei '{path}' gibt es nicht (list_files zeigt den Inhalt)")
     ext = f.suffix.lower()
+    if ext in (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp") and shutil.which("tesseract") and _env("PCL_OCR_IMAGES", "1") != "0":
+        try:
+            t = ocr_image(f)
+        except Exception as e:
+            raise ToolError(f"OCR fehlgeschlagen ({type(e).__name__})")
+        return (f"{path}: Text aus dem Bild (OCR, Fehler moeglich):\n{t[:READ_CHARS]}" if t
+                else f"{path}: Bild ohne erkennbaren Text ({f.stat().st_size // 1024} KB).")
     if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".zip"):
         return f"{path}: Mediendatei ({f.stat().st_size // 1024} KB). Fuer Videos/Audio: media_info."
     raw = f.read_bytes()[:30_000_000]
@@ -439,6 +447,53 @@ def pdf_text(data):
     return ""
 
 
+def _tess_lang():
+    """OCR-Sprachen: PCL_OCR_LANG (z.B. deu+eng), sonst alles Vorhandene aus deu/eng/tur."""
+    want = _env("PCL_OCR_LANG")
+    try:
+        have = set(subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, timeout=20).stdout.split()[1:])
+    except Exception:
+        have = set()
+    langs = [l for l in (want.split("+") if want else ["deu", "eng", "tur"]) if l in have]
+    return "+".join(langs) or ("eng" if "eng" in have else "")
+
+
+def ocr_image(path):
+    """Text aus einem Bild (tesseract). Leerer String, wenn nichts erkannt wurde."""
+    if not shutil.which("tesseract"):
+        raise ToolError("OCR nicht installiert (Raspberry Pi: sudo apt install tesseract-ocr tesseract-ocr-deu)")
+    lang = _tess_lang()
+    cmd = ["tesseract", str(path), "-"] + (["-l", lang] if lang else [])
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    return r.stdout.strip()
+
+
+def ocr_pdf(data, max_pages=None):
+    """Gescannte PDF seitenweise per pdftoppm + tesseract lesen (langsam auf dem Pi, daher Seitenlimit PCL_OCR_MAX_PAGES)."""
+    if not (shutil.which("tesseract") and shutil.which("pdftoppm")):
+        return ""
+    max_pages = max_pages or int(_env("PCL_OCR_MAX_PAGES", "25"))
+    parts, total = [], 0
+    with tempfile.TemporaryDirectory(prefix="pcl-ocr-") as td:
+        pdf = Path(td) / "in.pdf"
+        pdf.write_bytes(data)
+        subprocess.run(["pdftoppm", "-r", "200", "-gray", "-l", str(max_pages), "-png", str(pdf), str(Path(td) / "p")],
+                       capture_output=True, timeout=600)
+        pages = sorted(Path(td).glob("p-*.png"))
+        total = len(pages)
+        for i, img in enumerate(pages, 1):
+            try:
+                t = ocr_image(img)
+            except Exception:
+                t = ""
+            if t:
+                parts.append(f"[Seite {i}]\n{t}")
+    if not parts:
+        return ""
+    note = f"[OCR-Text eines Scans, Fehler moeglich; die ersten {total} Seiten gelesen]\n\n"
+    return note + "\n\n".join(parts)
+
+
 def docx_text(data):
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         xml = z.read("word/document.xml").decode("utf-8", "replace")
@@ -462,7 +517,9 @@ def _doc_text(path, data):
     ext = Path(str(path)).suffix.lower()
     if ext == ".pdf" or data[:4] == b"%PDF":
         t = pdf_text(data)
-        return t or "(PDF enthaelt keinen auslesbaren Text, vermutlich ein Scan)"
+        if not t.strip():
+            t = ocr_pdf(data)
+        return t or "(PDF enthaelt keinen auslesbaren Text, vermutlich ein Scan, und OCR ist nicht installiert: sudo apt install tesseract-ocr tesseract-ocr-deu poppler-utils)"
     if ext == ".docx":
         return docx_text(data)
     if ext == ".epub":
@@ -520,7 +577,7 @@ def _bin(name):
 
 
 def _ff(args, root, timeout=None):
-    timeout = timeout or int(_env("PCL_FFMPEG_TIMEOUT", "1200"))
+    timeout = timeout or int(_env("PCL_FFMPEG_TIMEOUT", "3600"))
     try:
         r = subprocess.run([_bin("ffmpeg"), "-nostdin", "-y", "-hide_banner", "-loglevel", "error"] + [str(a) for a in args],
                            cwd=str(root), capture_output=True, text=True, timeout=timeout)
@@ -825,6 +882,17 @@ _VOICES_EDGE = {"de": "de-DE-KatjaNeural", "en": "en-US-AriaNeural", "tr": "tr-T
                 "es": "es-ES-ElviraNeural", "it": "it-IT-ElsaNeural"}
 
 
+def _piper():
+    """(Kommando, Modell) fuer Piper. Sucht im venv und in models/piper/, damit PATH und .env nicht stimmen muessen."""
+    here = Path(__file__).resolve().parent
+    exe = shutil.which("piper") or next((str(x) for x in (Path(sys.executable).parent / "piper", here / "venv" / "bin" / "piper") if x.exists()), "")
+    model = _env("PIPER_MODEL")
+    if not model:
+        cands = sorted((here / "models" / "piper").glob("*.onnx")) if (here / "models" / "piper").is_dir() else []
+        model = str(cands[0]) if cands else ""
+    return (exe, model) if exe and model and Path(model).exists() else (None, None)
+
+
 def speak(root, text, lang="de", name=""):
     text = str(text or "").strip()[:6000]
     if not text:
@@ -842,10 +910,13 @@ def speak(root, text, lang="de", name=""):
         txt = tmp / "t.txt"
         txt.write_text(text, encoding="utf-8")
         done = False
-        if engine in ("auto", "piper") and shutil.which("piper") and _env("PIPER_MODEL"):
+        pexe, pmodel = _piper()
+        # Piper-Stimmen sind einsprachig (Dateiname z.B. de_DE-thorsten-medium.onnx): automatisch nur fuer passende Sprache
+        pl = Path(pmodel).name.split("_")[0].lower() if pmodel else ""
+        if pexe and (engine == "piper" or (engine == "auto" and pl == lang.split("-")[0])):
             wav = tmp / "o.wav"
-            r = subprocess.run(["piper", "--model", _env("PIPER_MODEL"), "--output_file", str(wav)], input=text, text=True,
-                               capture_output=True, timeout=300)
+            r = subprocess.run([pexe, "--model", pmodel, "--output_file", str(wav)], input=text, text=True,
+                               capture_output=True, timeout=600)
             if r.returncode == 0 and wav.exists():
                 _ff(["-i", wav, "-c:a", "libmp3lame", "-q:a", "3", target], root)
                 done = True

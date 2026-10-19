@@ -359,7 +359,9 @@ def _post_openai(cfg, key, model, messages):
     body = {"model": model, "messages": messages, "temperature": 0.4}
     if MAX_OUTPUT:
         body["max_tokens"] = MAX_OUTPUT
-    return requests.post(cfg["url"], headers=headers, timeout=180, json=body)
+    # Lokale Modelle (Ollama) antworten auf dem Pi sehr langsam -> eigenes, grosszuegiges Zeitlimit
+    tmo = int(os.environ.get("OLLAMA_TIMEOUT", "900")) if cfg is PROVIDERS["ollama"] else 180
+    return requests.post(cfg["url"], headers=headers, timeout=tmo, json=body)
 
 
 def _post_anthropic(cfg, key, model, messages):

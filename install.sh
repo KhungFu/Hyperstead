@@ -2,6 +2,8 @@
 # PaperclipLite Installer (Raspberry Pi / Debian / Ubuntu / MX Linux)
 #   ./install.sh            -> venv + Abhaengigkeiten + .env mit zufaelligem Passwort
 #   ./install.sh --service  -> zusaetzlich systemd-Dienst einrichten und starten (braucht sudo)
+#   ./install.sh --piper    -> zusaetzlich Piper (gute deutsche Offline-Stimme) einrichten; beides kombinierbar
+#   Danach pruefen:  ./venv/bin/python selftest.py
 set -euo pipefail
 cd "$(dirname "$0")"
 DIR="$(pwd)"
@@ -15,9 +17,22 @@ echo "Abhaengigkeiten installiert."
 MISSING=""
 command -v ffmpeg >/dev/null || MISSING="$MISSING ffmpeg"
 command -v espeak-ng >/dev/null || MISSING="$MISSING espeak-ng"
+command -v tesseract >/dev/null || MISSING="$MISSING tesseract-ocr tesseract-ocr-deu poppler-utils"
+command -v tesseract >/dev/null && ! tesseract --list-langs 2>/dev/null | grep -qx deu && MISSING="$MISSING tesseract-ocr-deu"
+command -v pdftoppm >/dev/null || case "$MISSING" in *poppler-utils*) ;; *) MISSING="$MISSING poppler-utils";; esac
 fc-list 2>/dev/null | grep -qi dejavu || MISSING="$MISSING fonts-dejavu-core"
 if [ -n "$MISSING" ]; then
-  echo "Fuer Video, Sprache und Sonderzeichen in PDFs empfohlen:  sudo apt install$MISSING"
+  echo "Fuer Video, Sprache, OCR (gescannte PDFs) und Sonderzeichen in PDFs empfohlen:  sudo apt install$MISSING"
+fi
+
+# Piper: gute Offline-Stimme (deutsch). Optional:  ./install.sh --piper
+if [ "${1:-}" = "--piper" ] || [ "${2:-}" = "--piper" ]; then
+  echo "Piper-Sprachausgabe wird eingerichtet (ca. 100 MB) ..."
+  ./venv/bin/pip install -q piper-tts
+  mkdir -p models/piper
+  ./venv/bin/python -m piper.download_voices de_DE-thorsten-medium --download-dir models/piper \
+    && echo "Piper fertig: Stimme in models/piper/ (wird automatisch genutzt)." \
+    || echo "Stimme konnte nicht geladen werden (Internet?). Erneut versuchen: ./install.sh --piper"
 fi
 
 if [ ! -f .env ]; then
@@ -35,7 +50,7 @@ else
   echo ".env existiert bereits - unveraendert gelassen."
 fi
 
-if [ "${1:-}" = "--service" ]; then
+if [ "${1:-}" = "--service" ] || [ "${2:-}" = "--service" ]; then
   sed -e "s|__USER__|$(id -un)|g" -e "s|__DIR__|${DIR}|g" deploy/paperclip-lite.service \
     | sudo tee /etc/systemd/system/paperclip-lite.service >/dev/null
   sudo systemctl daemon-reload
