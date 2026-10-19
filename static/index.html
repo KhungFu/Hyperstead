@@ -672,7 +672,7 @@ async function wirePicker(id){
 $('#btnTplProj').onclick=async()=>{
   openOv('Firma aus Vorlage gründen'); const body=$('#ovbody');
   const tpls=await api('/templates');
-  const defProv=(S.providers.find(p=>p.configured&&p.id!=='mock'&&p.id!=='cli')||{id:'mock'}).id;
+  const defProv=(S.providers.find(p=>p.configured&&p.id!=='mock'&&!p.id.endsWith('cli'))||{id:'mock'}).id;
   body.innerHTML = `<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Legt Projekt, Organigramm, Arbeitsanweisungen und Rechte komplett an. Danach kannst du alles ändern. Aufträge gibst du dem obersten Agenten (Post-Ansicht, Chat-Tab oder Telegram).</div>`
     + tpls.map(t=>`<div class="task" style="padding:10px"><b>${t.icon} ${esc(t.label)}</b> <span style="color:var(--mute);font-size:12px">· ${t.agents} Agenten</span>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">${esc(t.desc)}</div>

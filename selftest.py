@@ -76,7 +76,11 @@ def group_llm():
         if pid in ("mock", "cli"):
             continue
         if not A.provider_configured(pid):
-            line("warn", cfg["label"], "kein Key" if pid != "ollama" else f"nicht erreichbar ({cfg['url']}) - laeuft 'ollama serve'?")
+            if cfg.get("kind") == "cli":
+                why = "PCL_ALLOW_CLI=1 in .env fehlt" if not A.ALLOW_CLI else f"'{cfg['bin']}' nicht installiert (siehe README: CLI-Anbieter)"
+            else:
+                why = "kein Key" if pid != "ollama" else f"nicht erreichbar ({cfg['url']}) - laeuft 'ollama serve'?"
+            line("warn", cfg["label"], why)
             continue
         any_real = True
 
@@ -84,7 +88,8 @@ def group_llm():
             txt, tok = A.call_llm({"provider": pid, "model": "", "name": "Selbsttest", "id": 0, "perms": "{}"},
                                   [{"role": "user", "content": "Antworte nur mit dem Wort: bereit"}])
             return f"Antwort: {txt.strip()[:40]!r}"
-        check(f"{cfg['label']} ({cfg['model']})", run)
+        check(f"{cfg['label']} ({cfg['model'] or 'Standard'})", run,
+              hint="CLI-Programm angemeldet? Einmal von Hand testen: echo hallo | " + (cfg.get("cmd") or "") if cfg.get("kind") == "cli" else "")
         if pid == "ollama":
             check("Ollama: Modellliste", lambda: f"{len(A.list_models('ollama'))} Modelle: " + ", ".join(A.list_models("ollama")[:4]),
                   hint="Modell laden: ollama pull qwen2.5:3b")

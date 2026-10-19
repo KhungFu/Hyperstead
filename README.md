@@ -175,6 +175,7 @@ mit **▶ Testen** prüfst du Key und Modell sofort. So setzt du das passende Mo
 | OpenRouter | `OPENROUTER_API_KEY` | ein Key für hunderte Modelle (Claude, GPT, Gemini, DeepSeek, Qwen, Llama …) |
 | Groq, Gemini, DeepSeek, Qwen | `GROQ_API_KEY`, `GEMINI_API_KEY`, … | mehrere Keys mit Komma = Rotation bei Limit |
 | Ollama | – | lokale Modelle auf dem Pi |
+| Claude (CLI, dein Abo) / ChatGPT (Codex-CLI, dein Abo) | – | fest eingebaut: `claude -p` bzw. `codex exec -`, Modell im Dropdown (Claude: sonnet/opus/haiku); braucht `PCL_ALLOW_CLI=1` und das angemeldete Programm auf dem Pi |
 | CLI-Agent | – | Befehl, der den Prompt von stdin liest, z. B. `claude -p --model sonnet`; braucht `PCL_ALLOW_CLI=1` |
 
 **Wichtig:** Ein Web-Login (OAuth, „Abo“) von ChatGPT oder Claude lässt sich nicht sauber als API nutzen, das Abgreifen von
@@ -216,3 +217,11 @@ Anbieter „Ollama (lokal)“: kein Key nötig, die Modellliste kommt direkt von
 gibt es die Knöpfe „Alles lokal“ und „Nur Mitarbeiter lokal“; sonst wählst du Ollama je Agent. Läuft Ollama auf einem anderen Rechner
 (z. B. dem Laptop), setze `OLLAMA_URL` auf dessen Adresse. Kleine Modelle (3B) sind auf dem Pi langsam und halten das Werkzeug-Protokoll
 oft schlecht ein; für Chefs ein starkes Modell, lokal eher für einfache Mitarbeiter oder den Chat.
+
+## Claude und ChatGPT über dein Abo (CLI statt API-Key)
+
+In `.env`: `PCL_ALLOW_CLI=1`. Die Programme installierst und meldest du einmal selbst auf dem Pi an (Anleitungen der Hersteller:
+Claude Code `claude`, OpenAI Codex `codex`; Anmeldung mit deinem Abo). Danach erscheinen „Claude (CLI, dein Abo)“ und „ChatGPT (Codex-CLI, dein Abo)“
+in allen Anbieter-Listen. Der Server ruft sie ohne Shell auf, in einem leeren Ordner und **ohne unsere API-Keys in der Umgebung**
+(sonst würde `claude` den API-Key statt des Abos abrechnen). Grenzen: langsamer als die API (Programmstart je Antwort), Abo-Limits gelten
+(viele Agenten = schnell am Limit), und die CLI-Programme haben eigene Werkzeuge – Befehl bei Bedarf über `PCL_CLI_CLAUDE` / `PCL_CLI_CODEX` anpassen.

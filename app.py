@@ -17,6 +17,7 @@ import re
 import secrets
 import shlex
 import sqlite3
+import shutil
 import subprocess
 import sys
 import threading
@@ -126,6 +127,18 @@ PROVIDERS = {
         "models_url": os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/v1/chat/completions").replace("/chat/completions", "/models"),
         "key_env": None,
         "model": os.environ.get("OLLAMA_MODEL", "qwen2.5:3b"),
+    },
+    "claude_cli": {
+        "label": "Claude (CLI, dein Abo)",
+        "kind": "cli", "url": None, "key_env": None, "model": "",
+        "bin": "claude", "cmd_env": "PCL_CLI_CLAUDE", "cmd": "claude -p", "model_flag": "--model",
+        "models": ["sonnet", "opus", "haiku"],
+    },
+    "codex_cli": {
+        "label": "ChatGPT (Codex-CLI, dein Abo)",
+        "kind": "cli", "url": None, "key_env": None, "model": "",
+        "bin": "codex", "cmd_env": "PCL_CLI_CODEX", "cmd": "codex exec --skip-git-repo-check -", "model_flag": "-m",
+        "models": [],
     },
     "cli": {
         "label": "CLI-Agent (z.B. claude -p)",
@@ -291,9 +304,30 @@ def provider_configured(pid):
         return True
     if pid == "cli":
         return ALLOW_CLI
+    if PROVIDERS.get(pid, {}).get("kind") == "cli":
+        return ALLOW_CLI and bool(shutil.which(PROVIDERS[pid]["bin"]))
     if pid == "ollama":
         return ollama_reachable()
     return bool(provider_keys(pid))
+
+
+def _run_cli(argv, prompt):
+    """CLI-Anbieter: Prompt per stdin, Antwort von stdout. Laeuft in einem leeren Ordner und ohne unsere Keys/Tokens in der Umgebung
+    (sonst wuerde z.B. 'claude' den API-Key statt deines Abos benutzen, und das CLI-Programm bekaeme Zugriff auf alle Zugangsdaten)."""
+    env = {k: v for k, v in os.environ.items()
+           if not (k.endswith(("_API_KEY", "_TOKEN", "_SECRET")) or k in ("APP_TOKEN", "TELEGRAM_CHAT_ID"))}
+    wd = Path(WORKSPACE) / ".cli-run"
+    wd.mkdir(parents=True, exist_ok=True)
+    tmo = int(os.environ.get("PCL_CLI_TIMEOUT", "600"))
+    try:
+        r = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=tmo, cwd=str(wd), env=env)
+    except FileNotFoundError:
+        raise RuntimeError(f"Programm '{argv[0]}' nicht gefunden")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"CLI-Agent: Zeitlimit ({tmo} s)")
+    if r.returncode != 0:
+        raise RuntimeError(f"CLI-Fehler: {(r.stderr or r.stdout)[-500:]}")
+    return r.stdout.strip()
 
 
 def call_llm(agent, messages):
@@ -305,21 +339,24 @@ def call_llm(agent, messages):
     if pid == "mock":
         return mock_llm(agent, messages)
 
-    if pid == "cli":
+    if pid == "cli" or PROVIDERS[pid].get("kind") == "cli":
         if not ALLOW_CLI:
             raise RuntimeError("CLI-Agenten sind aus. In .env PCL_ALLOW_CLI=1 setzen.")
-        cmd = (agent.get("cli_command") or "").strip()
-        if not cmd:
-            raise RuntimeError("Kein CLI-Befehl eingetragen.")
+        if pid == "cli":
+            cmd = (agent.get("cli_command") or "").strip()
+            if not cmd:
+                raise RuntimeError("Kein CLI-Befehl eingetragen.")
+            argv = shlex.split(cmd)
+        else:
+            cfg = PROVIDERS[pid]
+            if not shutil.which(cfg["bin"]):
+                raise RuntimeError(f"'{cfg['bin']}' ist auf dem Server nicht installiert oder nicht angemeldet.")
+            argv = shlex.split(os.environ.get(cfg["cmd_env"], "").strip() or cfg["cmd"])
+            model = (agent.get("model") or "").strip()
+            if model:  # Modellflag direkt hinter das Programm (vor ein abschliessendes "-")
+                argv[1:1] = [cfg["model_flag"], model]
         prompt = "\n\n".join(f"[{m['role']}]\n{m['content']}" for m in messages)
-        try:
-            r = subprocess.run(shlex.split(cmd), input=prompt, capture_output=True,
-                               text=True, timeout=300, cwd=str(WORKSPACE))
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("CLI-Agent: Zeitlimit (300 s)")
-        if r.returncode != 0:
-            raise RuntimeError(f"CLI-Fehler: {(r.stderr or r.stdout)[-500:]}")
-        out = r.stdout.strip()
+        out = _run_cli(argv, prompt)
         return out, max(1, (len(prompt) + len(out)) // 4)
 
     cfg = PROVIDERS[pid]
@@ -397,6 +434,8 @@ def list_models(pid, force=False):
     if not cfg:
         return {"models": [], "default": "", "live": False, "error": "Unbekannter Anbieter"}
     base = {"default": cfg["model"], "live": False, "error": ""}
+    if cfg.get("kind") == "cli":
+        return {**base, "models": cfg.get("models", [])}
     if pid in ("mock", "cli") or not cfg.get("models_url"):
         return {**base, "models": [cfg["model"]] if cfg["model"] else []}
     hit = _models_cache.get(pid)
