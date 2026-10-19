@@ -95,6 +95,32 @@ trotzdem kann eine präparierte Seite ein Modell beeinflussen: gib Agenten mit I
 Agenten haben bewusst **keine** Werkzeuge für Käufe, Orders, Zahlungen oder E-Mail-Versand, sie liefern Entwürfe und Empfehlungen.
 Bildlizenzen (CC) verlangen oft eine Namensnennung, der Bildredakteur schreibt dafür `bildnachweis.md`.
 
+## Medien, Dokumente und eigene Dateien
+
+Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem Pi, siehe `install.sh`):
+
+| Werkzeug | Was es kann |
+|---|---|
+| `video_edit` | Video schneiden (`trim`), zusammenfügen (`concat`), **Diashow-Animation mit Zoom** aus Bildern (`slideshow`, optional mit Ton), Text/Untertitel/Logo einblenden, Ton ersetzen/mischen, Tempo ändern, in GIF/WebM/MP3 umwandeln, Standbild ziehen |
+| `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen) |
+| `make_document` | aus Markdown-Kapiteln **PDF, DOCX, EPUB oder HTML** (A4/A5, Cover, Bilder, Umlaute und türkische Zeichen) |
+| `media_info` | Dauer, Auflösung, Codecs |
+| `download_file` | PDFs, EPUB, Office, Audio, Video, ZIP aus dem Netz in `downloads/` laden |
+| `read_file` | liest Text, Markdown, HTML, **PDF, DOCX, EPUB**, auch lange Dateien in Abschnitten |
+
+**Eigene Dateien** (Videos zum Bearbeiten, PDFs, Bilder, Texte) lädst du in „📁 Dateien dieses Projekts“ hoch, sie landen in
+`input/`; fertige Ergebnisse liegen in `output/`, Bilder in `assets/`. Ehrliche Grenzen: Es gibt **keine KI-Videogenerierung**
+(Text-zu-Video). „Animation“ heißt hier: Szenenbilder per Bild-KI + Zoom/Schwenk + Sprecher + Schnitt. Auf dem Raspberry Pi
+rechnet ffmpeg langsam (eine Minute 720p-Video kann mehrere Minuten dauern), Zeitlimit `PCL_FFMPEG_TIMEOUT`.
+
+## Chat und Vorlagen
+
+- **💬 Chat-Tab** (im Agenten-Panel): freies Gespräch mit jedem Agenten, z. B. mit der Leitung der *Gedankenwerkstatt*, zum Philosophieren,
+  Ideen entwickeln und Hinterfragen. „📋 Als Auftrag erteilen“ übergibt das Gespräch dem Agenten und seinem Team, das Ergebnis kommt als Post.
+  Der Chat läuft ohne Werkzeuge.
+- **Firmenvorlagen** (🏢): Webagentur, Buchhaltung/Steuerkanzlei, Import/Export-Handel, **Animationsagentur**, **Buchverlag/Content-Agentur**,
+  **Gedankenwerkstatt**, **Recherchebüro** (findet und liest PDFs). Beim Gründen wählst du Modell für Leitung und Mitarbeiter.
+
 ## Post und Telegram
 
 Sobald ein **oberster Auftrag** (den du einem Agenten, meist dem CEO, gegeben hast) fertig, fehlgeschlagen oder
@@ -132,15 +158,25 @@ Die App fragt Telegram nur nach außen ab, es wird kein Port geöffnet (geht auc
 Die Rechte werden **serverseitig** geprüft. Schreibt ein Modell eine nicht erlaubte Aktion in seine
 Antwort, wird sie ignoriert und im Verlauf protokolliert.
 
-## KI-Anbieter
+## KI-Anbieter und Modellwahl
 
-Groq, Gemini, DeepSeek, Qwen und Ollama laufen über das OpenAI-kompatible Format mit Key-Rotation.
-Modellnamen ändern sich oft, im Agenten-Panel kannst du das Modell frei eintragen.
+Pro Agent wählst du **Anbieter und Modell** (Panel → Einstellungen). Die Modellliste holt die App live vom Anbieter,
+mit **▶ Testen** prüfst du Key und Modell sofort. So setzt du das passende Modell pro Rolle: stärkstes für Chefs
+(Planen, Prüfen, Denken), gute Text- oder Code-Modelle für Mitarbeiter, schnelle günstige für einfache Arbeit.
 
-**ChatGPT / Claude über Web-Login (OAuth)** lassen sich nicht sauber als API nutzen. Das Abgreifen von
-Web-Sitzungen verstößt gegen die Nutzungsbedingungen und wird geblockt. Der saubere Weg ist der Anbieter
-**„CLI-Agent"**: Du trägst einen Befehl ein, der den Prompt von stdin liest (z. B. `claude -p`), und
-meldest dich einmalig mit der offiziellen CLI an. Dafür `PCL_ALLOW_CLI=1` in `.env` setzen.
+| Anbieter | Key in `.env` | Hinweis |
+|---|---|---|
+| Claude (Anthropic) | `ANTHROPIC_API_KEY` | Sonnet, Haiku, Opus … je Agent wählbar |
+| ChatGPT (OpenAI) | `OPENAI_API_KEY` | |
+| OpenRouter | `OPENROUTER_API_KEY` | ein Key für hunderte Modelle (Claude, GPT, Gemini, DeepSeek, Qwen, Llama …) |
+| Groq, Gemini, DeepSeek, Qwen | `GROQ_API_KEY`, `GEMINI_API_KEY`, … | mehrere Keys mit Komma = Rotation bei Limit |
+| Ollama | – | lokale Modelle auf dem Pi |
+| CLI-Agent | – | Befehl, der den Prompt von stdin liest, z. B. `claude -p --model sonnet`; braucht `PCL_ALLOW_CLI=1` |
+
+**Wichtig:** Ein Web-Login (OAuth, „Abo“) von ChatGPT oder Claude lässt sich nicht sauber als API nutzen, das Abgreifen von
+Web-Sitzungen verstößt gegen die Nutzungsbedingungen. Wege: der **API-Key** des Anbieters (Abrechnung nach Verbrauch, nicht
+das Chat-Abo) oder der **CLI-Agent** mit der offiziellen, einmalig angemeldeten CLI. Es gibt kein Budget in der App: bei
+bezahlten APIs und vielen Werkzeug-Runden können Kosten entstehen, die Tokens siehst du pro Agent am Knoten.
 
 ## Sicherheit
 
@@ -156,6 +192,7 @@ meldest dich einmalig mit der offiziellen CLI an. Dafür `PCL_ALLOW_CLI=1` in `.
 
 - Ein Worker, Aufgaben laufen nacheinander.
 - Kein automatischer Heartbeat nach Zeitplan (Aufgaben starten manuell oder per Delegation).
+- Keine Text-zu-Video-KI, keine Scan-/Bild-PDFs (OCR), keine eigene Anstellung neuer Agenten durch den CEO (Organigramm legst du an).
 - Kein echter Browser: Seiten werden als Text gelesen, JavaScript-lastige Seiten liefern oft wenig. Die DuckDuckGo-Suche ohne Key kann begrenzt oder geändert werden.
 - Kein Budget: Tokens werden nur gezählt. Die Rundenlimits (Überarbeitungen, Prüfdurchgänge, Tiefe) verhindern Endlosschleifen.
 - Sitzungen sind einfache signierte Cookies, ein einzelnes Gerät lässt sich nicht gezielt abmelden

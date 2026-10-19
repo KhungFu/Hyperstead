@@ -94,6 +94,11 @@ textarea{resize:vertical;min-height:110px}
 .chk small{display:block;color:var(--mute)}
 .btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
 .btn:hover{border-color:#55555d}
+#chatlog{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 330px);overflow:auto;margin-bottom:10px}
+.bub{padding:8px 11px;border-radius:12px;max-width:92%;white-space:pre-wrap;word-wrap:break-word;line-height:1.45;font-size:13px}
+.bub.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:3px}
+.bub.assistant{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:3px}
+.bub.wait{opacity:.6;font-style:italic}
 a.btn{text-decoration:none;color:var(--text);display:inline-block}
 a.btn.pri{color:#fff}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -174,6 +179,7 @@ a.btn.pri{color:#fff}
     <div class="p-head"><b id="ptitle">Agent</b><button class="icon-btn" id="pclose">✕</button></div>
     <div class="tabs">
       <button class="tab on" data-tab="set">Einstellungen</button>
+      <button class="tab" data-tab="chat">💬 Chat</button>
       <button class="tab" data-tab="tasks">Aufgaben</button>
       <button class="tab" data-tab="log">Verlauf</button>
     </div>
@@ -414,7 +420,7 @@ function drawPanel(){
   const a=agentById(S.sel); if(!a){ closePanel(); return; }
   $('#ptitle').textContent=a.name;
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===S.tab));
-  if(S.tab==='set') drawSettings(a); else if(S.tab==='tasks') drawTasks(a); else drawLog(a);
+  if(S.tab==='set') drawSettings(a); else if(S.tab==='chat') drawChat(a); else if(S.tab==='tasks') drawTasks(a); else drawLog(a);
 }
 
 function drawSettings(a){
@@ -427,7 +433,11 @@ function drawSettings(a){
     <label>Rolle / Titel</label><input type="text" id="f_role" value="${esc(a.role)}">
     <label>Berichtet an</label><select id="f_parent">${par}</select>
     <label>Anbieter (KI)</label><select id="f_prov">${prov}</select>
-    <label>Modell (leer = Standard des Anbieters)</label><input type="text" id="f_model" value="${esc(a.model)}" placeholder="z.B. llama-3.3-70b-versatile">
+    <label>Modell</label>
+    <select id="f_modelsel"><option>lade …</option></select>
+    <input type="text" id="f_model" value="${esc(a.model)}" placeholder="Modellname eingeben" style="display:none;margin-top:6px">
+    <div class="row" style="margin:6px 0"><button class="btn sm" id="mtest">▶ Testen</button><button class="btn sm" id="mrefresh">↻ Liste neu laden</button></div>
+    <div id="mres" style="font-size:12px;color:var(--mute);margin-bottom:6px;white-space:pre-wrap"></div>
     <div id="cliwrap" style="display:${a.provider==='cli'?'block':'none'}">
       <label>CLI-Befehl (liest Prompt von stdin, z.B. <code>claude -p</code>)</label><input type="text" id="f_cli" value="${esc(a.cli_command)}">
     </div>
@@ -440,6 +450,7 @@ function drawSettings(a){
     <div class="chk"><input type="checkbox" id="p_auto" ${pm.auto_run?'checked':''}><div>Delegierte Aufgaben starten automatisch<small>aus = du startest sie selbst (sicherer)</small></div></div>
     <div class="chk"><input type="checkbox" id="p_web" ${pm.web?'checked':''}><div>Darf im Internet recherchieren<small>Websuche und Webseiten lesen (Gesetze, Preise, Wettbewerb …)</small></div></div>
     <div class="chk"><input type="checkbox" id="p_images" ${pm.images?'checked':''}><div>Darf Bilder suchen, laden und erzeugen<small>frei lizenzierte Fotos oder KI-Bilder, gespeichert in assets/</small></div></div>
+    <div class="chk"><input type="checkbox" id="p_media" ${pm.media?'checked':''}><div>Darf Medien &amp; Dokumente erstellen<small>Videos schneiden/erstellen (ffmpeg), Sprache, Bücher als PDF/Word/EPUB</small></div></div>
     <div class="chk"><input type="checkbox" id="p_read" ${pm.read_files?'checked':''}><div>Darf Projektdateien lesen<small>z. B. Ergebnisse der Kollegen im Projektordner</small></div></div>
     <div class="chk"><input type="checkbox" id="p_files" ${pm.write_files?'checked':''}><div>Darf Dateien schreiben<small>nur im Projektordner auf dem Pi</small></div></div>
     <div class="chk"><input type="checkbox" id="p_shell" ${pm.shell?'checked':''} ${S.info.allow_shell?'':'disabled'}><div>Darf Shell-Befehle vorschlagen<small>${S.info.allow_shell?'läuft erst nach deiner Freigabe (Sidebar „Freigaben“)':'auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env)'}</small></div></div>
@@ -449,11 +460,30 @@ function drawSettings(a){
       <button class="btn pri" id="saveAg">Speichern</button>
       <button class="btn danger" id="delAg">Agent löschen</button>
     </div>`;
-  $('#f_prov').onchange=e=>$('#cliwrap').style.display=e.target.value==='cli'?'block':'none';
+  async function loadModels(force){
+    const prov=$('#f_prov').value, sel=$('#f_modelsel'), inp=$('#f_model');
+    if(prov==='cli'||prov==='mock'){ sel.innerHTML='<option value="">— nicht nötig —</option>'; inp.value=''; inp.style.display='none'; $('#mres').textContent=prov==='cli'?'Das Modell steckt im CLI-Befehl, z. B. claude -p --model sonnet':''; return; }
+    let r; try{ r=await api('/providers/'+prov+'/models'+(force?'?refresh=1':'')); }catch(e){ r={models:[],default:'',error:'Liste nicht ladbar'}; }
+    const cur=inp.value.trim();
+    const opts=[`<option value="">— Standard (${esc(r.default)}) —</option>`].concat((r.models||[]).filter(m=>m!==r.default||true).map(m=>`<option value="${esc(m)}">${esc(m)}</option>`));
+    if(cur && !(r.models||[]).includes(cur)) opts.push(`<option value="${esc(cur)}">${esc(cur)}</option>`);
+    opts.push('<option value="__custom">✎ eigener Name …</option>');
+    sel.innerHTML=opts.join(''); sel.value=cur||''; inp.style.display='none';
+    $('#mres').textContent=r.error?('⚠ '+r.error):(r.live?`${(r.models||[]).length} Modelle vom Anbieter geladen`:'');
+  }
+  $('#f_modelsel').onchange=e=>{ const v=e.target.value; const inp=$('#f_model'); if(v==='__custom'){ inp.style.display=''; inp.focus(); } else { inp.value=v; inp.style.display='none'; } };
+  $('#mrefresh').onclick=()=>loadModels(true);
+  $('#mtest').onclick=async()=>{
+    const el=$('#mres'); el.textContent='teste …';
+    const r=await api('/providers/test','POST',{provider:$('#f_prov').value,model:$('#f_model').value.trim(),cli_command:$('#f_cli')?$('#f_cli').value:''});
+    el.textContent=r.ok?`✅ läuft: ${r.model} · ${r.seconds}s · ${r.tokens} Tok · Antwort: „${r.reply}“`:`❌ ${r.error}`;
+  };
+  loadModels(false);
+  $('#f_prov').onchange=e=>{ $('#cliwrap').style.display=e.target.value==='cli'?'block':'none'; $('#f_model').value=''; loadModels(false); };
   $('#saveAg').onclick=async()=>{
     const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,provider:$('#f_prov').value,model:$('#f_model').value.trim(),
       system_prompt:$('#f_sys').value,paused:$('#f_pause').checked,
-      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,shell:$('#p_shell').checked}};
+      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,shell:$('#p_shell').checked}};
     if($('#cliwrap').style.display!=='none') body.cli_command=$('#f_cli').value;
     const np=$('#f_parent').value; body.parent_id=np?+np:null;
     await api('/agents/'+a.id,'PUT',body); toast('Gespeichert'); $('#toast').style.borderColor='var(--green)';
@@ -463,6 +493,31 @@ function drawSettings(a){
   $('#delAg').onclick=async()=>{ if(confirm('Agent „'+a.name+'“ mit seinen Aufgaben löschen?')){ await api('/agents/'+a.id,'DELETE'); closePanel(); refresh(true);} };
 }
 
+const miniMd = t => esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|\s)\*(\S[^*]*?)\*(?=\s|$|[.,;:!?])/g,'$1<i>$2</i>');
+async function drawChat(a){
+  $('#pbody').innerHTML=`
+    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Freies Gespräch mit ${esc(a.name)} – zum Nachdenken, Philosophieren, Ideen entwickeln. Ohne Werkzeuge; zum Umsetzen gib das Gespräch als Auftrag ans Team.</div>
+    <div id="chatlog"></div>
+    <textarea id="chatin" style="min-height:70px" placeholder="Schreib etwas … (Enter sendet, Shift+Enter = neue Zeile)"></textarea>
+    <div class="row"><button class="btn pri" id="chatsend">Senden</button><button class="btn" id="chatorder">📋 Als Auftrag erteilen</button><button class="btn danger sm" id="chatclear">Verlauf leeren</button></div>`;
+  const log=$('#chatlog');
+  const add=(role,text,cls='')=>{ const d=document.createElement('div'); d.className='bub '+role+' '+cls; d.innerHTML=role==='assistant'?miniMd(text):esc(text); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; };
+  (await api('/agents/'+a.id+'/chat')).forEach(m=>add(m.role,m.content));
+  async function send(){
+    const inp=$('#chatin'), msg=inp.value.trim(); if(!msg) return;
+    inp.value=''; add('user',msg); const w=add('assistant','denkt nach …','wait'); $('#chatsend').disabled=true;
+    try{ const r=await api('/agents/'+a.id+'/chat','POST',{message:msg}); w.className='bub assistant'; w.innerHTML=miniMd(r.reply); }
+    catch(e){ w.remove(); inp.value=msg; }
+    $('#chatsend').disabled=false; log.scrollTop=log.scrollHeight; inp.focus();
+  }
+  $('#chatsend').onclick=send;
+  $('#chatin').onkeydown=e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } };
+  $('#chatorder').onclick=async()=>{
+    const t=prompt('Titel des Auftrags (leer = aus deiner letzten Nachricht):',''); if(t===null) return;
+    const r=await api('/agents/'+a.id+'/chat/order','POST',{title:t}); toast('Auftrag #'+r.id+' erteilt, das Ergebnis kommt als Post.'); refresh(true);
+  };
+  $('#chatclear').onclick=async()=>{ if(confirm('Gesprächsverlauf löschen?')){ await api('/agents/'+a.id+'/chat','DELETE'); drawChat(a); } };
+}
 function treeHtml(list){
   return list.map(c=>`<details ${S.openTasks.has('c'+c.id)?'open':''} data-cid="${c.id}">
     <summary><span class="chip ${c.status}">${STATUS[c.status]||c.status}</span><span class="t">${esc(c.title)}</span><span class="who">${esc(c.agent_name||'?')}${c.rounds?` · ${c.rounds}× überarbeitet`:''}</span></summary>
@@ -567,36 +622,80 @@ $('#btnInbox').onclick=()=>{
   }
   load();
 };
-$('#btnFiles').onclick=async()=>{
+async function showFiles(){
   if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
   openOv('Dateien dieses Projekts'); const body=$('#ovbody');
   const r=await api('/projects/'+S.pid+'/files');
-  const isImg=p=>/\.(png|jpe?g|gif|webp|svg)$/i.test(p);
-  const kb=n=>n<1024?n+' B':(n/1024).toFixed(0)+' KB';
-  body.innerHTML = r.files.length ? `
-    <div class="row" style="margin:0 0 10px"><a class="btn pri sm" href="${r.zip}">⬇ Alles als ZIP</a>
-      ${r.files.some(f=>f.path==='index.html')?`<a class="btn sm" target="_blank" rel="noopener" href="${r.files.find(f=>f.path==='index.html').url}">🌐 Webseite öffnen (index.html)</a>`:''}</div>
-    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Vorschau läuft isoliert (Sandbox). Der Link enthält einen geheimen Schlüssel, gib ihn nicht weiter.</div>`
-    + r.files.map(f=>`<div class="task" style="padding:8px;display:flex;gap:10px;align-items:center">
-        ${isImg(f.path)?`<img src="${f.url}" style="width:44px;height:44px;object-fit:cover;border-radius:6px">`:'<span style="width:44px;text-align:center">📄</span>'}
-        <a href="${f.url}" target="_blank" rel="noopener" style="flex:1;color:var(--text);word-break:break-all">${esc(f.path)}</a><span style="color:var(--mute);font-size:12px">${kb(f.size)}</span></div>`).join('')
-    : '<div style="color:var(--mute)">Noch keine Dateien. Agenten mit dem Recht „Dateien schreiben“ bzw. „Bilder“ legen sie hier ab.</div>';
-};
+  const isImg=p=>/\.(png|jpe?g|gif|webp|svg)$/i.test(p), isVid=p=>/\.(mp4|webm|mov)$/i.test(p), isAud=p=>/\.(mp3|wav|ogg|m4a)$/i.test(p);
+  const kb=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
+  const icon=p=>isVid(p)?'🎬':isAud(p)?'🎵':/\.pdf$/i.test(p)?'📕':/\.(epub|docx)$/i.test(p)?'📘':'📄';
+  const idx=r.files.find(f=>f.path==='index.html');
+  body.innerHTML = `
+    <div class="task" style="padding:10px;margin-bottom:12px">
+      <b>Eigene Dateien für das Team hochladen</b>
+      <div style="color:var(--mute);font-size:12px;margin:3px 0 6px">Videos zum Bearbeiten, PDFs zum Lesen, Bilder, Texte. Sie landen in <code>input/</code>, das Team findet sie dort.</div>
+      <input type="file" id="upf" multiple style="width:auto"><div id="upst" style="font-size:12px;color:var(--mute);margin-top:4px"></div>
+    </div>`
+    + (r.files.length ? `<div class="row" style="margin:0 0 10px"><a class="btn pri sm" href="${r.zip}">⬇ Alles als ZIP</a>
+      ${idx?`<a class="btn sm" target="_blank" rel="noopener" href="${idx.url}">🌐 Webseite öffnen (index.html)</a>`:''}</div>
+      <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Vorschau läuft isoliert (Sandbox). Der Link enthält einen geheimen Schlüssel, gib ihn nicht weiter.</div>`
+      + r.files.map(f=>`<div class="task" style="padding:8px;display:flex;gap:10px;align-items:center">
+        ${isImg(f.path)?`<img src="${f.url}" style="width:44px;height:44px;object-fit:cover;border-radius:6px">`:`<span style="width:44px;text-align:center;font-size:22px">${icon(f.path)}</span>`}
+        <a href="${f.url}" target="_blank" rel="noopener" style="flex:1;color:var(--text);word-break:break-all">${esc(f.path)}</a>
+        <span style="color:var(--mute);font-size:12px;white-space:nowrap">${kb(f.size)}</span>
+        <button class="icon-btn" title="Datei löschen" data-delf="${esc(f.path)}">🗑</button></div>`).join('')
+      : '<div style="color:var(--mute)">Noch keine Dateien. Was das Team erzeugt (Webseiten, Bilder, Videos, Dokumente), erscheint hier.</div>');
+  $('#upf').onchange=async e=>{
+    const st=$('#upst');
+    for(const f of e.target.files){
+      st.textContent='Lade hoch: '+f.name+' …'; const fd=new FormData(); fd.append('file',f);
+      const resp=await fetch('/api/projects/'+S.pid+'/upload',{method:'POST',headers:{'X-PCL':'1'},body:fd});
+      if(!resp.ok){ toast((await resp.text()).slice(0,200)||'Upload fehlgeschlagen'); break; }
+    }
+    showFiles();
+  };
+  body.querySelectorAll('[data-delf]').forEach(b=>b.onclick=async()=>{ if(confirm('„'+b.dataset.delf+'“ löschen?')){ await fetch('/api/projects/'+S.pid+'/files?path='+encodeURIComponent(b.dataset.delf),{method:'DELETE',headers:{'X-PCL':'1'}}); showFiles(); } });
+}
+$('#btnFiles').onclick=showFiles;
+
+/* ---------- Firma aus Vorlage ---------- */
+function provOptions(def){ return S.providers.map(p=>`<option value="${p.id}" ${p.id===def?'selected':''}>${esc(p.label)}${p.configured?'':' — kein Key'}</option>`).join(''); }
+async function wirePicker(id){
+  const ps=$('#'+id+'_p'), ms=$('#'+id+'_m');
+  async function load(){
+    ms.innerHTML='<option value="">lade …</option>';
+    let r; try{ r=await api('/providers/'+ps.value+'/models'); }catch(e){ r={models:[],default:''}; }
+    ms.innerHTML=`<option value="">— Standard (${esc(r.default||'-')}) —</option>`+(r.models||[]).map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  }
+  ps.onchange=load; load();
+}
 $('#btnTplProj').onclick=async()=>{
   openOv('Firma aus Vorlage gründen'); const body=$('#ovbody');
   const tpls=await api('/templates');
-  body.innerHTML = `<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Legt Projekt, Organigramm, Arbeitsanweisungen und Rechte komplett an. Danach kannst du alles ändern. Aufträge gibst du dem obersten Agenten (Post-Ansicht oder Telegram).</div>`
+  const defProv=(S.providers.find(p=>p.configured&&p.id!=='mock'&&p.id!=='cli')||{id:'mock'}).id;
+  body.innerHTML = `<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Legt Projekt, Organigramm, Arbeitsanweisungen und Rechte komplett an. Danach kannst du alles ändern. Aufträge gibst du dem obersten Agenten (Post-Ansicht, Chat-Tab oder Telegram).</div>`
     + tpls.map(t=>`<div class="task" style="padding:10px"><b>${t.icon} ${esc(t.label)}</b> <span style="color:var(--mute);font-size:12px">· ${t.agents} Agenten</span>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">${esc(t.desc)}</div>
-        <div class="row"><button class="btn pri sm" data-tpl="${t.key}">Gründen</button></div></div>`).join('');
-  body.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=async()=>{
+        <div class="row"><button class="btn pri sm" data-tpl="${t.key}">Auswählen</button></div></div>`).join('');
+  body.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{
     const t=tpls.find(x=>x.key===b.dataset.tpl);
-    const name=prompt('Name der Firma:', t.label); if(!name) return;
-    const goal=prompt('Ziel / Kontext (Land, Branche, Kunde …). Leer lassen für die Standardbeschreibung:', '');
-    b.disabled=true;
-    const r=await api('/projects/from_template','POST',{template:t.key,name,goal:goal||undefined});
-    $('#ov').classList.remove('on'); await loadProjects(); await openProject(r.id);
-    toast('Firma gegründet. Provider: '+r.provider);
+    body.innerHTML = `<b>${t.icon} ${esc(t.label)}</b>
+      <label>Name der Firma</label><input type="text" id="tp_name" value="${esc(t.label)}">
+      <label>Ziel / Kontext (Land, Branche, Kunde …) – alle Agenten kennen es</label><textarea id="tp_goal" style="min-height:110px">${esc(t.goal)}</textarea>
+      <label>KI-Modell für die Leitung (Chefs, die planen und prüfen)</label>
+      <select id="tp_lead_p">${provOptions(defProv)}</select><select id="tp_lead_m" style="margin-top:6px"></select>
+      <label>KI-Modell für die Mitarbeiter (Texte, Code, Recherche …)</label>
+      <select id="tp_team_p">${provOptions(defProv)}</select><select id="tp_team_m" style="margin-top:6px"></select>
+      <div style="color:var(--mute);font-size:12px;margin-top:6px">Tipp: Chefs brauchen das stärkste Modell (Planen, Prüfen, Denken), Mitarbeiter je nach Aufgabe ein gutes Text-, Code- oder schnelles Modell. Du kannst jeden Agenten später einzeln umstellen und testen.</div>
+      <div class="row"><button class="btn pri" id="tp_go">Firma gründen</button><button class="btn" id="tp_back">Zurück</button></div>`;
+    wirePicker('tp_lead'); wirePicker('tp_team');
+    $('#tp_back').onclick=()=>$('#btnTplProj').onclick();
+    $('#tp_go').onclick=async()=>{
+      $('#tp_go').disabled=true;
+      const r=await api('/projects/from_template','POST',{template:t.key,name:$('#tp_name').value.trim()||t.label,goal:$('#tp_goal').value.trim()||undefined,
+        models:{lead:{provider:$('#tp_lead_p').value,model:$('#tp_lead_m').value},team:{provider:$('#tp_team_p').value,model:$('#tp_team_m').value}}});
+      $('#ov').classList.remove('on'); await loadProjects(); await openProject(r.id); toast('Firma gegründet.');
+    };
   });
 };
 $('#btnAudit').onclick=async()=>{

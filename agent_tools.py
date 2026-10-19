@@ -12,12 +12,18 @@ Sicherheit:
 - Dateien nur innerhalb des Projektordners workspace/<projekt-id>/.
 """
 import base64
+import html as htmllib
+import io
 import ipaddress
 import json
 import os
 import re
+import shutil
 import socket
+import subprocess
+import tempfile
 import time
+import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urljoin, urlparse
@@ -29,6 +35,7 @@ MAX_PAGE_BYTES = 2_000_000
 MAX_IMAGE_BYTES = 8_000_000
 PAGE_CHARS = 7000        # Text pro Seite, der ans Modell geht
 READ_CHARS = 12000       # Text pro gelesener Projektdatei
+MAX_PDF_BYTES = 30_000_000
 
 
 class ToolError(Exception):
@@ -46,13 +53,36 @@ def enabled():
 
 # --------------------------------------------------------------------- Beschreibung fuers Modell
 TOOLS = {
-    "web_search": ("web", '{"tool": "web_search", "query": "Suchbegriff"}  Websuche: aktuelle Infos, Gesetze, Preise, Wettbewerb, Quellen'),
-    "fetch_url": ("web", '{"tool": "fetch_url", "url": "https://..."}  Webseite als Text lesen (z.B. Treffer der Suche genauer ansehen)'),
+    "web_search": ("web", '{"tool": "web_search", "query": "Suchbegriff"}  Websuche: aktuelle Infos, Gesetze, Preise, Wettbewerb, Quellen. '
+                          'PDFs/Dokumente finden: Suchbegriff + " filetype:pdf"'),
+    "fetch_url": ("web", '{"tool": "fetch_url", "url": "https://..."}  Webseite oder PDF (Textinhalt) lesen'),
+    "download_file": ("web", '{"tool": "download_file", "url": "https://.../x.pdf", "name": "kurzname"}  Datei (PDF, EPUB, Office, Audio, Video, ZIP) '
+                             'in downloads/ speichern. Urheberrecht/Lizenz beachten, nur fuer erlaubte Nutzung'),
     "image_search": ("images", '{"tool": "image_search", "query": "mountain lake sunrise"}  frei nutzbare Fotos suchen (Lizenz/Urheber werden mitgeliefert)'),
     "image_save": ("images", '{"tool": "image_save", "url": "https://...jpg", "name": "hero"}  Bild in assets/ des Projekts speichern'),
     "image_generate": ("images", '{"tool": "image_generate", "prompt": "detaillierte Bildbeschreibung", "name": "logo"}  Bild per KI erzeugen und in assets/ speichern'),
-    "list_files": ("read_files", '{"tool": "list_files", "path": ""}  Dateien im Projektordner auflisten'),
-    "read_file": ("read_files", '{"tool": "read_file", "path": "index.html"}  Textdatei aus dem Projektordner lesen'),
+    "list_files": ("read_files", '{"tool": "list_files", "path": ""}  Dateien im Projektordner auflisten (input/ = vom Besitzer hochgeladen, '
+                                 'assets/ = Bilder, downloads/ = geladene Dateien, output/ = fertige Medien/Dokumente)'),
+    "read_file": ("read_files", '{"tool": "read_file", "path": "datei.pdf", "offset": 0}  Datei lesen: Text, Markdown, HTML, PDF, DOCX, EPUB. '
+                                'Lange Dateien in Teilen lesen (offset = Zeichenposition, steht am Ende der Ausgabe)'),
+    "media_info": ("media", '{"tool": "media_info", "path": "input/video.mp4"}  Dauer, Aufloesung, Codecs einer Video-/Audio-/Bilddatei'),
+    "video_edit": ("media", """{"tool": "video_edit", "op": "...", ...}  Video/Audio bearbeiten (ffmpeg). Pfade relativ zum Projektordner, Ergebnis landet in output/.
+     op=trim: input, start, end (Sekunden oder MM:SS)
+     op=concat: inputs [..] (werden auf gleiche Groesse/Bildrate gebracht), optional width, height, fps
+     op=slideshow: images [..], seconds (je Bild, Standard 4), kenburns true/false (Zoom/Schwenk), audio (optional Musik/Sprecher), width, height
+     op=text_overlay: input, text, start, end, position top|center|bottom, size, color
+     op=burn_subtitles: input, srt (Untertiteldatei)
+     op=overlay_image: input, image (Logo/Wasserzeichen), position tl|tr|bl|br|center, width
+     op=add_audio: input (Video), audio, mode replace|mix, volume (0.0-2.0)
+     op=extract_audio: input, format mp3|wav
+     op=speed: input, factor (0.25-4)
+     op=convert: input, format mp4|webm|gif|mp3|wav, optional width, height, fps
+     op=frame: input, at (Sekunde) -> PNG-Standbild
+     optional bei allen: name (Dateiname des Ergebnisses ohne Endung)"""),
+    "speak": ("media", '{"tool": "speak", "text": "Sprechertext", "lang": "de", "name": "sprecher1"}  Text zu gesprochener Audiodatei (output/audio/). lang: de, en, tr ...'),
+    "make_document": ("media", """{"tool": "make_document", "format": "pdf", "title": "Buchtitel", "author": "Name", "sources": ["kapitel1.md", "kapitel2.md"], "name": "buch"}
+     Erzeugt aus Markdown-Dateien ein fertiges Dokument in output/. format: pdf | docx | epub | html. Optional: content (Markdown direkt statt sources),
+     cover (Bildpfad, nur epub), page A4|A5 (pdf). Markdown: # Kapitel, ## Abschnitt, ### Unterabschnitt, - Listen, 1. nummeriert, > Zitat, **fett**, *kursiv*, ![Text](assets/bild.png)"""),
 }
 
 
@@ -98,6 +128,8 @@ def safe_get(url, max_bytes, hops=5):
             r.close()
             continue
         buf, cut = bytearray(), False
+        if "pdf" in r.headers.get("Content-Type", "").lower():
+            max_bytes = max(max_bytes, MAX_PDF_BYTES)
         for chunk in r.iter_content(65536):
             buf += chunk
             if len(buf) > max_bytes:
@@ -195,7 +227,13 @@ def web_search(query, n=6):
 def fetch_url(url):
     r, data, cut = safe_get(str(url or "").strip(), MAX_PAGE_BYTES)
     ctype = r.headers.get("Content-Type", "").lower()
-    if any(x in ctype for x in ("image/", "video/", "audio/", "zip", "octet-stream", "pdf")):
+    if "pdf" in ctype or data[:4] == b"%PDF":
+        txt = pdf_text(data)
+        if not txt.strip():
+            return f"Quelle: {url}\nPDF ohne auslesbaren Text (Scan?). Mit download_file speichern."
+        return (f"Quelle: {url} (PDF, {len(data) // 1024} KB)\n\n" + _clip(txt, PAGE_CHARS) +
+                "\n\nFuer das ganze Dokument: download_file, dann read_file mit offset.")
+    if any(x in ctype for x in ("image/", "video/", "audio/", "zip", "octet-stream")):
         raise ToolError(f"Kein Text-Inhalt ({ctype.split(';')[0]}). Fuer Bilder image_save nutzen.")
     text = data.decode(r.encoding or "utf-8", errors="replace")
     if "html" in ctype or text.lstrip()[:1] == "<":
@@ -339,23 +377,830 @@ def list_files(root, path=""):
     if not d.exists():
         return "(Ordner ist leer oder existiert noch nicht)"
     rows = []
-    for f in sorted(d.rglob("*"))[:300]:
-        if f.is_file():
+    for f in sorted(d.rglob("*"))[:600]:
+        if f.is_file() and not any(part.startswith(".") for part in f.relative_to(root.resolve()).parts):
             rows.append(f"{f.relative_to(root.resolve())}  ({f.stat().st_size // 1024 or 1} KB)")
     return "\n".join(rows) or "(keine Dateien)"
 
 
-def read_file(root, path):
+def read_file(root, path, offset=0):
     try:
         f = _inside(root, path)
     except ValueError:
         raise ToolError("Pfad liegt ausserhalb des Projektordners")
     if not f.is_file():
         raise ToolError(f"Datei '{path}' gibt es nicht (list_files zeigt den Inhalt)")
-    data = f.read_bytes()[:400_000]
-    if b"\x00" in data[:2000]:
-        return f"{path}: Binaerdatei ({f.stat().st_size // 1024} KB), kann nicht als Text gelesen werden."
-    return f"Datei {path}:\n" + _clip(data.decode("utf-8", errors="replace"), READ_CHARS)
+    ext = f.suffix.lower()
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".zip"):
+        return f"{path}: Mediendatei ({f.stat().st_size // 1024} KB). Fuer Videos/Audio: media_info."
+    raw = f.read_bytes()[:30_000_000]
+    try:
+        text = _doc_text(path, raw)
+    except Exception as e:
+        raise ToolError(f"Dokument nicht lesbar ({type(e).__name__})")
+    if text is None:
+        if b"\x00" in raw[:2000]:
+            return f"{path}: Binaerdatei ({f.stat().st_size // 1024} KB), kann nicht als Text gelesen werden."
+        text = raw[:2_000_000].decode("utf-8", errors="replace")
+    try:
+        offset = max(0, int(offset or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    chunk = text[offset:offset + READ_CHARS]
+    more = f"\n[Fortsetzung: read_file mit offset={offset + READ_CHARS}; Gesamtlaenge {len(text)} Zeichen]" if len(text) > offset + READ_CHARS else ""
+    return f"Datei {path} (ab Zeichen {offset}):\n" + chunk + more
+
+
+# ------------------------------------------------------------------ Dokumente lesen (PDF, DOCX, EPUB)
+def pdf_text(data):
+    """Text aus PDF-Bytes. pypdf, sonst pdftotext."""
+    try:
+        from pypdf import PdfReader
+        rd = PdfReader(io.BytesIO(data))
+        parts = []
+        for i, pg in enumerate(rd.pages, 1):
+            t = (pg.extract_text() or "").strip()
+            if t:
+                parts.append(f"[Seite {i}]\n{t}")
+        txt = "\n\n".join(parts)
+        if txt.strip():
+            return txt
+    except ImportError:
+        pass
+    except Exception:
+        pass
+    if shutil.which("pdftotext"):
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
+            f.write(data)
+            f.flush()
+            r = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, timeout=60)
+            if r.stdout.strip():
+                return r.stdout
+    return ""
+
+
+def docx_text(data):
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        xml = z.read("word/document.xml").decode("utf-8", "replace")
+    xml = re.sub(r"</w:p>", "\n", xml)
+    xml = re.sub(r"<w:tab/>", "\t", xml)
+    return htmllib.unescape(re.sub(r"<[^>]+>", "", xml)).strip()
+
+
+def epub_text(data):
+    out = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        names = sorted(n for n in z.namelist() if n.lower().endswith((".xhtml", ".html", ".htm")))
+        for n in names:
+            title, body = html_to_text(z.read(n).decode("utf-8", "replace"))
+            if body.strip():
+                out.append(body)
+    return "\n\n".join(out)
+
+
+def _doc_text(path, data):
+    ext = Path(str(path)).suffix.lower()
+    if ext == ".pdf" or data[:4] == b"%PDF":
+        t = pdf_text(data)
+        return t or "(PDF enthaelt keinen auslesbaren Text, vermutlich ein Scan)"
+    if ext == ".docx":
+        return docx_text(data)
+    if ext == ".epub":
+        return epub_text(data)
+    if ext in (".html", ".htm"):
+        return html_to_text(data.decode("utf-8", "replace"))[1]
+    return None
+
+
+# --------------------------------------------------------------------------- Dateien laden
+_DL_EXT = {"application/pdf": "pdf", "application/epub+zip": "epub", "text/plain": "txt", "text/csv": "csv",
+           "application/json": "json", "application/zip": "zip", "video/mp4": "mp4", "video/webm": "webm",
+           "video/quicktime": "mov", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/ogg": "ogg",
+           "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+           "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx"}
+_DL_OK_EXT = {"pdf", "epub", "txt", "csv", "json", "zip", "mp4", "webm", "mov", "mp3", "wav", "ogg", "docx", "xlsx", "pptx",
+              "md", "png", "jpg", "jpeg", "gif", "webp", "svg"}
+
+
+def download_file(root, url, name=""):
+    maxb = int(_env("PCL_MAX_DOWNLOAD_MB", "60")) * 1_000_000
+    url = str(url or "").strip()
+    r, data, cut = safe_get(url, maxb)
+    if cut:
+        raise ToolError(f"Datei ist groesser als {maxb // 1_000_000} MB")
+    ctype = r.headers.get("Content-Type", "").split(";")[0].strip().lower()
+    ext = _DL_EXT.get(ctype) or Path(urlparse(url).path).suffix.lower().lstrip(".")
+    if data[:4] == b"%PDF":
+        ext = "pdf"
+    if ext not in _DL_OK_EXT:
+        raise ToolError(f"Dateityp nicht erlaubt ({ctype or ext or 'unbekannt'}). Erlaubt: PDF, EPUB, Office, Text, Audio, Video, ZIP, Bilder.")
+    if ext == "pdf" and data[:4] != b"%PDF":
+        raise ToolError("Die Adresse liefert kein echtes PDF (vermutlich eine Webseite). Mit fetch_url ansehen und den Direktlink suchen.")
+    d = root / "downloads"
+    d.mkdir(parents=True, exist_ok=True)
+    base = _safe_name(name or Path(urlparse(url).path).stem, "datei")
+    i = 0
+    while (d / f"{base}{'' if not i else '-' + str(i)}.{ext}").exists():
+        i += 1
+    target = d / f"{base}{'' if not i else '-' + str(i)}.{ext}"
+    target.write_bytes(data)
+    extra = ""
+    if ext == "pdf":
+        extra = f" Seiten-Text lesbar: {'ja' if pdf_text(data).strip() else 'nein (Scan)'}. Zum Lesen: read_file."
+    return f"Gespeichert: downloads/{target.name} ({len(data) // 1024} KB).{extra}"
+
+
+# ------------------------------------------------------------------------------ ffmpeg
+def _bin(name):
+    p = shutil.which(name)
+    if not p:
+        raise ToolError(f"'{name}' ist auf dem Server nicht installiert (Raspberry Pi: sudo apt install {name if name != 'ffprobe' else 'ffmpeg'})")
+    return p
+
+
+def _ff(args, root, timeout=None):
+    timeout = timeout or int(_env("PCL_FFMPEG_TIMEOUT", "1200"))
+    try:
+        r = subprocess.run([_bin("ffmpeg"), "-nostdin", "-y", "-hide_banner", "-loglevel", "error"] + [str(a) for a in args],
+                           cwd=str(root), capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ToolError(f"ffmpeg Zeitlimit ({timeout} s). Kuerzere Clips oder kleinere Aufloesung nehmen.")
+    if r.returncode != 0:
+        raise ToolError("ffmpeg-Fehler: " + (r.stderr or "")[-600:])
+
+
+def _probe(path):
+    try:
+        r = subprocess.run([_bin("ffprobe"), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
+                           capture_output=True, text=True, timeout=60)
+        d = json.loads(r.stdout or "{}")
+    except (subprocess.TimeoutExpired, ValueError):
+        raise ToolError("Datei konnte nicht analysiert werden")
+    v = next((s for s in d.get("streams", []) if s.get("codec_type") == "video"), None)
+    a = next((s for s in d.get("streams", []) if s.get("codec_type") == "audio"), None)
+    dur = float((d.get("format") or {}).get("duration") or (v or a or {}).get("duration") or 0)
+    return {"duration": dur, "video": v, "audio": a, "size": int((d.get("format") or {}).get("size") or 0)}
+
+
+def _describe_probe(p):
+    bits = []
+    if p["video"]:
+        v = p["video"]
+        bits.append(f"Video {v.get('width')}x{v.get('height')} {v.get('codec_name')}")
+    if p["audio"]:
+        bits.append(f"Audio {p['audio'].get('codec_name')}")
+    return f"{p['duration']:.1f} s, " + ", ".join(bits) + f", {p['size'] // 1024} KB"
+
+
+def media_info(root, path):
+    f = _inside_existing(root, path)
+    return f"{path}: " + _describe_probe(_probe(f))
+
+
+def _inside_existing(root, rel):
+    try:
+        f = _inside(root, rel)
+    except ValueError:
+        raise ToolError("Pfad liegt ausserhalb des Projektordners")
+    if not f.is_file():
+        raise ToolError(f"Datei '{rel}' gibt es nicht (list_files zeigt den Inhalt)")
+    return f
+
+
+def _secs(v, default=None):
+    if v in (None, ""):
+        return default
+    if isinstance(v, (int, float)):
+        return float(v)
+    parts = str(v).strip().replace(",", ".").split(":")
+    try:
+        n = [float(x) for x in parts]
+    except ValueError:
+        raise ToolError(f"Zeitangabe '{v}' nicht lesbar (Sekunden oder MM:SS)")
+    t = 0.0
+    for x in n:
+        t = t * 60 + x
+    return t
+
+
+def _find_font(bold=False):
+    names = (["DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf"] if bold else ["DejaVuSans.ttf", "LiberationSans-Regular.ttf"])
+    for d in ("/usr/share/fonts/truetype/dejavu", "/usr/share/fonts/truetype/liberation", "/usr/share/fonts/TTF", "/usr/share/fonts"):
+        for n in names:
+            if os.path.exists(os.path.join(d, n)):
+                return os.path.join(d, n)
+    return None
+
+
+def _out_path(root, call, default, ext):
+    out = root / "output"
+    out.mkdir(parents=True, exist_ok=True)
+    base = _safe_name(call.get("name"), default)
+    p, i = out / f"{base}.{ext}", 1
+    while p.exists():
+        p = out / f"{base}-{i}.{ext}"
+        i += 1
+    return p
+
+
+def _rel(root, p):
+    return Path(p).resolve().relative_to(root.resolve()).as_posix()
+
+
+def _dims(call, default_w=1280, default_h=720):
+    try:
+        w, h = int(call.get("width") or default_w), int(call.get("height") or default_h)
+        fps = int(call.get("fps") or 30)
+    except (TypeError, ValueError):
+        raise ToolError("width/height/fps muessen Zahlen sein")
+    w, h, fps = max(64, min(w, 3840)) // 2 * 2, max(64, min(h, 2160)) // 2 * 2, max(1, min(fps, 60))
+    return w, h, fps
+
+
+def _norm_segment(src, dst, root, w, h, fps):
+    p = _probe(src)
+    if not p["video"]:
+        raise ToolError(f"{_rel(root, src)} enthaelt kein Video")
+    vf = (f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
+          f"setsar=1,fps={fps},format=yuv420p")
+    args = ["-i", src]
+    if not p["audio"]:
+        args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-shortest"]
+    args += ["-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-ar", "48000", "-ac", "2", dst]
+    _ff(args, root)
+
+
+def _concat(segments, dst, root, tmp):
+    lst = Path(tmp) / "list.txt"
+    lst.write_text("".join(f"file '{Path(s).resolve().as_posix()}'\n" for s in segments), encoding="utf-8")
+    _ff(["-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", "-movflags", "+faststart", dst], root)
+
+
+def video_edit(root, call):
+    op = str(call.get("op") or "").strip().lower()
+    tmp = Path(tempfile.mkdtemp(prefix=".tmp-", dir=root))
+    try:
+        return _video_edit(root, call, op, tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _video_edit(root, call, op, tmp):
+    def src(key="input"):
+        return _inside_existing(root, call.get(key))
+
+    if op == "trim":
+        f = src()
+        start, end = _secs(call.get("start"), 0.0), _secs(call.get("end"))
+        if end is not None and end <= start:
+            raise ToolError("end muss nach start liegen")
+        out = _out_path(root, call, "ausschnitt", "mp4")
+        args = ["-ss", start, "-i", f] + (["-t", end - start] if end is not None else [])
+        _ff(args + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-c:a", "aac", "-movflags", "+faststart", out], root)
+
+    elif op == "concat":
+        ins = call.get("inputs")
+        if not isinstance(ins, list) or len(ins) < 2:
+            raise ToolError("inputs: Liste mit mindestens 2 Videos")
+        w, h, fps = _dims(call)
+        segs = []
+        for i, name in enumerate(ins[:40]):
+            seg = tmp / f"seg{i}.mp4"
+            _norm_segment(_inside_existing(root, name), seg, root, w, h, fps)
+            segs.append(seg)
+        out = _out_path(root, call, "zusammenschnitt", "mp4")
+        _concat(segs, out, root, tmp)
+
+    elif op == "slideshow":
+        imgs = call.get("images")
+        if not isinstance(imgs, list) or not imgs:
+            raise ToolError("images: Liste mit Bildpfaden")
+        w, h, fps = _dims(call)
+        sec = max(1.0, min(_secs(call.get("seconds"), 4.0), 30.0))
+        kb = str(call.get("kenburns", "true")).lower() not in ("false", "0", "no")
+        frames = int(sec * fps)
+        segs = []
+        for i, name in enumerate(imgs[:80]):
+            f = _inside_existing(root, name)
+            seg = tmp / f"s{i}.mp4"
+            fade = f"fade=t=in:st=0:d=0.5,fade=t=out:st={sec - 0.5}:d=0.5,format=yuv420p"
+            if kb:
+                zexpr = "min(zoom+0.0007,1.2)" if i % 2 == 0 else "if(eq(on,0),1.2,max(zoom-0.0007,1.0))"
+                vf = (f"scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},"
+                      f"zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps},{fade}")
+                _ff(["-i", f, "-vf", vf, "-frames:v", frames, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", seg], root)
+            else:
+                vf = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,{fade}"
+                _ff(["-loop", "1", "-t", sec, "-i", f, "-vf", vf, "-r", fps, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", seg], root)
+            segs.append(seg)
+        silent = tmp / "all.mp4"
+        _concat(segs, silent, root, tmp)
+        out = _out_path(root, call, "diashow", "mp4")
+        if call.get("audio"):
+            a = _inside_existing(root, call.get("audio"))
+            _ff(["-i", silent, "-i", a, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-shortest",
+                 "-movflags", "+faststart", out], root)
+        else:
+            shutil.move(str(silent), str(out))
+
+    elif op == "text_overlay":
+        f = src()
+        text = str(call.get("text") or "").strip()
+        if not text:
+            raise ToolError("text fehlt")
+        font = _find_font(bold=True)
+        if not font:
+            raise ToolError("Keine Schriftart gefunden (sudo apt install fonts-dejavu-core)")
+        tf = tmp / "t.txt"
+        tf.write_text(text[:300], encoding="utf-8")
+        size = max(12, min(int(call.get("size") or 48), 200))
+        color = str(call.get("color") or "white")
+        if not re.fullmatch(r"[A-Za-z0-9#]{3,20}", color):
+            raise ToolError("color ungueltig")
+        pos = {"top": "y=h*0.08", "center": "y=(h-text_h)/2"}.get(str(call.get("position") or "bottom"), "y=h*0.80")
+        st, en = _secs(call.get("start"), 0.0), _secs(call.get("end"))
+        en_part = f":enable='between(t,{st},{en})'" if en is not None else (f":enable='gte(t,{st})'" if st else "")
+        rel_tf = tf.relative_to(root.resolve()).as_posix()
+        vf = (f"drawtext=fontfile={font}:textfile={rel_tf}:fontsize={size}:fontcolor={color}:x=(w-text_w)/2:{pos}"
+              f":box=1:boxcolor=black@0.45:boxborderw=14{en_part}")
+        out = _out_path(root, call, "mit-text", "mp4")
+        _ff(["-i", f, "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-c:a", "copy", "-movflags", "+faststart", out], root)
+
+    elif op == "burn_subtitles":
+        f, srt = src(), src("srt")
+        local = tmp / "sub.srt"
+        shutil.copy(srt, local)
+        out = _out_path(root, call, "mit-untertiteln", "mp4")
+        rel_sub = local.relative_to(root.resolve()).as_posix()
+        _ff(["-i", f, "-vf", f"subtitles={rel_sub}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-c:a", "copy", out], root)
+
+    elif op == "overlay_image":
+        f, img = src(), src("image")
+        wpx = max(16, min(int(call.get("width") or 160), 1000))
+        xy = {"tl": "x=20:y=20", "tr": "x=W-w-20:y=20", "bl": "x=20:y=H-h-20", "center": "x=(W-w)/2:y=(H-h)/2"}.get(
+            str(call.get("position") or "br"), "x=W-w-20:y=H-h-20")
+        out = _out_path(root, call, "mit-logo", "mp4")
+        _ff(["-i", f, "-i", img, "-filter_complex", f"[1:v]scale={wpx}:-1[lg];[0:v][lg]overlay={xy}", "-c:v", "libx264",
+             "-preset", "veryfast", "-crf", "22", "-c:a", "copy", out], root)
+
+    elif op == "add_audio":
+        f, a = src(), src("audio")
+        vol = max(0.0, min(float(call.get("volume") or 1.0), 2.0))
+        has_a = bool(_probe(f)["audio"])
+        out = _out_path(root, call, "mit-ton", "mp4")
+        if str(call.get("mode") or "replace") == "mix" and has_a:
+            _ff(["-i", f, "-i", a, "-filter_complex", f"[1:a]volume={vol}[m];[0:a][m]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                 "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-movflags", "+faststart", out], root)
+        else:
+            _ff(["-i", f, "-i", a, "-filter_complex", f"[1:a]volume={vol}[m]", "-map", "0:v", "-map", "[m]", "-c:v", "copy",
+                 "-c:a", "aac", "-shortest", "-movflags", "+faststart", out], root)
+
+    elif op == "extract_audio":
+        f = src()
+        fmt = "wav" if str(call.get("format")) == "wav" else "mp3"
+        out = _out_path(root, call, "audio", fmt)
+        _ff(["-i", f, "-vn"] + (["-c:a", "libmp3lame", "-q:a", "2"] if fmt == "mp3" else []) + [out], root)
+
+    elif op == "speed":
+        f = src()
+        fac = max(0.25, min(float(call.get("factor") or 1.0), 4.0))
+        has_a = bool(_probe(f)["audio"])
+        chain, x = [], fac
+        while x > 2.0:
+            chain.append("atempo=2.0")
+            x /= 2
+        while x < 0.5:
+            chain.append("atempo=0.5")
+            x *= 2
+        chain.append(f"atempo={x:.4f}")
+        out = _out_path(root, call, f"tempo-{fac:g}x", "mp4")
+        args = ["-i", f, "-vf", f"setpts=PTS/{fac}"] + (["-af", ",".join(chain)] if has_a else ["-an"])
+        _ff(args + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart", out], root)
+
+    elif op == "convert":
+        f = src()
+        fmt = str(call.get("format") or "mp4").lower()
+        if fmt not in ("mp4", "webm", "gif", "mp3", "wav"):
+            raise ToolError("format: mp4, webm, gif, mp3 oder wav")
+        out = _out_path(root, call, "konvertiert", fmt)
+        sc = ""
+        if call.get("width") or call.get("height"):
+            w, h, _ = _dims(call)
+            sc = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
+        fps = int(call.get("fps") or (12 if fmt == "gif" else 30))
+        if fmt == "gif":
+            vf = f"{sc}fps={min(fps, 20)},scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+            _ff(["-i", f, "-vf", vf, "-t", 30, out], root)
+        elif fmt in ("mp3", "wav"):
+            _ff(["-i", f, "-vn", out], root)
+        elif fmt == "webm":
+            _ff(["-i", f, "-vf", f"{sc}fps={fps}".rstrip(","), "-c:v", "libvpx-vp9", "-b:v", "1M", "-deadline", "realtime", "-cpu-used", "5",
+                 "-c:a", "libopus", out], root)
+        else:
+            _ff(["-i", f, "-vf", f"{sc}fps={fps},format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac",
+                 "-movflags", "+faststart", out], root)
+
+    elif op == "frame":
+        f = src()
+        out = _out_path(root, call, "standbild", "png")
+        _ff(["-ss", _secs(call.get("at"), 0.0), "-i", f, "-frames:v", 1, out], root)
+
+    else:
+        raise ToolError("op unbekannt. Erlaubt: trim, concat, slideshow, text_overlay, burn_subtitles, overlay_image, add_audio, extract_audio, speed, convert, frame")
+
+    if not out.exists() or out.stat().st_size == 0:
+        raise ToolError("Ergebnis wurde nicht erzeugt")
+    info = ""
+    if out.suffix in (".mp4", ".webm", ".mp3", ".wav"):
+        try:
+            info = " " + _describe_probe(_probe(out))
+        except ToolError:
+            pass
+    return f"Fertig: {_rel(root, out)}{info}"
+
+
+# ------------------------------------------------------------------------- Sprache (TTS)
+_VOICES_EDGE = {"de": "de-DE-KatjaNeural", "en": "en-US-AriaNeural", "tr": "tr-TR-EmelNeural", "fr": "fr-FR-DeniseNeural",
+                "es": "es-ES-ElviraNeural", "it": "it-IT-ElsaNeural"}
+
+
+def speak(root, text, lang="de", name=""):
+    text = str(text or "").strip()[:6000]
+    if not text:
+        raise ToolError("text fehlt")
+    lang = re.sub(r"[^a-z-]", "", str(lang or "de").lower())[:5] or "de"
+    outdir = root / "output" / "audio"
+    outdir.mkdir(parents=True, exist_ok=True)
+    base, i = _safe_name(name, "sprecher"), 0
+    while (outdir / f"{base}{'' if not i else '-' + str(i)}.mp3").exists():
+        i += 1
+    target = outdir / f"{base}{'' if not i else '-' + str(i)}.mp3"
+    engine = _env("TTS_ENGINE", "auto").lower()
+    tmp = Path(tempfile.mkdtemp(prefix=".tmp-", dir=root))
+    try:
+        txt = tmp / "t.txt"
+        txt.write_text(text, encoding="utf-8")
+        done = False
+        if engine in ("auto", "piper") and shutil.which("piper") and _env("PIPER_MODEL"):
+            wav = tmp / "o.wav"
+            r = subprocess.run(["piper", "--model", _env("PIPER_MODEL"), "--output_file", str(wav)], input=text, text=True,
+                               capture_output=True, timeout=300)
+            if r.returncode == 0 and wav.exists():
+                _ff(["-i", wav, "-c:a", "libmp3lame", "-q:a", "3", target], root)
+                done = True
+        if not done and engine in ("auto", "espeak") and shutil.which("espeak-ng"):
+            wav = tmp / "o.wav"
+            r = subprocess.run(["espeak-ng", "-v", lang.split("-")[0], "-s", "150", "-f", str(txt), "-w", str(wav)],
+                               capture_output=True, text=True, timeout=300)
+            if r.returncode == 0 and wav.exists():
+                _ff(["-i", wav, "-c:a", "libmp3lame", "-q:a", "3", target], root)
+                done = True
+        if not done and engine == "edge":
+            voice = _env("EDGE_VOICE") or _VOICES_EDGE.get(lang.split("-")[0], "en-US-AriaNeural")
+            r = subprocess.run(["python3", "-m", "edge_tts", "--voice", voice, "--file", str(txt), "--write-media", str(target)],
+                               capture_output=True, text=True, timeout=300)
+            done = r.returncode == 0 and target.exists()
+        if not done:
+            raise ToolError("Keine Sprachausgabe verfuegbar. Auf dem Pi: sudo apt install espeak-ng (einfache Stimme), oder "
+                            "PIPER_MODEL (Piper, gute Offline-Stimme) bzw. TTS_ENGINE=edge mit pip install edge-tts (Online-Stimmen, inoffizieller Dienst).")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    p = _probe(target)
+    return f"Sprache erzeugt: {_rel(root, target)} ({p['duration']:.1f} s). Fuer Videos: video_edit add_audio oder slideshow mit audio."
+
+
+# ----------------------------------------------------------------------------- Dokumente bauen
+def _parse_md(text):
+    blocks, para = [], []
+
+    def flush():
+        if para:
+            blocks.append(("p", " ".join(para)))
+            para.clear()
+    for line in text.replace("\r", "").split("\n"):
+        st = line.strip()
+        if not st:
+            flush()
+            continue
+        m = re.match(r"^(#{1,3})\s+(.*)$", st)
+        im = re.fullmatch(r"!\[(.*?)\]\((.+?)\)", st)
+        if m:
+            flush()
+            blocks.append(("h", len(m.group(1)), m.group(2)))
+        elif im:
+            flush()
+            blocks.append(("img", im.group(1), im.group(2)))
+        elif re.match(r"^[-*+]\s+", st):
+            flush()
+            blocks.append(("li", re.sub(r"^[-*+]\s+", "", st)))
+        elif re.match(r"^\d+[.)]\s+", st):
+            flush()
+            blocks.append(("ol", re.sub(r"^\d+[.)]\s+", "", st)))
+        elif st.startswith(">"):
+            flush()
+            blocks.append(("q", st.lstrip("> ").strip()))
+        elif re.fullmatch(r"(-{3,}|\*{3,}|_{3,})", st):
+            flush()
+            blocks.append(("hr",))
+        else:
+            para.append(st)
+    flush()
+    return blocks
+
+
+def _inline_html(t, code_tag="code"):
+    t = htmllib.escape(t, quote=False)
+    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+    t = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", t)
+    t = re.sub(r"`(.+?)`", rf"<{code_tag}>\1</{code_tag}>", t)
+    return re.sub(r"\[(.+?)\]\((https?://[^)\s]+)\)", r"\1", t)  # Links: nur Text (PDF/EPUB bleiben schlicht)
+
+
+def _runs(t):
+    """Inline-Markdown -> [(text, bold, italic)] fuer DOCX."""
+    out, pos = [], 0
+    for m in re.finditer(r"\*\*(.+?)\*\*|(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", t):
+        if m.start() > pos:
+            out.append((t[pos:m.start()], False, False))
+        out.append((m.group(1) or m.group(2), bool(m.group(1)), bool(m.group(2))))
+        pos = m.end()
+    if pos < len(t):
+        out.append((t[pos:], False, False))
+    return out
+
+
+def _md_sources(root, call):
+    if call.get("content"):
+        return str(call["content"])[:2_000_000]
+    srcs = call.get("sources")
+    if isinstance(srcs, str):
+        srcs = [srcs]
+    if not isinstance(srcs, list) or not srcs:
+        raise ToolError("sources (Liste von Markdown-Dateien) oder content fehlt")
+    return "\n\n".join(_inside_existing(root, s).read_text(encoding="utf-8", errors="replace") for s in srcs[:100])
+
+
+def make_document(root, call):
+    fmt = str(call.get("format") or "pdf").lower()
+    if fmt not in ("pdf", "docx", "epub", "html"):
+        raise ToolError("format: pdf, docx, epub oder html")
+    title = str(call.get("title") or "Dokument")[:200]
+    author = str(call.get("author") or "")[:100]
+    blocks = _parse_md(_md_sources(root, call))
+    if not blocks:
+        raise ToolError("Der Inhalt ist leer")
+    out = _out_path(root, call, _safe_name(title, "dokument"), fmt)
+    warn = ""
+    if fmt == "pdf":
+        warn = _build_pdf(out, title, author, blocks, root, str(call.get("page") or "A4").upper())
+    elif fmt == "docx":
+        _build_docx(out, title, author, blocks, root)
+    elif fmt == "epub":
+        _build_epub(out, title, author, blocks, root, call.get("cover"))
+    else:
+        out.write_text(_build_html(title, author, blocks, root, out), encoding="utf-8")
+    extra = ""
+    if fmt == "pdf":
+        try:
+            from pypdf import PdfReader
+            extra = f", {len(PdfReader(str(out)).pages)} Seiten"
+        except Exception:
+            pass
+    return f"Dokument erstellt: {_rel(root, out)} ({out.stat().st_size // 1024} KB{extra}).{warn}"
+
+
+def _img_path(root, rel):
+    try:
+        f = _inside(root, rel)
+        return f if f.is_file() else None
+    except ValueError:
+        return None
+
+
+_FONT_SETS = [
+    ("DejaVuSerif", "/usr/share/fonts/truetype/dejavu/", ("DejaVuSerif.ttf", "DejaVuSerif-Bold.ttf", "DejaVuSerif-Italic.ttf", "DejaVuSerif-BoldItalic.ttf")),
+    ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/", ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans-Oblique.ttf", "DejaVuSans-BoldOblique.ttf")),
+    ("LiberationSerif", "/usr/share/fonts/truetype/liberation/", ("LiberationSerif-Regular.ttf", "LiberationSerif-Bold.ttf", "LiberationSerif-Italic.ttf", "LiberationSerif-BoldItalic.ttf")),
+]
+
+
+def _pdf_font():
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    for fam, d, files in _FONT_SETS:
+        if all(os.path.exists(d + f) for f in files):
+            if fam not in pdfmetrics.getRegisteredFontNames():
+                for suffix, f in zip(("", "-B", "-I", "-BI"), files):
+                    pdfmetrics.registerFont(TTFont(fam + suffix, d + f))
+                pdfmetrics.registerFontFamily(fam, normal=fam, bold=fam + "-B", italic=fam + "-I", boldItalic=fam + "-BI")
+            return fam
+    return "Helvetica"
+
+
+def _build_pdf(out, title, author, blocks, root, page):
+    try:
+        from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+        from reportlab.lib.pagesizes import A4, A5
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer
+    except ImportError:
+        raise ToolError("PDF-Erzeugung braucht reportlab (pip install reportlab im venv)")
+    fam = _pdf_font()
+    size = A5 if page == "A5" else A4
+    fs = 10.5 if page == "A5" else 11
+    st = {
+        "p": ParagraphStyle("p", fontName=fam, fontSize=fs, leading=fs * 1.45, alignment=TA_JUSTIFY, spaceAfter=fs * 0.7),
+        "h1": ParagraphStyle("h1", fontName=fam + ("-B" if fam != "Helvetica" else "-Bold"), fontSize=fs * 1.9, leading=fs * 2.3, spaceAfter=fs * 1.2, spaceBefore=fs),
+        "h2": ParagraphStyle("h2", fontName=fam + ("-B" if fam != "Helvetica" else "-Bold"), fontSize=fs * 1.35, leading=fs * 1.8, spaceAfter=fs * 0.6, spaceBefore=fs * 1.1),
+        "h3": ParagraphStyle("h3", fontName=fam + ("-B" if fam != "Helvetica" else "-Bold"), fontSize=fs * 1.1, leading=fs * 1.5, spaceAfter=fs * 0.4, spaceBefore=fs * 0.8),
+        "q": ParagraphStyle("q", fontName=fam + ("-I" if fam != "Helvetica" else "-Oblique"), fontSize=fs, leading=fs * 1.45, leftIndent=14 * mm / 2, spaceAfter=fs * 0.7),
+        "li": ParagraphStyle("li", fontName=fam, fontSize=fs, leading=fs * 1.4, leftIndent=12, bulletIndent=2, spaceAfter=fs * 0.3),
+        "title": ParagraphStyle("t", fontName=fam + ("-B" if fam != "Helvetica" else "-Bold"), fontSize=fs * 2.6, leading=fs * 3.1, alignment=TA_CENTER),
+        "author": ParagraphStyle("a", fontName=fam, fontSize=fs * 1.3, alignment=TA_CENTER, spaceBefore=fs * 2),
+    }
+
+    def footer(canv, doc):
+        canv.setFont(fam, 8)
+        canv.drawCentredString(size[0] / 2, 10 * mm, str(doc.page))
+    doc = SimpleDocTemplate(str(out), pagesize=size, title=title, author=author, leftMargin=20 * mm, rightMargin=20 * mm,
+                            topMargin=20 * mm, bottomMargin=20 * mm)
+    fw, fh = size[0] - 40 * mm, size[1] - 40 * mm
+    story = [Spacer(1, fh * 0.3), Paragraph(htmllib.escape(title), st["title"])]
+    if author:
+        story.append(Paragraph(htmllib.escape(author), st["author"]))
+    story.append(PageBreak())
+    first_h1, n_ol = True, 0
+    for b in blocks:
+        kind = b[0]
+        if kind != "ol":
+            n_ol = 0
+        if kind == "h":
+            if b[1] == 1 and not first_h1:
+                story.append(PageBreak())
+            first_h1 = first_h1 and b[1] != 1
+            story.append(Paragraph(_inline_html(b[2], "font"), st[f"h{b[1]}"]))
+        elif kind == "p":
+            story.append(Paragraph(_inline_html(b[1], "font"), st["p"]))
+        elif kind == "li":
+            story.append(Paragraph(_inline_html(b[1], "font"), st["li"], bulletText="•"))
+        elif kind == "ol":
+            n_ol += 1
+            story.append(Paragraph(_inline_html(b[1], "font"), st["li"], bulletText=f"{n_ol}."))
+        elif kind == "q":
+            story.append(Paragraph(_inline_html(b[1], "font"), st["q"]))
+        elif kind == "hr":
+            story.append(Spacer(1, fs))
+        elif kind == "img":
+            f = _img_path(root, b[2])
+            try:
+                if not f:
+                    raise ValueError
+                img = Image(str(f))
+                r = min(fw / img.imageWidth, fh * 0.7 / img.imageHeight, 1.0)
+                img.drawWidth, img.drawHeight = img.imageWidth * r, img.imageHeight * r
+                story += [img, Spacer(1, fs * 0.6)]
+                if b[1]:
+                    story.append(Paragraph("<i>" + htmllib.escape(b[1]) + "</i>", st["q"]))
+            except Exception:
+                story.append(Paragraph(f"[Bild nicht darstellbar: {htmllib.escape(b[2])}]", st["p"]))
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    if fam == "Helvetica":
+        return " WARNUNG: keine Unicode-Schrift gefunden, Sonderzeichen (z. B. Tuerkisch) koennen fehlen (Server: sudo apt install fonts-dejavu-core)."
+    return ""
+
+
+def _build_docx(out, title, author, blocks, root):
+    try:
+        from docx import Document
+        from docx.shared import Inches
+    except ImportError:
+        raise ToolError("DOCX-Erzeugung braucht python-docx (pip install python-docx im venv)")
+    d = Document()
+    d.core_properties.title, d.core_properties.author = title, author
+    d.add_heading(title, 0)
+    if author:
+        d.add_paragraph(author)
+    for b in blocks:
+        kind = b[0]
+        if kind == "h":
+            d.add_heading(b[2], min(b[1], 3))
+        elif kind in ("p", "q", "li", "ol"):
+            style = {"li": "List Bullet", "ol": "List Number", "q": "Intense Quote"}.get(kind)
+            p = d.add_paragraph(style=style)
+            for txt, bold, ital in _runs(b[1]):
+                r = p.add_run(txt)
+                r.bold, r.italic = bold or None, ital or None
+        elif kind == "img":
+            f = _img_path(root, b[2])
+            try:
+                d.add_picture(str(f), width=Inches(5.5))
+            except Exception:
+                d.add_paragraph(f"[Bild nicht darstellbar: {b[2]}]")
+    d.save(str(out))
+
+
+_CSS = ("body{font-family:Georgia,'DejaVu Serif',serif;max-width:42em;margin:2em auto;padding:0 1em;line-height:1.6;color:#222}"
+        "h1,h2,h3{font-family:system-ui,sans-serif;line-height:1.25}img{max-width:100%;height:auto}blockquote{border-left:3px solid #bbb;margin-left:0;padding-left:1em;color:#555}")
+
+
+def _blocks_html(blocks, root, img_prefix=lambda rel: rel, collect=None):
+    out, lst = [], None
+
+    def close():
+        nonlocal lst
+        if lst:
+            out.append(f"</{lst}>")
+            lst = None
+    for b in blocks:
+        k = b[0]
+        if k not in ("li", "ol"):
+            close()
+        if k == "h":
+            out.append(f"<h{b[1]}>{_inline_html(b[2])}</h{b[1]}>")
+        elif k == "p":
+            out.append(f"<p>{_inline_html(b[1])}</p>")
+        elif k in ("li", "ol"):
+            tag = "ul" if k == "li" else "ol"
+            if lst != tag:
+                close()
+                out.append(f"<{tag}>")
+                lst = tag
+            out.append(f"<li>{_inline_html(b[1])}</li>")
+        elif k == "q":
+            out.append(f"<blockquote>{_inline_html(b[1])}</blockquote>")
+        elif k == "hr":
+            out.append("<hr/>")
+        elif k == "img":
+            f = _img_path(root, b[2])
+            if f:
+                if collect is not None:
+                    collect.append(f)
+                out.append(f'<p><img src="{htmllib.escape(img_prefix(b[2]))}" alt="{htmllib.escape(b[1])}"/></p>')
+    close()
+    return "\n".join(out)
+
+
+def _build_html(title, author, blocks, root, out):
+    prefix = os.path.relpath(root.resolve(), out.parent.resolve()).replace("\\", "/")
+    body = _blocks_html(blocks, root, img_prefix=lambda rel: f"{prefix}/{rel}")
+    return (f'<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            f"<title>{htmllib.escape(title)}</title><style>{_CSS}</style></head><body><h1>{htmllib.escape(title)}</h1>"
+            f"<p><em>{htmllib.escape(author)}</em></p>{body}</body></html>")
+
+
+def _build_epub(out, title, author, blocks, root, cover):
+    chapters, cur = [], []
+    for b in blocks:
+        if b[0] == "h" and b[1] == 1 and cur:
+            chapters.append(cur)
+            cur = []
+        cur.append(b)
+    if cur:
+        chapters.append(cur)
+    uid = "urn:uuid:" + __import__("uuid").uuid4().hex
+    images = {}
+    items, spine, nav = [], [], []
+    xhtml = ('<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" lang="de"><head>'
+             '<meta charset="utf-8"/><title>{t}</title><style>{css}</style></head><body>{b}</body></html>')
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")  # muss zuerst und unkomprimiert sein
+        z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                   '<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+                   compress_type=zipfile.ZIP_DEFLATED)
+        for i, ch in enumerate(chapters, 1):
+            found = []
+            body = _blocks_html(ch, root, img_prefix=lambda rel: "images/" + _safe_name(Path(rel).stem, "bild") + Path(rel).suffix.lower(), collect=found)
+            for f in found:
+                nm = _safe_name(f.stem, "bild") + f.suffix.lower()
+                if nm not in images:
+                    images[nm] = f
+            head = next((b[2] for b in ch if b[0] == "h"), f"Kapitel {i}")
+            fn = f"ch{i}.xhtml"
+            z.writestr("OEBPS/" + fn, xhtml.format(t=htmllib.escape(head), css=_CSS, b=body), compress_type=zipfile.ZIP_DEFLATED)
+            items.append(f'<item id="ch{i}" href="{fn}" media-type="application/xhtml+xml"/>')
+            spine.append(f'<itemref idref="ch{i}"/>')
+            nav.append(f'<li><a href="{fn}">{htmllib.escape(head)}</a></li>')
+        mt = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml", ".webp": "image/webp"}
+        meta_cover = ""
+        for j, (nm, f) in enumerate(images.items(), 1):
+            z.writestr("OEBPS/images/" + nm, f.read_bytes(), compress_type=zipfile.ZIP_DEFLATED)
+            items.append(f'<item id="img{j}" href="images/{nm}" media-type="{mt.get(Path(nm).suffix, "image/png")}"/>')
+        cf = _img_path(root, cover) if cover else None
+        if cf and cf.suffix.lower() in mt:
+            z.writestr("OEBPS/cover" + cf.suffix.lower(), cf.read_bytes(), compress_type=zipfile.ZIP_DEFLATED)
+            items.append(f'<item id="cover-image" href="cover{cf.suffix.lower()}" media-type="{mt[cf.suffix.lower()]}" properties="cover-image"/>')
+            meta_cover = '<meta name="cover" content="cover-image"/>'
+        z.writestr("OEBPS/nav.xhtml", xhtml.format(t="Inhalt", css=_CSS, b=f'<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc"><h1>Inhalt</h1><ol>{"".join(nav)}</ol></nav>'),
+                   compress_type=zipfile.ZIP_DEFLATED)
+        items.append('<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>')
+        opf = ('<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bid">'
+               f'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="bid">{uid}</dc:identifier><dc:title>{htmllib.escape(title)}</dc:title>'
+               f'<dc:creator>{htmllib.escape(author or "unbekannt")}</dc:creator><dc:language>de</dc:language>'
+               f'<meta property="dcterms:modified">{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}</meta>{meta_cover}</metadata>'
+               f'<manifest>{"".join(items)}</manifest><spine>{"".join(spine)}</spine></package>')
+        z.writestr("OEBPS/content.opf", opf, compress_type=zipfile.ZIP_DEFLATED)
 
 
 # ----------------------------------------------------------------------------- Dispatcher
@@ -382,10 +1227,21 @@ def run_tool(call, root, perms):
             out = image_generate(root, call.get("prompt"), call.get("name"))
         elif name == "list_files":
             out = list_files(root, call.get("path"))
+        elif name == "download_file":
+            out = download_file(root, call.get("url"), call.get("name"))
+        elif name == "media_info":
+            out = media_info(root, call.get("path"))
+        elif name == "video_edit":
+            out = video_edit(root, call)
+        elif name == "speak":
+            out = speak(root, call.get("text"), call.get("lang"), call.get("name"))
+        elif name == "make_document":
+            out = make_document(root, call)
         else:
-            out = read_file(root, call.get("path"))
+            out = read_file(root, call.get("path"), call.get("offset"))
         made = None
-        m = re.search(r"(assets/[\w.-]+)", out) if name in ("image_save", "image_generate") else None
+        m = re.search(r"((?:assets|downloads|output)/[\w./-]+?)(?:\s|\(|$|\.\s)", out) if name in (
+            "image_save", "image_generate", "download_file", "video_edit", "speak", "make_document") else None
         if m:
             made = m.group(1)
         return out, made

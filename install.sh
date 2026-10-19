@@ -11,6 +11,14 @@ command -v python3 >/dev/null || { echo "python3 fehlt: sudo apt install python3
 ./venv/bin/pip install -q --upgrade pip
 ./venv/bin/pip install -q -r requirements.txt
 echo "Abhaengigkeiten installiert."
+# Systemprogramme fuer Video/Sprache/Schriften (optional, aber noetig fuer Medien-Agenten)
+MISSING=""
+command -v ffmpeg >/dev/null || MISSING="$MISSING ffmpeg"
+command -v espeak-ng >/dev/null || MISSING="$MISSING espeak-ng"
+fc-list 2>/dev/null | grep -qi dejavu || MISSING="$MISSING fonts-dejavu-core"
+if [ -n "$MISSING" ]; then
+  echo "Fuer Video, Sprache und Sonderzeichen in PDFs empfohlen:  sudo apt install$MISSING"
+fi
 
 if [ ! -f .env ]; then
   cp .env.example .env
