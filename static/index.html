@@ -201,7 +201,7 @@ const fmtTok = n => n>=1000 ? (n/1000).toFixed(1)+'k Tok' : n+' Tok';
 const MGR = {delegate:true,judge:true,auto_run:true};
 
 const TPL = {
-  ceo:{name:'CEO',role:'Chief Executive Officer',perms:MGR,
+  ceo:{name:'CEO',role:'Chief Executive Officer',perms:{...MGR,recruit:true},
     prompt:'Du führst das Unternehmen. Zerlege das Projektziel in klare Aufträge, verteile sie an die passenden Mitarbeiter, prüfe deren Berichte kritisch und gib unzureichende Arbeit mit konkretem Feedback zurück. Dein Endergebnis fasst alles verständlich zusammen. Antworte auf Deutsch.'},
   cto:{name:'CTO',role:'Chief Technology Officer',perms:MGR,
     prompt:'Du verantwortest die Technik. Plane die Umsetzung, verteile Programmieraufgaben, prüfe die Ergebnisse auf Korrektheit und Vollständigkeit und gib Mängel zurück. Antworte auf Deutsch.'},
@@ -291,7 +291,7 @@ function render(){
     el.dataset.id = a.id; el.style.left=a.x+'px'; el.style.top=a.y+'px';
     const c = a.counts||{}; const running = (c.running||0)+(c.queued||0)+(c.waiting_subtasks||0);
     const cls = a.paused?'paused':(c.waiting_approval?'wait':running?'run':'');
-    const prov = (S.providers.find(p=>p.id===a.provider)||{}).label || a.provider;
+    const prov = a.provider ? ((S.providers.find(p=>p.id===a.provider)||{}).label || a.provider) : '⚠ noch keine KI';
     el.innerHTML = `<div class="port top"></div>
       <div class="n-head"><div class="n-ico">${esc((a.name||'?')[0].toUpperCase())}</div>
         <div class="n-txt"><div class="n-name">${esc(a.name)}</div><div class="n-role">${esc(a.role||'—')}</div><div class="n-prov">${esc(prov)}</div></div>
@@ -456,7 +456,7 @@ function kidList(a){
 }
 function drawSettings(a){
   const others=S.graph.agents.filter(x=>x.id!==a.id);
-  const prov=S.providers.map(p=>`<option value="${p.id}" ${p.id===a.provider?'selected':''}>${esc(p.label)}${p.configured?'':(p.id==='ollama'?' — nicht erreichbar':' — kein Key')}</option>`).join('');
+  const prov=(a.provider?'':'<option value="" selected>⚠ noch keine KI zugewiesen</option>')+S.providers.map(p=>`<option value="${p.id}" ${p.id===a.provider?'selected':''}>${esc(p.label)}${p.configured?'':(p.id==='ollama'?' — nicht erreichbar':' — kein Key')}</option>`).join('');
   const par=`<option value="">— keiner (oberste Ebene) —</option>`+others.map(o=>`<option value="${o.id}" ${o.id===a.parent_id?'selected':''}>${esc(o.name)}</option>`).join('');
   const pm=a.perms;
   $('#pbody').innerHTML=`
@@ -487,6 +487,7 @@ function drawSettings(a){
     <div class="chk"><input type="checkbox" id="p_media" ${pm.media?'checked':''}><div>Darf Medien &amp; Dokumente erstellen<small>Videos schneiden/erstellen (ffmpeg), Sprache, Bücher als PDF/Word/EPUB</small></div></div>
     <div class="chk"><input type="checkbox" id="p_read" ${pm.read_files?'checked':''}><div>Darf Projektdateien lesen<small>z. B. Ergebnisse der Kollegen im Projektordner</small></div></div>
     <div class="chk"><input type="checkbox" id="p_files" ${pm.write_files?'checked':''}><div>Darf Dateien schreiben<small>nur im Projektordner auf dem Pi</small></div></div>
+    <div class="chk"><input type="checkbox" id="p_recruit" ${pm.recruit?'checked':''}><div>Darf sein Team selbst zusammenstellen<small>Nur solange er noch keine Mitarbeiter hat: analysiert den Auftrag und legt Mitarbeiter mit Rollen an (ohne KI – die weist du zu)</small></div></div>
     <div class="chk"><input type="checkbox" id="p_shell" ${pm.shell?'checked':''} ${S.info.allow_shell?'':'disabled'}><div>Darf Shell-Befehle vorschlagen<small>${S.info.allow_shell?'läuft erst nach deiner Freigabe (Sidebar „Freigaben“)':'auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env)'}</small></div></div>
     <small style="color:var(--mute)">${(a.used_tokens||0).toLocaleString('de-AT')} Tokens diesen Monat verbraucht (nur zur Info, kein Limit).</small>
     <div class="chk" style="margin-top:12px"><input type="checkbox" id="f_pause" ${a.paused?'checked':''}><div>Agent pausiert</div></div>
@@ -496,6 +497,7 @@ function drawSettings(a){
     </div>`;
   async function loadModels(force){
     const prov=$('#f_prov').value, sel=$('#f_modelsel'), inp=$('#f_model');
+    if(!prov){ sel.innerHTML='<option value="">— erst KI wählen —</option>'; inp.value=''; inp.style.display='none'; $('#mres').textContent='Diesem Agenten ist noch keine KI zugewiesen.'; return; }
     if(prov==='cli'||prov==='mock'){ sel.innerHTML='<option value="">— nicht nötig —</option>'; inp.value=''; inp.style.display='none'; $('#mres').textContent=prov==='cli'?'Das Modell steckt im CLI-Befehl, z. B. claude -p --model sonnet':''; return; }
     let r; try{ r=await api('/providers/'+prov+'/models'+(force?'?refresh=1':'')); }catch(e){ r={models:[],default:'',error:'Liste nicht ladbar'}; }
     const cur=inp.value.trim();
@@ -526,9 +528,9 @@ function drawSettings(a){
     toast(n+' Zuordnung(en) geändert'); await refresh(true); drawPanel();
   };
   $('#saveAg').onclick=async()=>{
-    const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,provider:$('#f_prov').value,model:$('#f_model').value.trim(),
+    const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,...($('#f_prov').value?{provider:$('#f_prov').value}:{}),model:$('#f_model').value.trim(),
       system_prompt:$('#f_sys').value,paused:$('#f_pause').checked,
-      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,shell:$('#p_shell').checked}};
+      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,shell:$('#p_shell').checked}};
     if($('#cliwrap').style.display!=='none') body.cli_command=$('#f_cli').value;
     const np=$('#f_parent').value; body.parent_id=np?+np:null;
     await api('/agents/'+a.id,'PUT',body); toast('Gespeichert'); $('#toast').style.borderColor='var(--green)';
@@ -639,12 +641,13 @@ $('#btnModels').onclick=()=>{
     body.innerHTML='<div style="color:var(--mute)">prüfe Modelle bei den Anbietern …</div>';
     let rows; try{ rows=await api('/model_health'+(refresh?'?refresh=1':'')); }catch(e){ return; }
     const groups={};
-    rows.forEach(r=>{ const k=r.provider+'\u0001'+r.model; (groups[k]=groups[k]||{r,names:[]}).names.push(r.name+(r.project?' ('+r.project+')':'')); });
+    rows.forEach(r=>{ const k=r.provider+'\u0001'+r.model+'\u0001'+(r.unassigned?r.project_id:''); (groups[k]=groups[k]||{r,names:[]}).names.push(r.name+(r.project?' ('+r.project+')':'')); });
     const gl=Object.values(groups);
+    const defProvM=(S.providers.find(p=>p.configured&&p.id!=='mock'&&!p.id.endsWith('cli'))||{id:'mock'}).id;
     body.innerHTML='<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Zeigt Agenten, deren Modell beim Anbieter nicht mehr gelistet ist oder abgelehnt wurde. Neues Modell wählen, dann gelten alle Agenten dieser Gruppe sofort. <a href="#" id="mdref" style="color:var(--accent)">↻ Neu prüfen</a></div>'
-      +(gl.length? gl.map((g,i)=>`<div class="task" style="padding:10px"><b>⚠ ${esc(g.r.provider_label)} · ${esc(g.r.effective)}</b> <span style="color:var(--mute);font-size:12px">${g.names.length} Agent(en)</span>
+      +(gl.length? gl.map((g,i)=>`<div class="task" style="padding:10px"><b>⚠ ${g.r.unassigned?'Noch keine KI'+(g.r.project?' · '+esc(g.r.project):''):esc(g.r.provider_label)+' · '+esc(g.r.effective)}</b> <span style="color:var(--mute);font-size:12px">${g.names.length} Agent(en)</span>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">${esc(g.names.join(', '))}<br>${esc(g.r.reason)}</div>
-        <select id="mr${i}_p">${provOptions(g.r.provider)}</select><select id="mr${i}_m" style="margin-top:6px"></select>
+        <select id="mr${i}_p">${provOptions(g.r.provider||defProvM)}</select><select id="mr${i}_m" style="margin-top:6px"></select>
         <div class="row"><button class="btn pri sm" data-rep="${i}">Alle umstellen</button></div></div>`).join('')
        : '<div style="color:var(--mute)">✅ Alle Modelle sind verfügbar.</div>');
     gl.forEach((g,i)=>wirePicker('mr'+i));
@@ -652,7 +655,7 @@ $('#btnModels').onclick=()=>{
       const i=+b.dataset.rep, g=gl[i], np=$('#mr'+i+'_p').value, nm=$('#mr'+i+'_m').value;
       if(np===g.r.provider && nm===g.r.model){ toast('Bitte ein anderes Modell wählen.'); return; }
       b.disabled=true;
-      const res=await api('/models/replace','POST',{provider:g.r.provider,from_model:g.r.model,to_provider:np,to_model:nm});
+      const res=await api('/models/replace','POST',{provider:g.r.provider,from_model:g.r.model,to_provider:np,to_model:nm,project_id:g.r.unassigned?g.r.project_id:undefined});
       toast(res.changed+' Agent(en) umgestellt'); await load(false); refresh(true);
     });
     const rf=$('#mdref'); if(rf) rf.onclick=e=>{ e.preventDefault(); load(true); };

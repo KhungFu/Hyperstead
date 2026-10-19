@@ -22,7 +22,8 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - Modi: `work` (Blatt), `plan` (Chef delegiert), `review` (Chef nach Abschluss aller Kinder: liest Berichte, kann per `review`
   zurückgeben, weiter delegieren oder abschließen). Status `waiting_subtasks`; `finish`/`wake_parent` wecken den Chef.
 - Limits: `MAX_REVISIONS` 2 je Kind, `MAX_REVIEW_PASSES` 4 (danach `final_only`), `PCL_MAX_DEPTH` 8. Kein Budget.
-- Rechte: delegate, judge, auto_run, write_files, shell.
+- Rechte: delegate, judge, auto_run, write_files, shell, recruit.
+- Modus `recruit`: Agent mit Recht `recruit`, ohne Mitarbeiter, oberste Aufgabe → `recruit_team` legt Agenten mit `provider=''` an (Rechte nur aus `RECRUIT_PERMS`, max. `RECRUIT_MAX`). Plan-Modus bricht ab, solange Kinder ohne KI existieren. Zuweisung über `/api/models/replace` (provider `''`, optional `project_id`), `model_health` meldet sie als `unassigned`.
 
 ## Werkzeuge der Agenten
 - `run_with_tools` (app.py): Modell antwortet mit `{"tools":[...]}` → Server führt `agent_tools.run_tool` aus → nächste Runde, max. `MAX_TOOL_STEPS`, danach erzwungene Endantwort. Ältere Ergebnisse werden gekürzt (kleine Kontextfenster).

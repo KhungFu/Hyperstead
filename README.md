@@ -231,3 +231,6 @@ PaperclipLite prüft alle 6 Stunden (`PCL_MODEL_CHECK_HOURS`), ob die Modelle de
 
 ## Große Teams
 Ein Vorgesetzter kann beliebig viele Mitarbeiter haben. Im Panel des Vorgesetzten (Einstellungen) wählst du unter **Unterstellte Mitarbeiter** per Häkchen alle aus und speicherst die Zuweisung. Alternativ: unteren Punkt des Vorgesetzten auf einen Mitarbeiter ziehen. Der Knopf **🗂 Ordnen** legt alles als Organigramm an (Gruppen ab 6 Mitarbeitern in Reihen zu je 5).
+
+## CEO stellt sein Team selbst zusammen
+Der CEO aus der Palette hat das Recht **„Darf sein Team selbst zusammenstellen“** (`recruit`). Hat er noch keine Mitarbeiter und bekommt einen Auftrag, analysiert er ihn und legt Mitarbeiter mit Rolle, Arbeitsanweisung und Berichtslinien an (bis 20, auch Abteilungsleiter mit eigenem Team). Die Neuen haben **noch keine KI**: Du weist sie im Menü **⚠ Modelle** (alle auf einmal) oder je Agent in den Einstellungen zu und antwortest dann in der **Post** auf den Auftrag (z. B. „Weiter“). Danach verteilt der CEO die Arbeit wie gewohnt. Der CEO kann Neuen nur Web, Bilder, Dateien lesen/schreiben und Medien mitgeben, nie Shell.

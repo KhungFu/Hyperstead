@@ -160,8 +160,11 @@ PROVIDERS = {
 # auto_run  = verteilte Aufgaben starten sofort (wie in einer Firma: Auftrag erteilt = es geht los)
 # media      = Video/Audio schneiden (ffmpeg), Sprache, Dokumente (PDF/DOCX/EPUB) erzeugen
 # web        = Websuche + Webseiten lesen   images = Bilder suchen/speichern/erzeugen   read_files = Projektdateien lesen
+# recruit    = stellt anhand des Auftrags selbst ein Team zusammen (legt Mitarbeiter ohne KI an; der Besitzer weist KI/Modell zu)
 DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False,
-                 "web": True, "images": True, "read_files": True, "media": True}
+                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False}
+RECRUIT_MAX = 20                                                    # Mitarbeiter je Einstellungsrunde
+RECRUIT_PERMS = ("web", "images", "read_files", "write_files", "media")  # mehr darf der Chef Neuen nie mitgeben
 MAX_TOOL_STEPS = int(os.environ.get("PCL_MAX_TOOL_STEPS", "6"))    # Werkzeug-Runden pro Lauf
 TOOL_RESULT_CHARS = 4500                                            # Ergebnis je Werkzeugaufruf im Prompt
 
@@ -339,6 +342,8 @@ def _run_cli(argv, prompt):
 def call_llm(agent, messages):
     """Gibt (text, tokens) zurueck. Rotiert Keys bei 429/5xx."""
     pid = agent["provider"]
+    if not pid:
+        raise RuntimeError("Diesem Agenten ist noch keine KI zugewiesen (Einstellungen -> Anbieter oder Menue ⚠ Modelle).")
     if pid not in PROVIDERS:
         raise RuntimeError(f"Unbekannter Anbieter: {pid}")
 
@@ -501,6 +506,12 @@ def mock_llm(agent, messages):
     p = perms_of(agent)
     kids = q("SELECT name FROM agents WHERE parent_id=?", (agent["id"],))
     title = user.split("\n")[0].replace("Aufgabe: ", "")
+    if p.get("recruit") and not kids and not user.startswith(REVIEW_MARKER):
+        return json.dumps({"result": f"[Mock {agent['name']}] Analyse: {title[:80]}",
+                           "recruit": [{"name": "Rechercheur", "role": "Recherche", "system_prompt": "Recherchiere gruendlich.", "tools": ["web"]},
+                                       {"name": "Autor", "role": "Texte", "system_prompt": "Schreibe klare Texte.", "tools": ["write_files"]},
+                                       {"name": "Lektor", "role": "Qualitaet", "reports_to": "Autor", "system_prompt": "Pruefe Texte."}]},
+                          ensure_ascii=False), 50
     redo = "ÜBERARBEITUNGSAUFTRAG" in user
     pre = "Ueberarbeitet: " if redo else ""
     if user.startswith(REVIEW_MARKER):
@@ -548,6 +559,15 @@ def build_system(agent, project, mode, final_only=False):
         rules.append("Du bist Fuehrungskraft: Entweder verteilst du Teilaufgaben an dein Team (delegate) oder du erledigst die Aufgabe selbst "
                      "(dann kein delegate). Mitarbeiter kennen NUR ihre Aufgabe, nicht deine: gib in description alles mit, was sie brauchen "
                      "(Ziel, Umfang, gewuenschtes Format, Qualitaetskriterien). Delegiere nur an exakt benannte Mitarbeiter.")
+    elif mode == "recruit":
+        fields[0] = '"result": "deine Analyse des Auftrags und warum du genau dieses Team brauchst"'
+        fields.append('"recruit": [{"name": "Kurzer eindeutiger Name", "role": "Rolle/Titel", "reports_to": "Name eines anderen Teammitglieds oder leer = direkt an dich", '
+                      '"system_prompt": "Arbeitsanweisung in 2-4 Saetzen", "tools": ["web", "write_files"]}]')
+        rules.append(f"Du hast noch kein Team. Analysiere den Auftrag und stelle genau die Mitarbeiter ein, die du dafuer brauchst (so wenige wie sinnvoll, "
+                     f"hoechstens {RECRUIT_MAX}). Gib jedem eine klare Rolle und eine konkrete Arbeitsanweisung (Aufgabe, Qualitaetskriterien, Format). "
+                     "Fuer groessere Bereiche darfst du Abteilungsleiter einstellen und ihnen weitere Mitarbeiter ueber reports_to unterstellen. "
+                     "tools ist optional; erlaubt: web, images, read_files, write_files, media. Verteile in diesem Schritt KEINE Aufgaben: "
+                     "Der Besitzer weist den Mitarbeitern zuerst KI und Modell zu, danach startest du die Arbeit.")
     elif mode == "review":
         fields[0] = '"result": "konsolidiertes Gesamtergebnis, das an deinen Vorgesetzten bzw. als Endergebnis geht"'
         rules.append("Du hast die Berichte deines Teams gelesen. Pruefe sie kritisch gegen die urspruengliche Aufgabe, fasse zusammen und entscheide.")
@@ -732,6 +752,63 @@ def run_with_tools(a, perms, messages, final_only, root, ids):
     return text, total, made
 
 
+def recruit_team(boss, project, items, notes):
+    """Legt die vom Chef vorgeschlagenen Mitarbeiter an: ohne KI (provider ''), Rechte nur aus RECRUIT_PERMS."""
+    items = [i for i in (items if isinstance(items, list) else []) if isinstance(i, dict)][:RECRUIT_MAX]
+    taken = {r["name"].lower() for r in q("SELECT name FROM agents WHERE project_id=?", (project["id"],))}
+    people = []
+    for it in items:
+        name = re.sub(r"\s+", " ", str(it.get("name") or "")).strip()[:60]
+        if not name:
+            continue
+        if name.lower() in taken:
+            notes.append(f"Name '{name}' ist schon vergeben - uebersprungen.")
+            continue
+        taken.add(name.lower())
+        tl = it.get("tools") if isinstance(it.get("tools"), list) else []
+        people.append({"name": name, "role": str(it.get("role") or "")[:100], "prompt": str(it.get("system_prompt") or "")[:3000],
+                       "reports": str(it.get("reports_to") or "").strip().lower(),
+                       "tools": {str(x) for x in tl if str(x) in RECRUIT_PERMS}})
+    idx = {p["name"].lower(): i for i, p in enumerate(people)}
+    for i, p in enumerate(people):  # Vorgesetzter innerhalb des neuen Teams, sonst der Chef selbst
+        j = idx.get(p["reports"])
+        p["parent"] = j if j is not None and j != i else None
+    for i, p in enumerate(people):  # Zyklen (A -> B -> A) aufloesen
+        cur, n = p["parent"], 0
+        while cur is not None and n <= len(people):
+            if cur == i:
+                p["parent"] = None
+                break
+            cur, n = people[cur]["parent"], n + 1
+    has_kids = {p["parent"] for p in people if p["parent"] is not None}
+    depth = []
+    for i, p in enumerate(people):
+        d, cur = 1, p["parent"]
+        while cur is not None:
+            d, cur = d + 1, people[cur]["parent"]
+        depth.append(d)
+    per_row = {}
+    for i, p in enumerate(people):
+        per_row.setdefault(depth[i], []).append(i)
+    ids = []
+    for i, p in enumerate(people):
+        perms = dict(DEFAULT_PERMS)
+        perms.update({k: (k in p["tools"]) for k in RECRUIT_PERMS})
+        if i in has_kids:
+            perms.update({"delegate": True, "judge": True})
+        row = per_row[depth[i]]
+        x = boss["x"] + (row.index(i) - (len(row) - 1) / 2) * 230
+        y = boss["y"] + 160 * depth[i]
+        aid = ex("INSERT INTO agents(project_id,name,role,x,y,provider,model,system_prompt,perms,created)"
+                 " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                 (project["id"], p["name"], p["role"], x, y, "", "", p["prompt"], json.dumps(perms), time.time()))
+        ids.append(aid)
+        log("agent_recruited", f"{p['name']} ({p['role']}) von {boss['name']}", project["id"], aid)
+    for i, p in enumerate(people):
+        ex("UPDATE agents SET parent_id=? WHERE id=?", (boss["id"] if p["parent"] is None else ids[p["parent"]], ids[i]))
+    return people
+
+
 def execute_task(tid):
     t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
     if not t:
@@ -755,11 +832,20 @@ def execute_task(tid):
     can_delegate = manager and depth < MAX_DEPTH
     if child_tasks:
         mode = "review"
+    elif perms["recruit"] and not kids and not t["parent_task_id"]:
+        mode = "recruit"
     elif can_delegate:
         mode = "plan"
     else:
         mode = "work"
     final_only = mode == "review" and t["passes"] >= MAX_REVIEW_PASSES
+    if mode == "plan":
+        no_ai = [k["name"] for k in q("SELECT name FROM agents WHERE parent_id=? AND provider=''", (aid,))]
+        if no_ai:
+            finish(tid, "failed", "Diesen Mitarbeitern ist noch keine KI zugewiesen: " + ", ".join(no_ai)
+                   + ".\nBitte zuweisen (Menue ⚠ Modelle oder Agent -> Einstellungen) und den Auftrag dann erneut starten.")
+            log("task_failed", "Mitarbeiter ohne KI: " + ", ".join(no_ai), pid, aid, tid)
+            return
 
     set_task(tid, "running")
     log("task_start", f"{t['title']} [{mode}]", pid, aid, tid)
@@ -811,6 +897,22 @@ def execute_task(tid):
                 log("revision_requested", f"an {cag['name']}: {feedback}", pid, aid, ct["id"])
                 notes.append(f"Zur Ueberarbeitung zurueckgegeben an {cag['name']}: {feedback[:120]}")
                 revised += 1
+
+    # --- Team einstellen (nur mit Recht 'recruit', nur im Modus recruit)
+    hired = []
+    if data.get("recruit"):
+        if mode != "recruit":
+            notes.append("Einstellen nur beim Aufbau eines neuen Teams moeglich - ignoriert.")
+            log("denied", "recruit", pid, aid, tid)
+        else:
+            hired = recruit_team(a, p, data["recruit"], notes)
+            if hired:
+                lines = [f"- {h['name']} ({h['role']})" + (f" -> berichtet an {hired[h['parent']]['name']}" if h["parent"] is not None else "")
+                         for h in hired]
+                notes.append(f"Team zusammengestellt ({len(hired)} Mitarbeiter):\n" + "\n".join(lines)
+                             + "\n\nNaechster Schritt: Den neuen Mitarbeitern KI und Modell zuweisen (Menue ⚠ Modelle, oder je Agent in den Einstellungen). "
+                             "Danach hier in der Post auf diesen Auftrag antworten (z. B. „Weiter“), dann verteilt der Chef die Arbeit.")
+                log("team_recruited", f"{len(hired)} Mitarbeiter", pid, aid, tid)
 
     # --- Delegieren
     dele = data.get("delegate")
@@ -950,6 +1052,11 @@ def model_health(refresh=False, cached_only=False):
     for a in q("SELECT a.id, a.name, a.provider, a.model, a.project_id, p.name AS project "
                "FROM agents a LEFT JOIN projects p ON p.id=a.project_id ORDER BY a.id"):
         pid = a["provider"]
+        if not pid:  # vom Chef eingestellt, noch ohne KI
+            out.append({"agent_id": a["id"], "name": a["name"], "project_id": a["project_id"], "project": a["project"],
+                        "provider": "", "provider_label": "Noch keine KI", "model": "", "effective": "-",
+                        "reason": "Noch keine KI zugewiesen.", "unassigned": True})
+            continue
         cfg = PROVIDERS.get(pid)
         if not cfg or pid in ("mock", "cli") or cfg.get("kind") == "cli":
             continue
@@ -976,7 +1083,7 @@ def model_health(refresh=False, cached_only=False):
 def model_check_and_notify():
     """Regelmaessig vom Worker: meldet Aenderungen einmalig per Audit-Log und Telegram."""
     try:
-        bad = model_health(refresh=True)
+        bad = [b for b in model_health(refresh=True) if not b.get("unassigned")]
     except Exception as e:
         print("Modellpruefung:", e)
         return
@@ -1479,16 +1586,20 @@ def api_model_health():
 def api_models_replace():
     """Stellt alle Agenten mit (Anbieter, altes Modell) auf ein neues Modell (und optional anderen Anbieter) um."""
     d = request.get_json(force=True)
-    old_p, new_p = d.get("provider"), d.get("to_provider") or d.get("provider")
+    old_p, new_p = d.get("provider", ""), d.get("to_provider") or d.get("provider")
     old_m, new_m = str(d.get("from_model") or ""), str(d.get("to_model") or "")[:100]
-    if old_p not in PROVIDERS or new_p not in PROVIDERS:
+    if (old_p and old_p not in PROVIDERS) or new_p not in PROVIDERS:
         abort(400, "Unbekannter Anbieter")
-    ids = [a["id"] for a in q("SELECT id FROM agents WHERE provider=? AND model=?", (old_p, old_m))]
+    sql, args = "SELECT id FROM agents WHERE provider=? AND model=?", [old_p, old_m]
+    if d.get("project_id"):
+        sql, args = sql + " AND project_id=?", args + [int(d["project_id"])]
+    ids = [a["id"] for a in q(sql, tuple(args))]
     if not ids:
         abort(400, "Keine Agenten mit diesem Modell")
     for i in ids:
         ex("UPDATE agents SET provider=?, model=? WHERE id=?", (new_p, new_m, i))
-    _bad_models.pop((old_p, old_m or PROVIDERS[old_p]["model"]), None)
+    if old_p:
+        _bad_models.pop((old_p, old_m or PROVIDERS[old_p]["model"]), None)
     log("models_replaced", f"{old_p}/{old_m or 'Standard'} -> {new_p}/{new_m or 'Standard'} ({len(ids)} Agenten)")
     return jsonify({"ok": True, "changed": len(ids), "remaining": len(model_health(cached_only=True))})
 
