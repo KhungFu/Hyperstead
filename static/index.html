@@ -312,6 +312,25 @@ function drawEdges(){
   });
   svg.innerHTML = h;
 }
+async function autoLayout(){
+  const ag=S.graph.agents, ids=new Set(ag.map(a=>a.id)), kids={};
+  ag.forEach(a=>{ if(a.parent_id && ids.has(a.parent_id)) (kids[a.parent_id]=kids[a.parent_id]||[]).push(a); });
+  const G=30, ROW=H+34, COLS=5, pos={};
+  function width(a){ const k=kids[a.id]||[]; if(!k.length) return W+G;
+    if(k.every(c=>!(kids[c.id]||[]).length) && k.length>COLS) return COLS*(W+G);
+    return Math.max(W+G, k.reduce((s,c)=>s+width(c),0)); }
+  function place(a,x0,y){ const k=kids[a.id]||[], w=width(a);
+    pos[a.id]={x:Math.round(x0+w/2-W/2),y};
+    if(!k.length) return;
+    if(k.every(c=>!(kids[c.id]||[]).length) && k.length>COLS){
+      k.forEach((c,i)=>{ const r=Math.floor(i/COLS), col=i%COLS, inRow=Math.min(COLS,k.length-r*COLS);
+        pos[c.id]={x:Math.round(x0+w/2-inRow*(W+G)/2+col*(W+G)+G/2), y:y+H+60+r*ROW}; });
+    } else { let x=x0; k.forEach(c=>{ place(c,x,y+H+70); x+=width(c); }); }
+  }
+  let x=0; ag.filter(a=>!a.parent_id||!ids.has(a.parent_id)).forEach(r=>{ place(r,x,40); x+=width(r)+G; });
+  await Promise.all(ag.map(a=>api('/agents/'+a.id,'PUT',pos[a.id]||{})));
+  await refresh(true); V.x=40; V.y=30; V.s=Math.min(1, ($('#vp').clientWidth-80)/Math.max(x,1)); applyView();
+}
 $('#edges').addEventListener('click', async e=>{
   const id = e.target.dataset && e.target.dataset.child; if(!id) return;
   if(confirm('Verbindung trennen?')){ await api('/agents/'+id,'PUT',{parent_id:null}); refresh(true); }
@@ -394,6 +413,7 @@ window.addEventListener('mouseup',async e=>{
     b.onclick=()=>{ const r=$('#vp').getBoundingClientRect(); const w=toWorld(r.left+r.width/2-W/2*V.s, r.top+r.height/3); addAgent(k,w.x,w.y); };
     pal.appendChild(b);
   });
+  const ob=document.createElement('div'); ob.className='pal'; ob.textContent='🗂 Ordnen'; ob.title='Alle Agenten als Organigramm anordnen'; ob.onclick=()=>autoLayout(); pal.appendChild(ob);
   const h=document.createElement('span'); h.className='hint'; h.textContent='Unterer Punkt am Knoten → auf anderen Knoten ziehen = verbinden. Linie anklicken = trennen.'; pal.appendChild(h);
 })();
 $('#vp').addEventListener('dragover',e=>e.preventDefault());
@@ -426,6 +446,14 @@ function drawPanel(){
   if(S.tab==='set') drawSettings(a); else if(S.tab==='chat') drawChat(a); else if(S.tab==='tasks') drawTasks(a); else drawLog(a);
 }
 
+function ancestorsOf(a){ const set=new Set(); let c=a.parent_id, n=0; while(c && n++<100){ set.add(c); const p=agentById(c); c=p&&p.parent_id; } return set; }
+function kidList(a){
+  const anc=ancestorsOf(a);
+  const rows=S.graph.agents.filter(x=>x.id!==a.id && !anc.has(x.id));
+  if(!rows.length) return '<span style="color:var(--mute);font-size:12px">Keine weiteren Agenten im Projekt.</span>';
+  return rows.map(x=>{ const other = x.parent_id && x.parent_id!==a.id ? agentById(x.parent_id) : null;
+    return `<label style="display:flex;gap:6px;align-items:center;margin:2px 0;font-size:13px"><input type="checkbox" class="kidchk" value="${x.id}" ${x.parent_id===a.id?'checked':''}> ${esc(x.name)} <span style="color:var(--mute);font-size:11px">${esc(x.role||'')}${other?' · jetzt bei '+esc(other.name):''}</span></label>`; }).join('');
+}
 function drawSettings(a){
   const others=S.graph.agents.filter(x=>x.id!==a.id);
   const prov=S.providers.map(p=>`<option value="${p.id}" ${p.id===a.provider?'selected':''}>${esc(p.label)}${p.configured?'':(p.id==='ollama'?' — nicht erreichbar':' — kein Key')}</option>`).join('');
@@ -435,6 +463,9 @@ function drawSettings(a){
     <label>Name</label><input type="text" id="f_name" value="${esc(a.name)}">
     <label>Rolle / Titel</label><input type="text" id="f_role" value="${esc(a.role)}">
     <label>Berichtet an</label><select id="f_parent">${par}</select>
+    <label>Unterstellte Mitarbeiter (beliebig viele)</label>
+    <div id="kidbox" style="border:1px solid var(--line,#333);border-radius:6px;padding:6px;max-height:190px;overflow:auto">${kidList(a)}</div>
+    <div class="row" style="margin:6px 0"><button class="btn sm" id="kidsave">👥 Zuweisung speichern</button><span id="kidcnt" style="color:var(--mute);font-size:12px"></span></div>
     <label>Anbieter (KI)</label><select id="f_prov">${prov}</select>
     <label>Modell</label>
     <select id="f_modelsel"><option>lade …</option></select>
@@ -483,6 +514,17 @@ function drawSettings(a){
   };
   loadModels(false);
   $('#f_prov').onchange=e=>{ $('#cliwrap').style.display=e.target.value==='cli'?'block':'none'; $('#f_model').value=''; loadModels(false); };
+  const kc=()=>{ $('#kidcnt').textContent=document.querySelectorAll('.kidchk:checked').length+' ausgewählt'; };
+  document.querySelectorAll('.kidchk').forEach(c=>c.onchange=kc); kc();
+  $('#kidsave').onclick=async()=>{
+    let n=0;
+    for(const c of document.querySelectorAll('.kidchk')){
+      const id=+c.value, x=agentById(id); if(!x) continue;
+      if(c.checked && x.parent_id!==a.id){ try{ await api('/agents/'+id,'PUT',{parent_id:a.id}); n++; }catch(_){} }
+      else if(!c.checked && x.parent_id===a.id){ try{ await api('/agents/'+id,'PUT',{parent_id:null}); n++; }catch(_){} }
+    }
+    toast(n+' Zuordnung(en) geändert'); await refresh(true); drawPanel();
+  };
   $('#saveAg').onclick=async()=>{
     const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,provider:$('#f_prov').value,model:$('#f_model').value.trim(),
       system_prompt:$('#f_sys').value,paused:$('#f_pause').checked,
