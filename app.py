@@ -44,7 +44,13 @@ def load_env():
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        v = v.strip()
+        if v[:1] in ('"', "'"):  # in Anfuehrungszeichen: alles bis zum schliessenden Zeichen
+            end = v.find(v[0], 1)
+            v = v[1:end] if end > 0 else v[1:]
+        else:  # sonst: Kommentar hinter dem Wert ("KEY=wert   # Hinweis") abschneiden
+            v = re.split(r"\s+#", v, 1)[0].strip()
+        os.environ.setdefault(k.strip(), v)
 
 
 load_env()
