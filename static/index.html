@@ -142,6 +142,7 @@ textarea{resize:vertical;min-height:110px}
   <aside id="side">
     <div class="brand"><div class="logo">P</div><b>PaperclipLite</b></div>
     <div class="side-sec">
+      <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnAudit">📜 Verlauf (Audit-Log)</button>
       <button class="side-btn" id="btnLogout" style="display:none" onclick="location.href='/logout'">🚪 Abmelden</button>
@@ -256,6 +257,8 @@ async function refresh(force){
   try{ S.graph = await api('/projects/'+S.pid+'/graph'); }catch(e){ return; }
   const n = S.graph.pending_approvals;
   const b = $('#apbadge'); b.textContent = n; b.style.display = n? '' : 'none';
+  const ni = S.graph.inbox_new||0;
+  const ib = $('#inbadge'); ib.textContent = ni; ib.style.display = ni? '' : 'none';
   render();
   if(S.sel && S.tab==='tasks') loadTasks();
 }
@@ -521,6 +524,40 @@ $('#btnApprovals').onclick=async()=>{
       </div>`).join(''):'<div style="color:var(--mute)">Keine offenen Freigaben.</div>';
     body.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await api('/approvals/'+b.dataset.ok,'POST',{decision:'approve'}); await load(); refresh(true); });
     body.querySelectorAll('[data-no]').forEach(b=>b.onclick=async()=>{ await api('/approvals/'+b.dataset.no,'POST',{decision:'deny'}); await load(); refresh(true); });
+  }
+  load();
+};
+$('#btnInbox').onclick=()=>{
+  openOv('Post'); const body=$('#ovbody');
+  async function load(){
+    const [rows,projs]=await Promise.all([api('/inbox'),Promise.resolve(S.graph?S.graph.agents:[])]);
+    const KIND={done:'✅ Ergebnis fertig',failed:'❌ Fehlgeschlagen',blocked:'⛔ Blockiert',queued:'🔁 in Überarbeitung',running:'🔁 in Arbeit',waiting_subtasks:'🔁 Team arbeitet'};
+    const tg = '<div style="text-align:right"><a href="#" id="inref" style="color:var(--mute);font-size:12px">↻ Aktualisieren</a></div>' + (S.info.telegram ? '<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Telegram ist verbunden: neue Post kommt aufs Handy, Antworten dort wirken genauso. <a href="#" id="tgtest" style="color:var(--accent)">Testnachricht senden</a></div>'
+      : '<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Telegram nicht eingerichtet (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in .env, siehe README).</div>');
+    const form = S.graph && S.graph.agents.length ? `
+      <div class="task" style="padding:10px;margin-bottom:12px">
+        <b>Neuer Auftrag</b>
+        <select id="no_ag" style="margin-top:6px">${S.graph.agents.filter(a=>!a.parent_id).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select>
+        <input type="text" id="no_t" placeholder="Titel">
+        <textarea id="no_d" style="min-height:60px" placeholder="Beschreibung (optional)"></textarea>
+        <div class="row"><button class="btn pri sm" id="no_go">Auftrag erteilen</button></div>
+      </div>` : '';
+    body.innerHTML = tg + form + (rows.length?rows.map(r=>`
+      <div class="task" style="padding:10px;${r.inbox==='closed'?'opacity:.55':''}">
+        <div><b>${esc(r.agent_name||'?')}</b> <span style="color:var(--mute)">(${esc(r.project_name||'')}) · #${r.id}</span></div>
+        <div>${r.inbox==='closed'?'☑ erledigt':(KIND[r.status]||r.status)} – ${esc(r.title)}${r.team?` <span style="color:var(--mute);font-size:12px">· Team: ${r.team} Aufgaben, ${r.revisions} Rückgaben</span>`:''}</div>
+        <details><summary style="cursor:pointer;color:var(--mute);font-size:12px">Ergebnis anzeigen</summary><pre>${esc(r.result||'(leer)')}</pre></details>
+        <div class="row">
+          ${r.inbox==='new'?`<button class="btn pri sm" data-ok="${r.id}">✅ Erledigt</button>`:''}
+          ${['done','failed','blocked'].includes(r.status)?`<button class="btn sm" data-rw="${r.id}">🔁 Überarbeiten…</button>`:''}
+        </div>
+      </div>`).join(''):'<div style="color:var(--mute)">Keine Post. Wenn ein Chef einen Auftrag abschließt, erscheint er hier.</div>');
+    body.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ await api('/inbox/'+b.dataset.ok+'/close','POST',{}); await load(); refresh(true); });
+    body.querySelectorAll('[data-rw]').forEach(b=>b.onclick=async()=>{ const fb=prompt('Was soll geändert werden?'); if(!fb||!fb.trim()) return; await api('/inbox/'+b.dataset.rw+'/rework','POST',{feedback:fb}); await load(); refresh(true); });
+    const go=$('#no_go'); if(go) go.onclick=async()=>{ const t=$('#no_t').value.trim(); if(!t){ toast('Titel fehlt'); return; }
+      await api('/agents/'+$('#no_ag').value+'/tasks','POST',{title:t,description:$('#no_d').value,run:true}); $('#no_t').value=''; $('#no_d').value=''; toast('Auftrag erteilt'); refresh(true); };
+    $('#inref').onclick=e=>{ e.preventDefault(); load(); };
+    const tt=$('#tgtest'); if(tt) tt.onclick=async e=>{ e.preventDefault(); try{ await api('/telegram/test','POST',{}); toast('Testnachricht gesendet'); }catch(x){} };
   }
   load();
 };

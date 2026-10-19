@@ -67,6 +67,30 @@ Mitarbeiter fertig sind, wacht er wieder auf, **liest ihre Berichte**, gibt Män
 fasst alles zusammen und berichtet an seinen Chef. So wandert das Ergebnis über beliebig viele Ebenen nach oben.
 Status „Wartet auf Team“ heißt: der Chef wartet auf seine Leute. Im Aufgaben-Tab siehst du den ganzen Baum.
 
+## Post und Telegram
+
+Sobald ein **oberster Auftrag** (den du einem Agenten, meist dem CEO, gegeben hast) fertig, fehlgeschlagen oder
+blockiert ist, liegt Post für dich bereit: Sidebar „📬 Post“ und, wenn eingerichtet, eine Telegram-Nachricht mit
+Art, Auftrag, Team-Kennzahlen und dem Ergebnis. Die Rechte-/Berichtskette darunter läuft wie gehabt.
+
+**Telegram einrichten (ca. 2 Minuten):**
+1. In Telegram `@BotFather` → `/newbot` → Token kopieren → `.env`: `TELEGRAM_BOT_TOKEN=…`
+2. `sudo systemctl restart paperclip-lite`, dem neuen Bot `/start` schreiben → er nennt deine Chat-ID.
+3. `.env`: `TELEGRAM_CHAT_ID=…` eintragen, Dienst neu starten. Im Web unter „Post“ gibt es eine Testnachricht.
+
+**Bedienung in Telegram:**
+
+| Du tust | Ergebnis |
+|---|---|
+| Einfach Text schreiben | neuer Auftrag an den Chef des gewählten Projekts (`@Name Text` = bestimmter Agent) |
+| Auf eine Post-Nachricht **antworten** | Auftrag wird mit deinem Text als Anweisung neu bearbeitet |
+| Button ✅ oder Antwort „ok“ | Auftrag als erledigt markiert |
+| `/post`, `/status`, `/ok <Nr>`, `/neu <Text>`, `/projekt [Nr]` | Übersicht bzw. Kurzbefehle |
+
+Die App fragt Telegram nur nach außen ab, es wird kein Port geöffnet (geht auch hinter CGNAT). Nur die Chat-ID aus
+`.env` darf Befehle geben, nimm einen privaten Chat, keine Gruppe. Freigaben für Shell-Befehle laufen bewusst
+**nicht** über Telegram, dort kommt nur ein Hinweis.
+
 ## Rechte pro Agent
 
 - **Delegieren**: darf Aufgaben an *direkte* Mitarbeiter verteilen (bis `PCL_MAX_DEPTH` Ebenen, Standard 8).

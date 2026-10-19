@@ -10,6 +10,7 @@ import hmac
 import html
 import json
 import os
+import queue
 import re
 import secrets
 import shlex
@@ -53,6 +54,12 @@ ALLOW_SHELL = os.environ.get("PCL_ALLOW_SHELL", "0") == "1"
 # 1 = hinter Cloudflare Tunnel / Tailscale Funnel / Reverse-Proxy (Client-IP aus Headern, Cookie "Secure")
 TRUST_PROXY = os.environ.get("TRUST_PROXY", "0") == "1"
 SESSION_DAYS = 7
+
+# Telegram (optional): Post vom Chef aufs Handy, Antworten = neuer Auftrag / Ueberarbeiten / Erledigt.
+# Die App ruft Telegram nur nach aussen ab (Long-Polling) - kein offener Port, geht auch hinter CGNAT.
+TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TG_CHATS = {c.strip() for c in os.environ.get("TELEGRAM_CHAT_ID", "").split(",") if c.strip()}
+TG_API = os.environ.get("TELEGRAM_API", "https://api.telegram.org").rstrip("/")  # nur fuer Tests aendern
 
 # Alle Anbieter sprechen das OpenAI-kompatible Chat-Format.
 # Modellnamen aendern sich oft -> im Agenten-Panel frei editierbar.
@@ -120,7 +127,11 @@ CREATE TABLE IF NOT EXISTS tasks(
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, agent_id INTEGER NOT NULL,
   parent_task_id INTEGER, title TEXT NOT NULL, description TEXT DEFAULT '',
   status TEXT DEFAULT 'todo', result TEXT DEFAULT '', created REAL, updated REAL,
-  feedback TEXT DEFAULT '', prev_result TEXT DEFAULT '', rounds INTEGER DEFAULT 0, passes INTEGER DEFAULT 0);
+  feedback TEXT DEFAULT '', prev_result TEXT DEFAULT '', rounds INTEGER DEFAULT 0, passes INTEGER DEFAULT 0,
+  inbox TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS tg_msgs(
+  chat TEXT, message_id INTEGER, task_id INTEGER, ts REAL, PRIMARY KEY(chat, message_id));
 CREATE TABLE IF NOT EXISTS approvals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, task_id INTEGER, agent_id INTEGER,
   kind TEXT, payload TEXT, status TEXT DEFAULT 'pending', output TEXT DEFAULT '', created REAL);
@@ -145,7 +156,8 @@ def init_db():
         # Migration alter Datenbanken (Spalten nachruesten)
         have = {r["name"] for r in c.execute("PRAGMA table_info(tasks)")}
         for col, ddl in (("feedback", "TEXT DEFAULT ''"), ("prev_result", "TEXT DEFAULT ''"),
-                         ("rounds", "INTEGER DEFAULT 0"), ("passes", "INTEGER DEFAULT 0")):
+                         ("rounds", "INTEGER DEFAULT 0"), ("passes", "INTEGER DEFAULT 0"),
+                         ("inbox", "TEXT DEFAULT ''")):
             if col not in have:
                 c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {ddl}")
         c.execute(
@@ -430,7 +442,9 @@ def review_prompt(t, child_tasks):
     parts = [f"{REVIEW_MARKER} (du hast alle Berichte gelesen, sie stehen unten).",
              f"Urspruengliche Aufgabe: {t['title']}\n{t['description']}".strip()]
     if t.get("feedback"):
-        parts.append("ÜBERARBEITUNGSAUFTRAG deines Vorgesetzten an dich:\n" + t["feedback"])
+        parts.append("ÜBERARBEITUNGSAUFTRAG deines Vorgesetzten an dich:\n" + t["feedback"]
+                     + "\n\nDein bisheriges Gesamtergebnis (verbessere es gezielt, Mitarbeiter darfst du bei Bedarf erneut einbeziehen):\n"
+                     + clip(t.get("prev_result", ""), 6000))
     per = min(6000, max(800, MAX_CONTEXT_CHARS // max(1, len(child_tasks))))
     for c in child_tasks:
         ag = q1("SELECT name, role FROM agents WHERE id=?", (c["agent_id"],)) or {"name": "?", "role": ""}
@@ -475,7 +489,10 @@ def finish(tid, status, result=None):
     set_task(tid, status, result)
     if status in FINISHED:
         set_task(tid, feedback="", prev_result="")
-        wake_parent(q1("SELECT * FROM tasks WHERE id=?", (tid,)))
+        t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
+        wake_parent(t)
+        if t and not t["parent_task_id"]:
+            inbox_arrived(t)  # oberste Aufgabe fertig = Post fuer den Besitzer
 
 
 def execute_task(tid):
@@ -628,6 +645,8 @@ def execute_task(tid):
                 log("approval_requested", cmd, pid, aid, tid)
                 notes.append(f"Wartet auf Freigabe: $ {cmd}")
                 pending += 1
+                tg_notify(f"🖐 Freigabe nötig · {a['name']} ({p['name']})\nAuftrag #{tid}: {t['title']}\n$ {str(cmd)[:500]}\n\n"
+                          "Bitte im Web unter „Freigaben“ entscheiden.")
 
     final = result + ("\n\n" + "\n".join(notes) if notes else "")
     if pending:
@@ -651,6 +670,331 @@ def task_tree(tid, depth=0):
         r["result"] = clip(r["result"], 4000)
         r["children"] = task_tree(r["id"], depth + 1) if depth < 10 else []
     return rows
+
+
+# ------------------------------------------------------- Post (Eingang des Besitzers)
+# "Post" = eine oberste Aufgabe (ohne Auftraggeber) ist fertig/fehlgeschlagen/blockiert.
+# inbox: '' = (noch) keine Post, 'new' = ungelesen/offen, 'closed' = vom Besitzer als erledigt markiert.
+KIND_DE = {"done": ("✅", "Ergebnis fertig"), "failed": ("❌", "Fehlgeschlagen"), "blocked": ("⛔", "Blockiert")}
+OK_WORDS = {"ok", "erledigt", "fertig", "beendet", "abgeschlossen", "passt", "✅", "👍"}
+
+
+def team_stats(tid):
+    n = rev = 0
+    for c in q("SELECT id, rounds FROM tasks WHERE parent_task_id=?", (tid,)):
+        a, b = team_stats(c["id"])
+        n += 1 + a
+        rev += c["rounds"] + b
+    return n, rev
+
+
+def get_setting(k, default=None):
+    r = q1("SELECT v FROM settings WHERE k=?", (k,))
+    return r["v"] if r else default
+
+
+def set_setting(k, v):
+    ex("INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)", (k, str(v)))
+
+
+def inbox_arrived(t):
+    ex("UPDATE tasks SET inbox='new' WHERE id=?", (t["id"],))
+    log("inbox_new", f"{t['title']} [{t['status']}]", t["project_id"], t["agent_id"], t["id"])
+    tg_notify_post(t["id"])
+
+
+def inbox_close(tid):
+    t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
+    if not t or t["parent_task_id"]:
+        return False, f"Auftrag #{tid} gibt es nicht (oder er ist nur eine Teilaufgabe)."
+    if t["status"] not in FINISHED:
+        return False, f"Auftrag #{tid} ist noch nicht fertig (Status: {STATUS_DE.get(t['status'], t['status'])})."
+    ex("UPDATE tasks SET inbox='closed' WHERE id=?", (tid,))
+    log("inbox_closed", t["title"], t["project_id"], t["agent_id"], tid)
+    return True, f"✅ Auftrag #{tid} „{t['title']}“ ist als erledigt markiert."
+
+
+def inbox_rework(tid, feedback):
+    feedback = (feedback or "").strip()
+    t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
+    if not t or t["parent_task_id"]:
+        return False, f"Auftrag #{tid} gibt es nicht (oder er ist nur eine Teilaufgabe)."
+    if not feedback:
+        return False, "Bitte schreib dazu, was geändert werden soll."
+    if t["status"] not in FINISHED:
+        return False, (f"Auftrag #{tid} ist gerade in Arbeit ({STATUS_DE.get(t['status'], t['status'])}). "
+                       "Ich melde mich, sobald Post da ist.")
+    ag = q1("SELECT name FROM agents WHERE id=?", (t["agent_id"],)) or {"name": "?"}
+    set_task(tid, "queued", feedback=feedback[:3000], prev_result=t["result"], rounds=t["rounds"] + 1,
+             passes=0, inbox="")
+    log("inbox_rework", feedback[:500], t["project_id"], t["agent_id"], tid)
+    return True, f"🔁 Auftrag #{tid} „{t['title']}“ geht zur Überarbeitung zurück an {ag['name']}."
+
+
+def top_agent(pid, name=None):
+    ags = q("SELECT * FROM agents WHERE project_id=? ORDER BY id", (pid,))
+    if name:
+        for a in ags:
+            if a["name"].lower() == name.lower():
+                return a
+        return None
+    roots = [a for a in ags if not a["parent_id"]]
+    for a in roots:
+        if perms_of(a)["delegate"]:
+            return a
+    return (roots or ags or [None])[0]
+
+
+def inbox_new_order(pid, text, agent_name=None):
+    text = text.strip()
+    a = top_agent(pid, agent_name)
+    if not a:
+        return None, None
+    title = text.splitlines()[0][:80] or "Auftrag"
+    tid = ex("INSERT INTO tasks(project_id,agent_id,title,description,status,created,updated) VALUES(?,?,?,?,?,?,?)",
+             (pid, a["id"], title, text[:8000], "queued", time.time(), time.time()))
+    log("task_created", f"per Post/Telegram: {title}", pid, a["id"], tid)
+    return tid, a
+
+
+def active_project():
+    pid = get_setting("tg_project")
+    if pid and q1("SELECT 1 FROM projects WHERE id=?", (int(pid),)):
+        return q1("SELECT * FROM projects WHERE id=?", (int(pid),))
+    r = q1("SELECT p.* FROM tasks t JOIN projects p ON p.id=t.project_id ORDER BY t.updated DESC LIMIT 1")
+    return r or q1("SELECT * FROM projects ORDER BY id LIMIT 1")
+
+
+# ------------------------------------------------------------------------ Telegram
+_tg_out = queue.Queue()
+_tg_denied = {}
+
+
+def _safe(e):
+    s = str(e)
+    return s.replace(TG_TOKEN, "***") if TG_TOKEN else s
+
+
+def tg(method, **params):
+    r = requests.post(f"{TG_API}/bot{TG_TOKEN}/{method}", json=params, timeout=(5, params.get("timeout", 0) + 15))
+    d = r.json()
+    if not d.get("ok"):
+        raise RuntimeError(d.get("description", "Telegram-Fehler"))
+    return d["result"]
+
+
+def tg_send_now(chat, text, task_id=None, buttons=None, force_reply=False):
+    p = {"chat_id": chat, "text": text[:4000]}
+    if buttons:
+        p["reply_markup"] = {"inline_keyboard": buttons}
+    elif force_reply:
+        p["reply_markup"] = {"force_reply": True, "selective": True}
+    m = tg("sendMessage", **p)
+    if task_id:
+        ex("INSERT OR REPLACE INTO tg_msgs(chat,message_id,task_id,ts) VALUES(?,?,?,?)",
+           (str(chat), m["message_id"], task_id, time.time()))
+    return m
+
+
+def tg_notify(text, task_id=None, buttons=None, chats=None):
+    """Aus beliebigen Threads aufrufen (Worker, Web): stellt nur in die Warteschlange."""
+    if not (TG_TOKEN and TG_CHATS):
+        return
+    for c in (chats or TG_CHATS):
+        _tg_out.put((c, text, task_id, buttons))
+
+
+def tg_sender():
+    while True:
+        chat, text, task_id, buttons = _tg_out.get()
+        try:
+            tg_send_now(chat, text, task_id, buttons)
+        except Exception as e:
+            print("Telegram-Senden:", _safe(e))
+            log("telegram_error", "Senden: " + _safe(e))
+
+
+def tg_notify_post(tid, chats=None):
+    t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
+    if not t:
+        return
+    a = q1("SELECT name FROM agents WHERE id=?", (t["agent_id"],)) or {"name": "?"}
+    p = q1("SELECT name FROM projects WHERE id=?", (t["project_id"],)) or {"name": "?"}
+    icon, label = KIND_DE.get(t["status"], ("📬", t["status"]))
+    n, rev = team_stats(tid)
+    head = f"📬 Post von {a['name']} ({p['name']})\n{icon} {label} · Auftrag #{tid}\n„{t['title']}“"
+    if n:
+        head += f"\nTeam: {n} Aufgaben, {rev} Rückgaben"
+    res = t["result"] or "(kein Text)"
+    text = head + "\n\n" + clip(res, 2800) + "\n\n↩️ Antworte auf diese Nachricht = Auftrag neu bearbeiten."
+    buttons = [[{"text": "✅ Erledigt", "callback_data": f"ok:{tid}"},
+                {"text": "🔁 Überarbeiten", "callback_data": f"rw:{tid}"}]]
+    if len(res) > 2800:
+        buttons.append([{"text": "📄 Ganzes Ergebnis", "callback_data": f"more:{tid}"}])
+    tg_notify(text, tid, buttons, chats)
+
+
+HELP_DE = ("PaperclipLite – so geht's:\n"
+           "• Einfach schreiben = neuer Auftrag an den Chef (mit „@Name text“ an einen bestimmten Agenten)\n"
+           "• Auf eine Post-Nachricht antworten = Auftrag neu bearbeiten (dein Text ist die Anweisung)\n"
+           "• Antwort „ok“ oder Button ✅ = als erledigt markieren\n"
+           "/post – offene Post anzeigen\n/status – was läuft gerade\n/ok <Nr> – Auftrag erledigt\n"
+           "/neu <Text> – neuer Auftrag\n/projekt [Nr] – Projekt anzeigen/wechseln")
+
+
+def tg_unbutton(cb):
+    try:
+        m = cb["message"]
+        tg("editMessageReplyMarkup", chat_id=m["chat"]["id"], message_id=m["message_id"], reply_markup={"inline_keyboard": []})
+    except Exception:
+        pass
+
+
+def tg_callback(cb):
+    chat = str(cb["message"]["chat"]["id"])
+    if chat not in TG_CHATS:
+        return
+    action, _, arg = (cb.get("data") or "").partition(":")
+    try:
+        tid = int(arg)
+    except ValueError:
+        return
+    if action == "ok":
+        ok, msg = inbox_close(tid)
+        tg("answerCallbackQuery", callback_query_id=cb["id"], text=msg[:190])
+        if ok:
+            tg_unbutton(cb)
+    elif action == "rw":
+        tg("answerCallbackQuery", callback_query_id=cb["id"])
+        tg_send_now(chat, f"Was soll bei Auftrag #{tid} geändert werden? Schreib es als Antwort auf diese Nachricht.",
+                    task_id=tid, force_reply=True)
+    elif action == "more":
+        tg("answerCallbackQuery", callback_query_id=cb["id"])
+        t = q1("SELECT result FROM tasks WHERE id=?", (tid,))
+        txt = (t or {}).get("result") or "(leer)"
+        for i in range(0, min(len(txt), 20000), 3800):
+            tg_send_now(chat, txt[i:i + 3800])
+
+
+def tg_list_open(chat):
+    rows = q("SELECT id FROM tasks WHERE parent_task_id IS NULL AND inbox='new' ORDER BY updated DESC LIMIT 5")
+    if not rows:
+        tg_send_now(chat, "📭 Keine offene Post.")
+    for r in rows:
+        tg_notify_post(r["id"], chats=[chat])
+
+
+def tg_status(chat):
+    rows = q("SELECT t.id, t.title, t.status, a.name FROM tasks t LEFT JOIN agents a ON a.id=t.agent_id "
+             "WHERE t.status IN ('queued','running','waiting_subtasks','waiting_approval') ORDER BY t.id DESC LIMIT 15")
+    open_post = q1("SELECT COUNT(*) c FROM tasks WHERE parent_task_id IS NULL AND inbox='new'")["c"]
+    lines = [f"📬 Offene Post: {open_post}", ""]
+    lines += [f"#{r['id']} {r['name']}: {r['title'][:50]} – {STATUS_DE.get(r['status'], r['status'])}" for r in rows] \
+        or ["Gerade läuft nichts."]
+    tg_send_now(chat, "\n".join(lines))
+
+
+def tg_new_order(chat, text):
+    pr = active_project()
+    if not pr:
+        tg_send_now(chat, "Es gibt noch kein Projekt. Lege zuerst im Web eins an.")
+        return
+    name = None
+    m = re.match(r"^@(\S+)\s+(.+)$", text, re.S)
+    if m:
+        name, text = m.group(1), m.group(2)
+    tid, a = inbox_new_order(pr["id"], text, name)
+    if not tid:
+        tg_send_now(chat, f"Agent „{name}“ gibt es im Projekt {pr['name']} nicht." if name else
+                    f"Im Projekt {pr['name']} gibt es noch keinen Agenten.")
+        return
+    tg_send_now(chat, f"📝 Auftrag #{tid} an {a['name']} übergeben (Projekt {pr['name']}). "
+                      "Ich melde mich, sobald Post da ist.", task_id=tid)
+
+
+def tg_handle(u):
+    if u.get("callback_query"):
+        return tg_callback(u["callback_query"])
+    m = u.get("message")
+    if not m or not m.get("text"):
+        return
+    chat, text = str(m["chat"]["id"]), m["text"].strip()
+    cmd = text.split()[0].split("@")[0].lower() if text.startswith("/") else ""
+    rest = text[len(text.split()[0]):].strip() if cmd else text
+    if chat not in TG_CHATS:
+        if cmd == "/start":
+            tg_send_now(chat, f"Deine Chat-ID ist {chat}.\nTrage sie in .env ein: TELEGRAM_CHAT_ID={chat}\n"
+                              "Danach PaperclipLite neu starten.")
+        elif _tg_denied.get(chat, 0) < 5:
+            _tg_denied[chat] = _tg_denied.get(chat, 0) + 1
+            log("telegram_denied", f"unbekannter Chat {chat}")
+        return
+    if cmd in ("/start", "/hilfe", "/help"):
+        return tg_send_now(chat, HELP_DE)
+    if cmd == "/post":
+        return tg_list_open(chat)
+    if cmd == "/status":
+        return tg_status(chat)
+    if cmd == "/projekt":
+        projs = q("SELECT * FROM projects ORDER BY id")
+        if rest.isdigit() and any(p["id"] == int(rest) for p in projs):
+            set_setting("tg_project", rest)
+        cur = active_project()
+        return tg_send_now(chat, "Projekte (Nr – Name):\n" + "\n".join(
+            f"{'👉 ' if cur and p['id'] == cur['id'] else '   '}{p['id']} – {p['name']}" for p in projs)
+            + "\n\nWechseln: /projekt <Nr>. Neue Aufträge gehen ins gewählte Projekt.")
+    if cmd == "/ok":
+        if rest.lstrip("#").isdigit():
+            return tg_send_now(chat, inbox_close(int(rest.lstrip("#")))[1])
+        rows = q("SELECT id FROM tasks WHERE parent_task_id IS NULL AND inbox='new'")
+        if len(rows) == 1:
+            return tg_send_now(chat, inbox_close(rows[0]["id"])[1])
+        return tg_send_now(chat, "Welcher Auftrag? /ok <Nr> (offene Post: /post)")
+    if cmd == "/neu":
+        return tg_new_order(chat, rest) if rest else tg_send_now(chat, "Wie lautet der Auftrag? /neu <Text>")
+    if cmd:
+        return tg_send_now(chat, HELP_DE)
+    # Antwort auf eine Nachricht des Bots -> betrifft genau diesen Auftrag
+    rt = (m.get("reply_to_message") or {}).get("message_id")
+    mapped = q1("SELECT task_id FROM tg_msgs WHERE chat=? AND message_id=?", (chat, rt)) if rt else None
+    if mapped:
+        if text.lower().strip(" .!") in OK_WORDS:
+            return tg_send_now(chat, inbox_close(mapped["task_id"])[1])
+        ok, msg = inbox_rework(mapped["task_id"], text)
+        return tg_send_now(chat, msg, task_id=mapped["task_id"] if ok else None)
+    tg_new_order(chat, text)
+
+
+def tg_poll():
+    try:
+        tg("deleteWebhook")
+    except Exception as e:
+        print("Telegram deleteWebhook:", _safe(e))
+    offset = None
+    while True:
+        try:
+            params = {"timeout": 25, "allowed_updates": ["message", "callback_query"]}
+            if offset is not None:
+                params["offset"] = offset
+            for u in tg("getUpdates", **params):
+                offset = u["update_id"] + 1
+                try:
+                    tg_handle(u)
+                except Exception as e:
+                    print("Telegram-Handler:", _safe(e))
+                    log("telegram_error", "Handler: " + _safe(e))
+        except Exception as e:
+            print("Telegram-Abruf:", _safe(e))
+            time.sleep(10)
+
+
+def start_telegram():
+    if not TG_TOKEN:
+        return
+    threading.Thread(target=tg_sender, daemon=True).start()
+    threading.Thread(target=tg_poll, daemon=True).start()
+    if not TG_CHATS:
+        print("Telegram: Bot-Token gesetzt, aber TELEGRAM_CHAT_ID fehlt. Schreib dem Bot /start, er nennt dir die ID.")
 
 
 # ----------------------------------------------------------------- Worker
@@ -807,7 +1151,8 @@ def index():
 
 @app.get("/api/info")
 def api_info():
-    return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI})
+    return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI,
+                    "telegram": bool(TG_TOKEN and TG_CHATS)})
 
 
 @app.get("/api/providers")
@@ -863,7 +1208,8 @@ def api_graph(pid):
         a["used_tokens"] = used_tokens(a["id"])
         a["counts"] = counts.get(a["id"], {})
     pend = q1("SELECT COUNT(*) c FROM approvals WHERE status='pending'")["c"]
-    return jsonify({"project": proj, "agents": agents, "pending_approvals": pend})
+    inbox_new = q1("SELECT COUNT(*) c FROM tasks WHERE parent_task_id IS NULL AND inbox='new'")["c"]
+    return jsonify({"project": proj, "agents": agents, "pending_approvals": pend, "inbox_new": inbox_new})
 
 
 def has_cycle(agent_id, new_parent):
@@ -983,7 +1329,7 @@ def api_task_run(tid):
     # Neustart einer Chef-Aufgabe = von vorn planen: alte Team-Aufgaben werden verworfen
     for c in q("SELECT id FROM tasks WHERE parent_task_id=?", (tid,)):
         delete_subtree(c["id"])
-    set_task(tid, "queued", feedback="", prev_result="", rounds=0, passes=0)
+    set_task(tid, "queued", feedback="", prev_result="", rounds=0, passes=0, inbox="")
     log("task_restarted", t["title"], t["project_id"], t["agent_id"], tid)
     return jsonify({"ok": True})
 
@@ -1051,6 +1397,43 @@ def api_approval_decide(aid):
     return jsonify({"ok": True})
 
 
+@app.get("/api/inbox")
+def api_inbox():
+    rows = q("""SELECT t.id, t.title, t.status, t.result, t.inbox, t.updated, t.rounds, a.name AS agent_name,
+                       p.name AS project_name, t.project_id, t.agent_id
+                FROM tasks t LEFT JOIN agents a ON a.id=t.agent_id LEFT JOIN projects p ON p.id=t.project_id
+                WHERE t.parent_task_id IS NULL AND t.inbox IN ('new','closed')
+                ORDER BY (t.inbox='new') DESC, t.updated DESC LIMIT 40""")
+    for r in rows:
+        r["result"] = clip(r["result"], 20000)
+        r["team"], r["revisions"] = team_stats(r["id"])
+    return jsonify(rows)
+
+
+@app.post("/api/inbox/<int:tid>/close")
+def api_inbox_close(tid):
+    ok, msg = inbox_close(tid)
+    if not ok:
+        abort(400, msg)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/inbox/<int:tid>/rework")
+def api_inbox_rework(tid):
+    ok, msg = inbox_rework(tid, str(request.get_json(force=True).get("feedback", "")))
+    if not ok:
+        abort(400, msg)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/telegram/test")
+def api_telegram_test():
+    if not (TG_TOKEN and TG_CHATS):
+        abort(400, "Telegram ist nicht eingerichtet (TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID in .env).")
+    tg_notify("✅ PaperclipLite ist verbunden. Schreib mir einen Auftrag oder /hilfe.")
+    return jsonify({"ok": True})
+
+
 @app.get("/api/audit")
 def api_audit():
     pid = request.args.get("project_id")
@@ -1075,6 +1458,7 @@ def bad(e):
 if __name__ == "__main__":
     init_db()
     start_worker()
+    start_telegram()
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8787"))
     exposed = host not in ("127.0.0.1", "localhost", "::1") or TRUST_PROXY
@@ -1084,5 +1468,5 @@ if __name__ == "__main__":
     if exposed and ALLOW_SHELL:
         print("WARNUNG: PCL_ALLOW_SHELL=1 bei erreichbarer App - wer das Passwort hat, kann Befehle freigeben.")
     print(f"PaperclipLite laeuft auf http://{host}:{port}  (Login: {'an' if TOKEN else 'aus'}, "
-          f"Shell: {'an' if ALLOW_SHELL else 'aus'})")
+          f"Shell: {'an' if ALLOW_SHELL else 'aus'}, Telegram: {'an' if TG_TOKEN and TG_CHATS else 'aus'})")
     app.run(host=host, port=port, threaded=True)
