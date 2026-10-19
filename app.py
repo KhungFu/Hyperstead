@@ -49,7 +49,7 @@ def load_env():
             end = v.find(v[0], 1)
             v = v[1:end] if end > 0 else v[1:]
         else:  # sonst: Kommentar hinter dem Wert ("KEY=wert   # Hinweis") abschneiden
-            v = re.split(r"\s+#", v, 1)[0].strip()
+            v = re.split(r"\s+#", v, maxsplit=1)[0].strip()
         os.environ.setdefault(k.strip(), v)
 
 
