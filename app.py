@@ -137,13 +137,13 @@ PROVIDERS = {
     "claude_cli": {
         "label": "Claude (CLI, dein Abo)",
         "kind": "cli", "url": None, "key_env": None, "model": "",
-        "bin": "claude", "cmd_env": "PCL_CLI_CLAUDE", "cmd": "claude -p", "model_flag": "--model",
+        "bin": "claude", "cmd_env": "PCL_CLI_CLAUDE", "cmd": 'claude -p --tools "" --no-session-persistence', "model_flag": "--model",
         "models": ["sonnet", "opus", "haiku"],
     },
     "codex_cli": {
         "label": "ChatGPT (Codex-CLI, dein Abo)",
         "kind": "cli", "url": None, "key_env": None, "model": "",
-        "bin": "codex", "cmd_env": "PCL_CLI_CODEX", "cmd": "codex exec --skip-git-repo-check -", "model_flag": "-m",
+        "bin": "codex", "cmd_env": "PCL_CLI_CODEX", "cmd": "codex exec --skip-git-repo-check --ephemeral -", "model_flag": "-m", "model_pos": 2,
         "models": [],
     },
     "cli": {
@@ -360,7 +360,7 @@ def call_llm(agent, messages):
             argv = shlex.split(os.environ.get(cfg["cmd_env"], "").strip() or cfg["cmd"])
             model = (agent.get("model") or "").strip()
             if model:  # Modellflag direkt hinter das Programm (vor ein abschliessendes "-")
-                argv[1:1] = [cfg["model_flag"], model]
+                argv[cfg.get("model_pos", 1):cfg.get("model_pos", 1)] = [cfg["model_flag"], model]
         prompt = "\n\n".join(f"[{m['role']}]\n{m['content']}" for m in messages)
         out = _run_cli(argv, prompt)
         return out, max(1, (len(prompt) + len(out)) // 4)

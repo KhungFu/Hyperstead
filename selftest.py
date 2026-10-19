@@ -91,8 +91,12 @@ def group_llm():
         check(f"{cfg['label']} ({cfg['model'] or 'Standard'})", run,
               hint="CLI-Programm angemeldet? Einmal von Hand testen: echo hallo | " + (cfg.get("cmd") or "") if cfg.get("kind") == "cli" else "")
         if pid == "ollama":
-            check("Ollama: Modellliste", lambda: f"{len(A.list_models('ollama'))} Modelle: " + ", ".join(A.list_models("ollama")[:4]),
-                  hint="Modell laden: ollama pull qwen2.5:3b")
+            def olist():
+                r = A.list_models("ollama", force=True)
+                if r.get("error"):
+                    raise RuntimeError(r["error"])
+                return f"{len(r['models'])} Modelle: " + ", ".join(r["models"][:4])
+            check("Ollama: Modellliste", olist, hint="Modell laden: ollama pull qwen2.5:3b")
     if not any_real:
         line("fail", "kein echter KI-Anbieter", "in .env mindestens einen Key setzen oder Ollama starten")
 

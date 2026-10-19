@@ -51,7 +51,7 @@ else
 fi
 
 if [ "${1:-}" = "--service" ] || [ "${2:-}" = "--service" ]; then
-  sed -e "s|__USER__|$(id -un)|g" -e "s|__DIR__|${DIR}|g" deploy/paperclip-lite.service \
+  sed -e "s|__USER__|$(id -un)|g" -e "s|__DIR__|${DIR}|g" -e "s|__HOME__|${HOME}|g" deploy/paperclip-lite.service \
     | sudo tee /etc/systemd/system/paperclip-lite.service >/dev/null
   sudo systemctl daemon-reload
   sudo systemctl enable --now paperclip-lite
