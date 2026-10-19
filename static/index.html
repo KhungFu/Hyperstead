@@ -151,6 +151,7 @@ a.btn.pri{color:#fff}
     <div class="side-sec">
       <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
+      <button class="side-btn" id="btnModels" title="Agenten, deren KI-Modell nicht mehr existiert, auf ein anderes umstellen">⚠ Modelle <span class="badge" id="mdbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnFiles">📁 Dateien dieses Projekts</button>
       <button class="side-btn" id="btnAudit">📜 Verlauf (Audit-Log)</button>
       <button class="side-btn" id="btnLogout" style="display:none" onclick="location.href='/logout'">🚪 Abmelden</button>
@@ -268,6 +269,8 @@ async function refresh(force){
   const b = $('#apbadge'); b.textContent = n; b.style.display = n? '' : 'none';
   const ni = S.graph.inbox_new||0;
   const ib = $('#inbadge'); ib.textContent = ni; ib.style.display = ni? '' : 'none';
+  const nm = S.graph.model_problems||0;
+  const mb = $('#mdbadge'); mb.textContent = nm; mb.style.display = nm? '' : 'none';
   render();
   if(S.sel && S.tab==='tasks') loadTasks();
 }
@@ -587,6 +590,32 @@ $('#btnApprovals').onclick=async()=>{
     body.querySelectorAll('[data-no]').forEach(b=>b.onclick=async()=>{ await api('/approvals/'+b.dataset.no,'POST',{decision:'deny'}); await load(); refresh(true); });
   }
   load();
+};
+$('#btnModels').onclick=()=>{
+  openOv('Modelle prüfen / umstellen'); const body=$('#ovbody');
+  async function load(refresh){
+    body.innerHTML='<div style="color:var(--mute)">prüfe Modelle bei den Anbietern …</div>';
+    let rows; try{ rows=await api('/model_health'+(refresh?'?refresh=1':'')); }catch(e){ return; }
+    const groups={};
+    rows.forEach(r=>{ const k=r.provider+'\u0001'+r.model; (groups[k]=groups[k]||{r,names:[]}).names.push(r.name+(r.project?' ('+r.project+')':'')); });
+    const gl=Object.values(groups);
+    body.innerHTML='<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Zeigt Agenten, deren Modell beim Anbieter nicht mehr gelistet ist oder abgelehnt wurde. Neues Modell wählen, dann gelten alle Agenten dieser Gruppe sofort. <a href="#" id="mdref" style="color:var(--accent)">↻ Neu prüfen</a></div>'
+      +(gl.length? gl.map((g,i)=>`<div class="task" style="padding:10px"><b>⚠ ${esc(g.r.provider_label)} · ${esc(g.r.effective)}</b> <span style="color:var(--mute);font-size:12px">${g.names.length} Agent(en)</span>
+        <div style="color:var(--mute);font-size:12px;margin:4px 0">${esc(g.names.join(', '))}<br>${esc(g.r.reason)}</div>
+        <select id="mr${i}_p">${provOptions(g.r.provider)}</select><select id="mr${i}_m" style="margin-top:6px"></select>
+        <div class="row"><button class="btn pri sm" data-rep="${i}">Alle umstellen</button></div></div>`).join('')
+       : '<div style="color:var(--mute)">✅ Alle Modelle sind verfügbar.</div>');
+    gl.forEach((g,i)=>wirePicker('mr'+i));
+    body.querySelectorAll('[data-rep]').forEach(b=>b.onclick=async()=>{
+      const i=+b.dataset.rep, g=gl[i], np=$('#mr'+i+'_p').value, nm=$('#mr'+i+'_m').value;
+      if(np===g.r.provider && nm===g.r.model){ toast('Bitte ein anderes Modell wählen.'); return; }
+      b.disabled=true;
+      const res=await api('/models/replace','POST',{provider:g.r.provider,from_model:g.r.model,to_provider:np,to_model:nm});
+      toast(res.changed+' Agent(en) umgestellt'); await load(false); refresh(true);
+    });
+    const rf=$('#mdref'); if(rf) rf.onclick=e=>{ e.preventDefault(); load(true); };
+  }
+  load(false);
 };
 $('#btnInbox').onclick=()=>{
   openOv('Post'); const body=$('#ovbody');

@@ -388,8 +388,27 @@ def call_llm(agent, messages):
         last = f"HTTP {r.status_code}: {r.text[:300]}"
         if r.status_code in (429, 500, 502, 503, 504, 529):
             continue  # naechster Key
+        if _model_gone(r.status_code, r.text):
+            _bad_models[(pid, model or cfg["model"])] = time.time()
+            _models_cache.pop(pid, None)
+            raise RuntimeError(f"MODELL_WEG: Modell „{model or cfg['model']}“ ({cfg['label']}) gibt es nicht mehr "
+                               f"oder es ist gesperrt. Im Menü „⚠ Modelle“ auf ein anderes umstellen. ({last[:160]})")
         break
     raise RuntimeError(last or "Unbekannter Fehler")
+
+
+_bad_models = {}  # (anbieter, modell) -> Zeitpunkt, an dem ein Aufruf "Modell nicht gefunden" meldete
+
+
+def _model_gone(status, text):
+    t = (text or "").lower()
+    if status == 404:
+        return True
+    if status in (400, 403):
+        return ("model" in t or "modell" in t) and any(
+            w in t for w in ("not found", "does not exist", "decommission", "deprecated", "no longer",
+                             "not supported", "invalid model", "unknown model", "not available", "retired"))
+    return False
 
 
 MAX_OUTPUT = int(os.environ.get("PCL_MAX_OUTPUT", "0"))  # 0 = Standard des Anbieters (Claude: 8192)
@@ -750,8 +769,12 @@ def execute_task(tid):
     try:
         text, tokens, made_files = run_with_tools(a, perms, messages, final_only, WORKSPACE / str(pid), (pid, aid, tid))
     except Exception as e:
-        finish(tid, "failed", f"Fehler: {e}")
-        log("task_failed", e, pid, aid, tid)
+        msg = str(e)
+        if msg.startswith("MODELL_WEG: "):
+            msg = msg[len("MODELL_WEG: "):]
+            threading.Thread(target=model_check_and_notify, daemon=True).start()
+        finish(tid, "failed", f"Fehler: {msg}")
+        log("task_failed", msg, pid, aid, tid)
         return
     ex("INSERT INTO usage(agent_id,ts,tokens) VALUES(?,?,?)", (aid, time.time(), tokens))
 
@@ -915,6 +938,61 @@ def get_setting(k, default=None):
 
 def set_setting(k, v):
     ex("INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)", (k, str(v)))
+
+
+# ------------------------------------------------------- Modell-Ueberwachung
+MODEL_CHECK_HOURS = float(os.environ.get("PCL_MODEL_CHECK_HOURS", "6") or 0)
+
+
+def model_health(refresh=False, cached_only=False):
+    """Findet Agenten, deren Modell beim Anbieter nicht mehr gelistet ist (oder bei einem Aufruf abgelehnt wurde)."""
+    lists, out = {}, []
+    for a in q("SELECT a.id, a.name, a.provider, a.model, a.project_id, p.name AS project "
+               "FROM agents a LEFT JOIN projects p ON p.id=a.project_id ORDER BY a.id"):
+        pid = a["provider"]
+        cfg = PROVIDERS.get(pid)
+        if not cfg or pid in ("mock", "cli") or cfg.get("kind") == "cli":
+            continue
+        eff = a["model"] or cfg["model"]
+        reason = ""
+        if (pid, eff) in _bad_models and time.time() - _bad_models[(pid, eff)] < 86400:
+            reason = "Der Anbieter hat das Modell bei einem Aufruf abgelehnt (nicht gefunden)."
+        if not reason:
+            if pid not in lists:
+                if cached_only and pid not in _models_cache:
+                    lists[pid] = None
+                else:
+                    lists[pid] = list_models(pid, force=refresh)
+            lm = lists[pid]
+            if lm and lm.get("live") and eff not in lm["models"]:
+                reason = "Steht nicht mehr in der Modellliste des Anbieters."
+        if reason:
+            out.append({"agent_id": a["id"], "name": a["name"], "project_id": a["project_id"],
+                        "project": a["project"], "provider": pid, "provider_label": cfg["label"],
+                        "model": a["model"], "effective": eff, "reason": reason})
+    return out
+
+
+def model_check_and_notify():
+    """Regelmaessig vom Worker: meldet Aenderungen einmalig per Audit-Log und Telegram."""
+    try:
+        bad = model_health(refresh=True)
+    except Exception as e:
+        print("Modellpruefung:", e)
+        return
+    sig = "|".join(sorted(f"{b['provider']}:{b['effective']}" for b in bad))
+    if sig == get_setting("model_alert_sig", ""):
+        return
+    set_setting("model_alert_sig", sig)
+    if not bad:
+        return
+    groups = {}
+    for b in bad:
+        groups.setdefault((b["provider_label"], b["effective"]), []).append(b["name"])
+    lines = [f"• {p} / {m}: {', '.join(n[:3])}{' …' if len(n) > 3 else ''} ({len(n)})" for (p, m), n in groups.items()]
+    log("model_gone", "; ".join(f"{p}/{m}" for (p, m) in groups))
+    tg_notify("⚠️ Modell nicht mehr verfügbar – diese Agenten können nicht mehr arbeiten:\n" + "\n".join(lines)
+              + "\n\nIn PaperclipLite: Menü „⚠ Modelle“ → auf ein anderes umstellen.")
 
 
 def inbox_arrived(t):
@@ -1219,8 +1297,12 @@ def start_telegram():
 
 # ----------------------------------------------------------------- Worker
 def worker():
+    next_check = time.time() + 30  # erste Modellpruefung kurz nach dem Start
     while True:
         try:
+            if MODEL_CHECK_HOURS > 0 and time.time() >= next_check:
+                next_check = time.time() + MODEL_CHECK_HOURS * 3600
+                model_check_and_notify()
             nxt = q1("SELECT id FROM tasks WHERE status='queued' ORDER BY id LIMIT 1")
             if nxt:
                 execute_task(nxt["id"])
@@ -1388,6 +1470,29 @@ def api_provider_models(pid):
     return jsonify(list_models(pid, force=request.args.get("refresh") == "1"))
 
 
+@app.get("/api/model_health")
+def api_model_health():
+    return jsonify(model_health(refresh=request.args.get("refresh") == "1"))
+
+
+@app.post("/api/models/replace")
+def api_models_replace():
+    """Stellt alle Agenten mit (Anbieter, altes Modell) auf ein neues Modell (und optional anderen Anbieter) um."""
+    d = request.get_json(force=True)
+    old_p, new_p = d.get("provider"), d.get("to_provider") or d.get("provider")
+    old_m, new_m = str(d.get("from_model") or ""), str(d.get("to_model") or "")[:100]
+    if old_p not in PROVIDERS or new_p not in PROVIDERS:
+        abort(400, "Unbekannter Anbieter")
+    ids = [a["id"] for a in q("SELECT id FROM agents WHERE provider=? AND model=?", (old_p, old_m))]
+    if not ids:
+        abort(400, "Keine Agenten mit diesem Modell")
+    for i in ids:
+        ex("UPDATE agents SET provider=?, model=? WHERE id=?", (new_p, new_m, i))
+    _bad_models.pop((old_p, old_m or PROVIDERS[old_p]["model"]), None)
+    log("models_replaced", f"{old_p}/{old_m or 'Standard'} -> {new_p}/{new_m or 'Standard'} ({len(ids)} Agenten)")
+    return jsonify({"ok": True, "changed": len(ids), "remaining": len(model_health(cached_only=True))})
+
+
 @app.post("/api/providers/test")
 def api_provider_test():
     """Kurzer Funktionstest: laeuft Key + Modell? Zeigt Antwortzeit und Antwort."""
@@ -1456,7 +1561,8 @@ def api_graph(pid):
         a["counts"] = counts.get(a["id"], {})
     pend = q1("SELECT COUNT(*) c FROM approvals WHERE status='pending'")["c"]
     inbox_new = q1("SELECT COUNT(*) c FROM tasks WHERE parent_task_id IS NULL AND inbox='new'")["c"]
-    return jsonify({"project": proj, "agents": agents, "pending_approvals": pend, "inbox_new": inbox_new})
+    return jsonify({"project": proj, "agents": agents, "pending_approvals": pend, "inbox_new": inbox_new,
+                    "model_problems": len(model_health(cached_only=True))})
 
 
 def has_cycle(agent_id, new_parent):
