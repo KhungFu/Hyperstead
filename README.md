@@ -67,6 +67,34 @@ Mitarbeiter fertig sind, wacht er wieder auf, **liest ihre Berichte**, gibt Män
 fasst alles zusammen und berichtet an seinen Chef. So wandert das Ergebnis über beliebig viele Ebenen nach oben.
 Status „Wartet auf Team“ heißt: der Chef wartet auf seine Leute. Im Aufgaben-Tab siehst du den ganzen Baum.
 
+## Fähigkeiten der Agenten (Internet, Bilder, Dateien)
+
+Agenten arbeiten in Runden: Sie fordern Werkzeuge an, der Server führt sie aus und gibt die Ergebnisse zurück, bis sie
+fertig sind (max. `PCL_MAX_TOOL_STEPS`). Rechte pro Agent: **Internet recherchieren**, **Bilder**, **Projektdateien lesen**
+(plus wie bisher Dateien schreiben).
+
+| Werkzeug | Was es tut | Ohne Key |
+|---|---|---|
+| `web_search` | Websuche (Gesetze, Preise, Wettbewerb …) | DuckDuckGo; besser: `SEARXNG_URL`, `BRAVE_API_KEY` oder `TAVILY_API_KEY` |
+| `fetch_url` | Webseite als Text lesen | ja |
+| `image_search` / `image_save` | frei lizenzierte Fotos suchen und in `assets/` speichern, mit Urheber und Lizenz | Openverse; optional `PEXELS_API_KEY` |
+| `image_generate` | KI-Bild erzeugen | Pollinations; besser `IMAGE_PROVIDER=gemini` oder `openai` |
+| `list_files` / `read_file` | Dateien im Projektordner lesen (z. B. Texte der Kollegen) | ja |
+
+Alles Erzeugte liegt unter `workspace/<projekt-id>/`. In der Sidebar zeigt **📁 Dateien** die Dateien, öffnet `index.html`
+als Webseite (isolierte Sandbox) und lädt alles als ZIP. Der Link enthält einen geheimen Schlüssel.
+
+**Firmenvorlagen** (🏢 neben „Projekte“): *Webagentur*, *Buchhaltung/Steuerkanzlei*, *Import/Export-Handel* legen Projekt,
+Organigramm, Arbeitsanweisungen und Rechte komplett an. Eigene Firmen: Projektziel schreiben („ihr seid eine …“, Land,
+Branche), Agenten und Rechte setzen. Die Agenten bekommen Datum und Projektziel mit und sollen Veränderliches (Gesetze,
+Preise) erst recherchieren und Quellen nennen.
+
+**Sicherheit der Werkzeuge:** Seitenabrufe sind auf öffentliche Adressen beschränkt (kein localhost, LAN, Tailscale,
+Cloud-Metadaten; Weiterleitungen werden einzeln geprüft). Webinhalte gelten für die Agenten als unvertrauenswürdige Daten,
+trotzdem kann eine präparierte Seite ein Modell beeinflussen: gib Agenten mit Internet keine Shell und prüfe Ergebnisse.
+Agenten haben bewusst **keine** Werkzeuge für Käufe, Orders, Zahlungen oder E-Mail-Versand, sie liefern Entwürfe und Empfehlungen.
+Bildlizenzen (CC) verlangen oft eine Namensnennung, der Bildredakteur schreibt dafür `bildnachweis.md`.
+
 ## Post und Telegram
 
 Sobald ein **oberster Auftrag** (den du einem Agenten, meist dem CEO, gegeben hast) fertig, fehlgeschlagen oder
@@ -128,7 +156,7 @@ meldest dich einmalig mit der offiziellen CLI an. Dafür `PCL_ALLOW_CLI=1` in `.
 
 - Ein Worker, Aufgaben laufen nacheinander.
 - Kein automatischer Heartbeat nach Zeitplan (Aufgaben starten manuell oder per Delegation).
-- Agenten haben kein Web-Browsing und kein Dateilesen, nur Schreiben.
+- Kein echter Browser: Seiten werden als Text gelesen, JavaScript-lastige Seiten liefern oft wenig. Die DuckDuckGo-Suche ohne Key kann begrenzt oder geändert werden.
 - Kein Budget: Tokens werden nur gezählt. Die Rundenlimits (Überarbeitungen, Prüfdurchgänge, Tiefe) verhindern Endlosschleifen.
 - Sitzungen sind einfache signierte Cookies, ein einzelnes Gerät lässt sich nicht gezielt abmelden
   (Passwort ändern macht alle Sitzungen ungültig).
