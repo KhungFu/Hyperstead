@@ -179,7 +179,7 @@ FINISHED = ("done", "failed", "blocked")
 # ------------------------------------------------------------------ Datenbank
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects(
-  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, goal TEXT DEFAULT '', created REAL);
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, goal TEXT DEFAULT '', created REAL, folder TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS agents(
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, name TEXT NOT NULL,
   role TEXT DEFAULT '', parent_id INTEGER, x REAL DEFAULT 0, y REAL DEFAULT 0,
@@ -218,6 +218,60 @@ def conn():
     return c
 
 
+# ------------------------------------------------ Projektordner (lesbar, bleibt erhalten)
+def folder_slug(name):
+    t = str(name or "").strip()
+    for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"), ("ß", "ss")):
+        t = t.replace(a, b)
+    t = re.sub(r"[^A-Za-z0-9_-]+", "-", t).strip("-_")[:50]
+    return t or "Projekt"
+
+
+def free_folder(claimed, name, pid):
+    """Eindeutiger Ordnername. Ein Ordner, den kein Projekt belegt (z. B. nach dem Loeschen eines gleichnamigen Projekts),
+    wird wieder verwendet: die Dateien sind dann sofort wieder da."""
+    base = folder_slug(name)
+    cand, n = base, 1
+    while cand.lower() in claimed or cand.startswith("."):
+        n += 1
+        cand = f"{base}-{n}"
+    return cand
+
+
+def migrate_folders(c):
+    rows = c.execute("SELECT id, name, folder FROM projects ORDER BY id").fetchall()
+    claimed = {r["folder"].lower() for r in rows if r["folder"]}
+    for r in rows:
+        if r["folder"]:
+            continue
+        old, cand = WORKSPACE / str(r["id"]), free_folder(claimed, r["name"], r["id"])
+        new = WORKSPACE / cand
+        if old.exists():
+            if new.exists():  # Ordner mit dem Namen liegt schon (Waise): Nummer anhaengen statt zu vermischen
+                cand = f"{cand}-{r['id']}"
+                new = WORKSPACE / cand
+            try:
+                old.rename(new)
+            except OSError:
+                cand = str(r["id"])  # notfalls beim alten Ordner bleiben
+        claimed.add(cand.lower())
+        c.execute("UPDATE projects SET folder=? WHERE id=?", (cand, r["id"]))
+    c.commit()
+
+
+def proj_dir(pid):
+    r = q1("SELECT folder FROM projects WHERE id=?", (pid,))
+    return WORKSPACE / ((r or {}).get("folder") or str(pid))
+
+
+def assign_folder(pid, name):
+    claimed = {r["folder"].lower() for r in q("SELECT folder FROM projects WHERE folder!='' AND id!=?", (pid,))}
+    f = free_folder(claimed, name, pid)
+    ex("UPDATE projects SET folder=? WHERE id=?", (f, pid))
+    return f
+
+
+
 def init_db():
     with closing(conn()) as c:
         c.execute("PRAGMA journal_mode=WAL")
@@ -230,6 +284,10 @@ def init_db():
                          ("resumed", "INTEGER DEFAULT 0")):
             if col not in have:
                 c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {ddl}")
+        if "folder" not in {r["name"] for r in c.execute("PRAGMA table_info(projects)")}:
+            c.execute("ALTER TABLE projects ADD COLUMN folder TEXT DEFAULT ''")
+        c.commit()
+        migrate_folders(c)
         if "kind" not in {r["name"] for r in c.execute("PRAGMA table_info(schedules)")}:
             c.execute("ALTER TABLE schedules ADD COLUMN kind TEXT DEFAULT ''")
         c.execute(
@@ -863,7 +921,7 @@ def execute_task(tid):
     messages = [{"role": "system", "content": build_system(a, p, mode, final_only)},
                 {"role": "user", "content": user}]
     try:
-        text, tokens, made_files = run_with_tools(a, perms, messages, final_only, WORKSPACE / str(pid), (pid, aid, tid))
+        text, tokens, made_files = run_with_tools(a, perms, messages, final_only, proj_dir(pid), (pid, aid, tid))
     except Exception as e:
         msg = str(e)
         if msg.startswith("MODELL_WEG: "):
@@ -968,7 +1026,7 @@ def execute_task(tid):
             notes.append("Dateien schreiben nicht erlaubt - ignoriert.")
             log("denied", "write_file", pid, aid, tid)
         else:
-            root = (WORKSPACE / str(pid)).resolve()
+            root = proj_dir(pid).resolve()
             root.mkdir(parents=True, exist_ok=True)
             for f in (wf if isinstance(wf, list) else [])[:5]:
                 try:
@@ -1839,6 +1897,7 @@ def api_project_new():
     d = request.get_json(force=True)
     pid = ex("INSERT INTO projects(name,goal,created) VALUES(?,?,?)",
              (str(d.get("name") or "Neues Projekt")[:100], str(d.get("goal", ""))[:2000], time.time()))
+    assign_folder(pid, d.get("name") or "Neues Projekt")
     log("project_created", d.get("name"), pid)
     return jsonify({"id": pid})
 
@@ -2137,10 +2196,10 @@ def api_approval_decide(aid):
     elif decision == "approve":
         if not ALLOW_SHELL:
             abort(400, "Shell ist auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env).")
-        proj_dir = WORKSPACE / str(pid)
-        proj_dir.mkdir(parents=True, exist_ok=True)
+        pdir = proj_dir(pid)
+        pdir.mkdir(parents=True, exist_ok=True)
         try:
-            r = subprocess.run(ap["payload"], shell=True, cwd=str(proj_dir),
+            r = subprocess.run(ap["payload"], shell=True, cwd=str(pdir),
                                capture_output=True, text=True, timeout=30)
             out = (r.stdout + r.stderr)[-4000:]
             out = f"(Exit {r.returncode})\n{out}"
@@ -2202,11 +2261,11 @@ def file_token(pid):
 
 
 def project_files(pid):
-    root = (WORKSPACE / str(pid)).resolve()
+    root = proj_dir(pid).resolve()
     out = []
     if root.exists():
-        for f in sorted(root.rglob("*"))[:500]:
-            if f.is_file() and not any(p.startswith(".") for p in f.relative_to(root).parts):
+        for f in sorted(x for x in root.rglob("*") if x.is_file())[:3000]:
+            if not any(p.startswith(".") for p in f.relative_to(root).parts):
                 rel = f.relative_to(root).as_posix()
                 out.append({"path": rel, "size": f.stat().st_size, "mtime": f.stat().st_mtime,
                             "url": f"/files/{pid}/{file_token(pid)}/{quote(rel)}"})
@@ -2237,7 +2296,7 @@ def api_upload(pid):
     if ext not in UPLOAD_EXT:
         abort(400, f"Dateityp .{ext} nicht erlaubt. Erlaubt: " + ", ".join(sorted(UPLOAD_EXT)))
     base = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-")[:60] or "datei"
-    d = WORKSPACE / str(pid) / "input"
+    d = proj_dir(pid) / "input"
     d.mkdir(parents=True, exist_ok=True)
     target, i = d / f"{base}.{ext}", 1
     while target.exists():
@@ -2250,7 +2309,7 @@ def api_upload(pid):
 
 @app.delete("/api/projects/<int:pid>/files")
 def api_file_delete(pid):
-    root = (WORKSPACE / str(pid)).resolve()
+    root = proj_dir(pid).resolve()
     try:
         target = (root / str(request.args.get("path", ""))).resolve()
         target.relative_to(root)
@@ -2270,7 +2329,7 @@ def serve_file(pid, tok, rel):
     selbst boesartiges JavaScript einer Agenten-Seite erreicht weder Cookie noch API."""
     if not hmac.compare_digest(tok, file_token(pid)):
         abort(404)
-    root = (WORKSPACE / str(pid)).resolve()
+    root = proj_dir(pid).resolve()
     if rel == "_projekt.zip":
         buf, total = io.BytesIO(), 0
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -2281,7 +2340,7 @@ def serve_file(pid, tok, rel):
                         abort(400, "Projektordner ist fuer den ZIP-Download zu gross (100 MB).")
                     z.write(f, f.relative_to(root).as_posix())
         resp = Response(buf.getvalue(), mimetype="application/zip")
-        resp.headers["Content-Disposition"] = f'attachment; filename="projekt-{pid}.zip"'
+        resp.headers["Content-Disposition"] = f'attachment; filename="{root.name}.zip"'
         return resp
     resp = send_from_directory(root, rel)
     resp.headers["Content-Security-Policy"] = ("sandbox allow-scripts allow-popups allow-forms; "
@@ -2312,6 +2371,7 @@ def api_project_from_template():
     name = str(d.get("name") or tpl["label"])[:100]
     goal = str(d.get("goal") or tpl["goal"])[:2000]
     pid = ex("INSERT INTO projects(name,goal,created) VALUES(?,?,?)", (name, goal, time.time()))
+    assign_folder(pid, name)
     # Modell je Rolle: "lead" = Leitungsebene (Chefs), "team" = Mitarbeiter. Leer = Standardanbieter ohne feste Modellwahl.
     chosen = {}
     for tier in ("lead", "team"):

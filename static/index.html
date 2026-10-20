@@ -255,7 +255,7 @@ $('#btnNewProj').onclick = async ()=>{
   await openProject(r.id);
 };
 $('#btnDelProj').onclick = async ()=>{
-  if(!S.pid || !confirm('Projekt mit allen Agenten und Aufgaben löschen? (Audit-Log bleibt)')) return;
+  if(!S.pid || !confirm('Projekt mit allen Agenten und Aufgaben löschen? (Audit-Log und die Dateien im Projektordner bleiben erhalten)')) return;
   await api('/projects/'+S.pid,'DELETE'); S.pid=null; S.graph=null; S.sel=null; closePanel();
   await loadProjects(); render();
 };

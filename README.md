@@ -241,3 +241,6 @@ Bei Arbeitsbeginn nimmt die Firma liegengebliebene Aufgaben wieder auf (nicht ge
 
 ## CEO-Kontrollgang
 Im Fenster **🕘 Zeitplan** richtet **👑 CEO-Kontrollgang** einen täglichen Kontrollgang des obersten Chefs ein (Standard: bei Feierabend; weitere Zeiten über „Neue tägliche Aufgabe“ + Häkchen *Kontrollgang*). Das System legt ihm einen **Statusbericht** mit Fakten bei: je Mitarbeiter heute gestartet/fertig/fehlgeschlagen/offen, Arbeitsstarts außerhalb der Öffnungszeiten, offene Aufgaben ohne Arbeitsbeginn, Mitarbeiter ohne KI, liegengebliebene Aufträge und ob die täglichen Aufgaben gelaufen sind. Der CEO bewertet das, verteilt bei Bedarf Folgeaufgaben an sein Team und schreibt einen Kontrollbericht in die Post. „📋 Statusbericht ansehen“ zeigt die Fakten ohne CEO.
+
+## Projektordner
+Jedes Projekt hat einen **Ordner mit seinem Namen** unter `workspace/` (z. B. `workspace/Buchverlag-Content-Agentur/`, Umlaute werden umschrieben). Er bleibt beim Umbenennen des Projekts gleich und wird beim **Löschen eines Projekts nie gelöscht**. Legst du ein Projekt mit gleichem Namen neu an, übernimmt es den vorhandenen Ordner samt Dateien. Alte Nummernordner (`workspace/1`, `workspace/2` …) werden beim Start automatisch auf den Projektnamen umbenannt.
