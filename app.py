@@ -165,7 +165,8 @@ PROVIDERS = {
 # web        = Websuche + Webseiten lesen   images = Bilder suchen/speichern/erzeugen   read_files = Projektdateien lesen
 # recruit    = stellt anhand des Auftrags selbst ein Team zusammen (legt Mitarbeiter ohne KI an; der Besitzer weist KI/Modell zu)
 DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False,
-                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False}
+                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False}
+# publish    = darf die Webseite (index.html im Projektordner) zur Veroeffentlichung vorschlagen; der Besitzer gibt frei
 RECRUIT_MAX = 20                                                    # Mitarbeiter je Einstellungsrunde
 RECRUIT_PERMS = ("web", "images", "read_files", "write_files", "media")  # mehr darf der Chef Neuen nie mitgeben
 MAX_TOOL_STEPS = int(os.environ.get("PCL_MAX_TOOL_STEPS", "6"))    # Werkzeug-Runden pro Lauf
@@ -656,6 +657,10 @@ def build_system(agent, project, mode, final_only=False):
         if perms["shell"]:
             fields.append('"shell": ["befehl"]')
             rules.append("shell-Befehle werden erst nach menschlicher Freigabe ausgefuehrt.")
+    if mode in ("work", "review") and perms["publish"]:
+        fields.append('"publish": true')
+        rules.append("publish: true bittet den Besitzer, die fertige Webseite (index.html im Projektordner) lokal zu veroeffentlichen; "
+                     "er muss es freigeben. Nur setzen, wenn die Seite fertig ist und index.html existiert. Ist sie schon online, aktualisieren sich Aenderungen automatisch.")
     tool_names = [] if final_only else tools.available(perms)
     if tool_names:
         s.append(
@@ -1061,6 +1066,22 @@ def execute_task(tid):
                 tg_notify(f"🖐 Freigabe nötig · {a['name']} ({p['name']})\nAuftrag #{tid}: {t['title']}\n$ {str(cmd)[:500]}\n\n"
                           "Bitte im Web unter „Freigaben“ entscheiden.")
 
+    if data.get("publish"):
+        if not perms["publish"]:
+            notes.append("Veroeffentlichen nicht erlaubt - ignoriert.")
+            log("denied", "publish", pid, aid, tid)
+        elif not (proj_dir(pid) / "index.html").is_file():
+            notes.append("Veroeffentlichen nicht moeglich: index.html fehlt im Projektordner.")
+        elif site_running(pid):
+            notes.append(f"Die Webseite ist schon online: {site_urls(pid)[0]} (Aenderungen sind sofort sichtbar).")
+        else:
+            ex("INSERT INTO approvals(project_id,task_id,agent_id,kind,payload,created) VALUES(?,?,?,?,?,?)",
+               (pid, tid, aid, "publish", "Webseite (index.html) veroeffentlichen", time.time()))
+            log("approval_requested", "publish", pid, aid, tid)
+            notes.append("Wartet auf Freigabe: Webseite veroeffentlichen")
+            pending += 1
+            tg_notify(f"🌐 Freigabe nötig · {a['name']} ({p['name']})\nWebseite veröffentlichen (Auftrag #{tid}: {t['title']})\n\nBitte im Web unter „Freigaben“ entscheiden.")
+
     final = result + ("\n\n" + "\n".join(notes) if notes else "")
     if pending:
         set_task(tid, "waiting_approval", final)
@@ -1459,6 +1480,130 @@ def tg_poll():
         except Exception as e:
             print("Telegram-Abruf:", _safe(e))
             time.sleep(10)
+
+
+# --------------------------------------------- Webseite veroeffentlichen (statischer Mini-Server)
+import mimetypes
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote
+
+SITE_HOST = os.environ.get("PCL_SITE_HOST", "127.0.0.1")           # 0.0.0.0 = im ganzen Netz erreichbar
+SITE_PORT_BASE = int(os.environ.get("PCL_SITE_PORT_BASE", "8800"))
+_sites = {}
+
+
+def _site_handler(pid):
+    class H(BaseHTTPRequestHandler):
+        server_version = "PCLSite"
+
+        def log_message(self, *a):
+            pass
+
+        def _serve(self, with_body):
+            root = proj_dir(pid).resolve()
+            rel = unquote(self.path.split("?", 1)[0].split("#", 1)[0])
+            parts = [x for x in rel.split("/") if x]
+            try:
+                f = (root / "/".join(parts)).resolve()
+                f.relative_to(root)
+            except (ValueError, OSError):
+                return self._err(404)
+            if any(x.startswith(".") for x in parts) or (parts and parts[0] == "input"):
+                return self._err(404)  # Eigene Uploads und versteckte Dateien werden nie ausgeliefert
+            if f.is_dir():
+                f = f / "index.html"
+            if not f.is_file():
+                return self._err(404)
+            ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
+            if ctype.startswith("text/") or ctype in ("application/javascript", "application/json", "image/svg+xml"):
+                ctype += "; charset=utf-8"
+            size = f.stat().st_size
+            self.send_response(200)
+            for k, v in (("Content-Type", ctype), ("Content-Length", str(size)), ("Cache-Control", "no-cache"),
+                         ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "no-referrer")):
+                self.send_header(k, v)
+            self.end_headers()
+            if with_body:
+                with open(f, "rb") as fh:
+                    while True:
+                        chunk = fh.read(65536)
+                        if not chunk:
+                            break
+                        try:
+                            self.wfile.write(chunk)
+                        except OSError:
+                            break
+
+        def _err(self, code):
+            self.send_response(code)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def do_GET(self):
+            self._serve(True)
+
+        def do_HEAD(self):
+            self._serve(False)
+    return H
+
+
+def site_cfg(pid):
+    try:
+        return json.loads(get_setting(f"site:{pid}", "") or "{}")
+    except Exception:
+        return {}
+
+
+def site_running(pid):
+    return pid in _sites
+
+
+def site_urls(pid):
+    port = site_cfg(pid).get("port")
+    return [f"http://127.0.0.1:{port}/"] if port else []
+
+
+def site_start(pid, persist=True):
+    """Gibt (ok, Text) zurueck."""
+    if pid in _sites:
+        return True, "Schon online: " + site_urls(pid)[0]
+    if not (proj_dir(pid) / "index.html").is_file():
+        return False, "Im Projektordner fehlt index.html."
+    used = {site_cfg(r["id"]).get("port") for r in q("SELECT id FROM projects") if r["id"] != pid}
+    pref = site_cfg(pid).get("port")
+    ports = ([pref] if pref else []) + [p for p in range(SITE_PORT_BASE, SITE_PORT_BASE + 100) if p not in used and p != pref]
+    for port in ports:
+        try:
+            httpd = ThreadingHTTPServer((SITE_HOST, port), _site_handler(pid))
+        except OSError:
+            continue
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        _sites[pid] = httpd
+        if persist:
+            set_setting(f"site:{pid}", json.dumps({"enabled": True, "port": port}))
+            log("site_published", f"Port {port}", pid)
+        return True, f"Online: http://127.0.0.1:{port}/" + ("" if SITE_HOST in ("127.0.0.1", "localhost") else f" (und im Netz auf {SITE_HOST}:{port})")
+    return False, f"Kein freier Port ab {SITE_PORT_BASE} gefunden."
+
+
+def site_stop(pid, persist=True):
+    h = _sites.pop(pid, None)
+    if h:
+        h.shutdown()
+        h.server_close()
+    if persist:
+        cfg = site_cfg(pid)
+        cfg["enabled"] = False
+        set_setting(f"site:{pid}", json.dumps(cfg))
+        log("site_unpublished", "", pid)
+
+
+def start_sites():
+    for r in q("SELECT id FROM projects"):
+        if site_cfg(r["id"]).get("enabled"):
+            ok, info = site_start(r["id"], persist=False)
+            print(f"Webseite Projekt {r['id']}: {info}")
+
 
 
 def start_telegram():
@@ -1917,6 +2062,8 @@ def api_project_del(pid):
     ex("DELETE FROM approvals WHERE project_id=?", (pid,))
     ex("DELETE FROM agents WHERE project_id=?", (pid,))
     ex("DELETE FROM schedules WHERE project_id=?", (pid,))
+    site_stop(pid, persist=False)
+    ex("DELETE FROM settings WHERE k=?", (f"site:{pid}",))
     ex("DELETE FROM projects WHERE id=?", (pid,))
     log("project_deleted", pid, pid)  # Audit bleibt erhalten
     return jsonify({"ok": True})
@@ -2193,6 +2340,12 @@ def api_approval_decide(aid):
         ex("UPDATE approvals SET status='denied' WHERE id=?", (aid,))
         log("approval_denied", ap["payload"], pid, ap["agent_id"], ap["task_id"])
         add = f"\n\nAbgelehnt: $ {ap['payload']}"
+    elif decision == "approve" and ap["kind"] == "publish":
+        ok, info = site_start(pid)
+        out = info if ok else "Fehler: " + info
+        ex("UPDATE approvals SET status='approved', output=? WHERE id=?", (out, aid))
+        log("approval_granted", "publish: " + out, pid, ap["agent_id"], ap["task_id"])
+        add = "\n\n🌐 " + out
     elif decision == "approve":
         if not ALLOW_SHELL:
             abort(400, "Shell ist auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env).")
@@ -2270,6 +2423,30 @@ def project_files(pid):
                 out.append({"path": rel, "size": f.stat().st_size, "mtime": f.stat().st_mtime,
                             "url": f"/files/{pid}/{file_token(pid)}/{quote(rel)}"})
     return out
+
+
+@app.get("/api/projects/<int:pid>/site")
+def api_site_get(pid):
+    cfg = site_cfg(pid)
+    host = request.host.split(":")[0]
+    urls = site_urls(pid)
+    if urls and SITE_HOST not in ("127.0.0.1", "localhost", "::1"):
+        urls.append(f"http://{host}:{cfg['port']}/")
+    return jsonify({"running": site_running(pid), "port": cfg.get("port"), "urls": urls if site_running(pid) else [],
+                    "has_index": (proj_dir(pid) / "index.html").is_file(), "host": SITE_HOST})
+
+
+@app.post("/api/projects/<int:pid>/site")
+def api_site_set(pid):
+    if not q1("SELECT 1 FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    if request.get_json(force=True).get("enabled"):
+        ok, info = site_start(pid)
+        if not ok:
+            abort(400, info)
+    else:
+        site_stop(pid)
+    return jsonify({"ok": True})
 
 
 @app.get("/api/projects/<int:pid>/files")
@@ -2513,6 +2690,7 @@ if __name__ == "__main__":
     init_db()
     start_worker()
     start_telegram()
+    start_sites()
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8787"))
     exposed = host not in ("127.0.0.1", "localhost", "::1") or TRUST_PROXY

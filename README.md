@@ -244,3 +244,6 @@ Im Fenster **🕘 Zeitplan** richtet **👑 CEO-Kontrollgang** einen täglichen 
 
 ## Projektordner
 Jedes Projekt hat einen **Ordner mit seinem Namen** unter `workspace/` (z. B. `workspace/Buchverlag-Content-Agentur/`, Umlaute werden umschrieben). Er bleibt beim Umbenennen des Projekts gleich und wird beim **Löschen eines Projekts nie gelöscht**. Legst du ein Projekt mit gleichem Namen neu an, übernimmt es den vorhandenen Ordner samt Dateien. Alte Nummernordner (`workspace/1`, `workspace/2` …) werden beim Start automatisch auf den Projektnamen umbenannt.
+
+## Webseite veröffentlichen
+Im Fenster **📁 Dateien dieses Projekts** gibt es **🚀 Veröffentlichen**: Die `index.html` aus dem Projektordner (ohne `input/` und versteckte Dateien) wird dauerhaft auf einem eigenen Port (ab 8800, `PCL_SITE_PORT_BASE`) ausgeliefert, standardmäßig nur auf dem Pi selbst: `http://127.0.0.1:8800/`. Für Zugriff im Netz `PCL_SITE_HOST=0.0.0.0` in `.env`. Agenten mit dem Recht „Darf die Webseite zur Veröffentlichung vorschlagen“ können auf „veröffentlichen“ eine Freigabe anfordern; erst dein Klick unter **Freigaben** schaltet die Seite online. Änderungen der Agenten sind sofort sichtbar, nach einem Neustart läuft die Seite automatisch wieder. Für das offene Internet gehört ein Reverse-Proxy mit HTTPS davor (z. B. Caddy), nicht der Mini-Server.
