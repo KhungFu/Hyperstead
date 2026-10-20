@@ -659,8 +659,9 @@ def build_system(agent, project, mode, final_only=False):
             rules.append("shell-Befehle werden erst nach menschlicher Freigabe ausgefuehrt.")
     if mode in ("work", "review") and perms["publish"]:
         fields.append('"publish": true')
-        rules.append("publish: true bittet den Besitzer, die fertige Webseite (index.html im Projektordner) lokal zu veroeffentlichen; "
-                     "er muss es freigeben. Nur setzen, wenn die Seite fertig ist und index.html existiert. Ist sie schon online, aktualisieren sich Aenderungen automatisch.")
+        rules.append("publish: true bittet den Besitzer, die fertige Webseite lokal zu veroeffentlichen; er muss es freigeben. "
+                     "Veroeffentlicht wird NUR der Ordner www/ des Projekts: lege die fertige Seite dort ab (www/index.html, dazu CSS, Bilder und Skripte "
+                     "in www/ mit relativen Pfaden). Nur setzen, wenn die Seite fertig ist und www/index.html existiert. Ist sie schon online, aktualisieren sich Aenderungen automatisch.")
     tool_names = [] if final_only else tools.available(perms)
     if tool_names:
         s.append(
@@ -1070,8 +1071,8 @@ def execute_task(tid):
         if not perms["publish"]:
             notes.append("Veroeffentlichen nicht erlaubt - ignoriert.")
             log("denied", "publish", pid, aid, tid)
-        elif not (proj_dir(pid) / "index.html").is_file():
-            notes.append("Veroeffentlichen nicht moeglich: index.html fehlt im Projektordner.")
+        elif not (site_root(pid) / "index.html").is_file():
+            notes.append("Veroeffentlichen nicht moeglich: www/index.html fehlt.")
         elif site_running(pid):
             notes.append(f"Die Webseite ist schon online: {site_urls(pid)[0]} (Aenderungen sind sofort sichtbar).")
         else:
@@ -1492,6 +1493,16 @@ SITE_PORT_BASE = int(os.environ.get("PCL_SITE_PORT_BASE", "8800"))
 _sites = {}
 
 
+def site_root(pid):
+    """Was veroeffentlicht wird: der Ordner www/ im Projektordner. Gibt es ihn nicht, gilt (wie bisher) der Projektordner selbst."""
+    d = proj_dir(pid)
+    return (d / "www") if (d / "www").is_dir() else d
+
+
+def site_legacy(pid):
+    return not (proj_dir(pid) / "www").is_dir()
+
+
 def _site_handler(pid):
     class H(BaseHTTPRequestHandler):
         server_version = "PCLSite"
@@ -1500,7 +1511,8 @@ def _site_handler(pid):
             pass
 
         def _serve(self, with_body):
-            root = proj_dir(pid).resolve()
+            root = site_root(pid).resolve()
+            legacy = site_legacy(pid)
             rel = unquote(self.path.split("?", 1)[0].split("#", 1)[0])
             parts = [x for x in rel.split("/") if x]
             try:
@@ -1508,7 +1520,7 @@ def _site_handler(pid):
                 f.relative_to(root)
             except (ValueError, OSError):
                 return self._err(404)
-            if any(x.startswith(".") for x in parts) or (parts and parts[0] == "input"):
+            if any(x.startswith(".") for x in parts) or (legacy and parts and parts[0] == "input"):
                 return self._err(404)  # Eigene Uploads und versteckte Dateien werden nie ausgeliefert
             if f.is_dir():
                 f = f / "index.html"
@@ -1567,8 +1579,8 @@ def site_start(pid, persist=True):
     """Gibt (ok, Text) zurueck."""
     if pid in _sites:
         return True, "Schon online: " + site_urls(pid)[0]
-    if not (proj_dir(pid) / "index.html").is_file():
-        return False, "Im Projektordner fehlt index.html."
+    if not (site_root(pid) / "index.html").is_file():
+        return False, "Es fehlt index.html (im Ordner www/ des Projekts" + (", oder im Projektordner" if site_legacy(pid) else "") + ")."
     used = {site_cfg(r["id"]).get("port") for r in q("SELECT id FROM projects") if r["id"] != pid}
     pref = site_cfg(pid).get("port")
     ports = ([pref] if pref else []) + [p for p in range(SITE_PORT_BASE, SITE_PORT_BASE + 100) if p not in used and p != pref]
@@ -2433,7 +2445,8 @@ def api_site_get(pid):
     if urls and SITE_HOST not in ("127.0.0.1", "localhost", "::1"):
         urls.append(f"http://{host}:{cfg['port']}/")
     return jsonify({"running": site_running(pid), "port": cfg.get("port"), "urls": urls if site_running(pid) else [],
-                    "has_index": (proj_dir(pid) / "index.html").is_file(), "host": SITE_HOST})
+                    "has_index": (site_root(pid) / "index.html").is_file(), "host": SITE_HOST,
+                    "legacy": site_legacy(pid)})
 
 
 @app.post("/api/projects/<int:pid>/site")

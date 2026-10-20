@@ -490,7 +490,7 @@ function drawSettings(a){
     <div class="chk"><input type="checkbox" id="p_read" ${pm.read_files?'checked':''}><div>Darf Projektdateien lesen<small>z. B. Ergebnisse der Kollegen im Projektordner</small></div></div>
     <div class="chk"><input type="checkbox" id="p_files" ${pm.write_files?'checked':''}><div>Darf Dateien schreiben<small>nur im Projektordner auf dem Pi</small></div></div>
     <div class="chk"><input type="checkbox" id="p_recruit" ${pm.recruit?'checked':''}><div>Darf sein Team selbst zusammenstellen<small>Nur solange er noch keine Mitarbeiter hat: analysiert den Auftrag und legt Mitarbeiter mit Rollen an (ohne KI – die weist du zu)</small></div></div>
-    <div class="chk"><input type="checkbox" id="p_publish" ${pm.publish?'checked':''}><div>Darf die Webseite zur Veröffentlichung vorschlagen<small>„veröffentlichen“ legt dir eine Freigabe vor; erst nach deinem Klick geht die Seite (index.html im Projektordner) online</small></div></div>
+    <div class="chk"><input type="checkbox" id="p_publish" ${pm.publish?'checked':''}><div>Darf die Webseite zur Veröffentlichung vorschlagen<small>„veröffentlichen“ legt dir eine Freigabe vor; erst nach deinem Klick geht der Ordner www/ des Projekts online</small></div></div>
     <div class="chk"><input type="checkbox" id="p_shell" ${pm.shell?'checked':''} ${S.info.allow_shell?'':'disabled'}><div>Darf Shell-Befehle vorschlagen<small>${S.info.allow_shell?'läuft erst nach deiner Freigabe (Sidebar „Freigaben“)':'auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env)'}</small></div></div>
     <small style="color:var(--mute)">${(a.used_tokens||0).toLocaleString('de-AT')} Tokens diesen Monat verbraucht (nur zur Info, kein Limit).</small>
     <div class="chk" style="margin-top:12px"><input type="checkbox" id="f_pause" ${a.paused?'checked':''}><div>Agent pausiert</div></div>
@@ -755,12 +755,12 @@ async function showFiles(){
   const isImg=p=>/\.(png|jpe?g|gif|webp|svg)$/i.test(p), isVid=p=>/\.(mp4|webm|mov)$/i.test(p), isAud=p=>/\.(mp3|wav|ogg|m4a)$/i.test(p);
   const kb=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
   const icon=p=>isVid(p)?'🎬':isAud(p)?'🎵':/\.pdf$/i.test(p)?'📕':/\.(epub|docx)$/i.test(p)?'📘':'📄';
-  const idx=r.files.find(f=>f.path==='index.html');
+  const idx=r.files.find(f=>f.path==='www/index.html')||r.files.find(f=>f.path==='index.html');
   const st=await api('/projects/'+S.pid+'/site');
   body.innerHTML = `
     <div class="task" style="padding:10px;margin-bottom:12px">
       <b>🚀 Webseite veröffentlichen</b>
-      <div style="color:var(--mute);font-size:12px;margin:3px 0 6px">${st.running?'🟢 Online: '+st.urls.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(u)}</a>`).join(' · ')+(st.host==='127.0.0.1'?' <br>(nur auf dem Pi selbst erreichbar; für das Netz <code>PCL_SITE_HOST=0.0.0.0</code> in .env)':''):(st.has_index?'Die index.html aus dem Projektordner wird dauerhaft ausgeliefert (ohne <code>input/</code>). Änderungen der Agenten sind sofort sichtbar.':'Noch keine <code>index.html</code> im Projektordner.')}</div>
+      <div style="color:var(--mute);font-size:12px;margin:3px 0 6px">${st.running?'🟢 Online: '+st.urls.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(u)}</a>`).join(' · ')+(st.host==='127.0.0.1'?' <br>(nur auf dem Pi selbst erreichbar; für das Netz <code>PCL_SITE_HOST=0.0.0.0</code> in .env)':''):(st.has_index?(st.legacy?'Es gibt keinen Ordner <code>www/</code>: ausgeliefert wird der ganze Projektordner (ohne <code>input/</code>). Sicherer: Seite in <code>www/</code> ablegen, dann wird nur das veröffentlicht.':'Der Ordner <code>www/</code> wird dauerhaft ausgeliefert, sonst nichts. Änderungen der Agenten sind sofort sichtbar.'):'Noch keine <code>www/index.html</code> (oder <code>index.html</code> im Projektordner).')}</div>
       <button class="btn ${st.running?'danger':'pri'} sm" id="sitebtn" ${(!st.running&&!st.has_index)?'disabled':''}>${st.running?'Offline nehmen':'Veröffentlichen'}</button>
     </div>
     <div class="task" style="padding:10px;margin-bottom:12px">
