@@ -62,6 +62,9 @@ TOOLS = {
     "image_search": ("images", '{"tool": "image_search", "query": "mountain lake sunrise"}  frei nutzbare Fotos suchen (Lizenz/Urheber werden mitgeliefert)'),
     "image_save": ("images", '{"tool": "image_save", "url": "https://...jpg", "name": "hero"}  Bild in assets/ des Projekts speichern'),
     "image_generate": ("images", '{"tool": "image_generate", "prompt": "detaillierte Bildbeschreibung", "name": "logo"}  Bild per KI erzeugen und in assets/ speichern'),
+    "video_generate": ("media", """{"tool": "video_generate", "prompt": "Szene: Ort, Figuren, Handlung, Kamera, Licht, Ton", "name": "szene1"}  Kurzen Videoclip per KI erzeugen (Google Veo/Omni, ca. 4-10 s, kostet pro Sekunde), Ergebnis in output/.
+     optional: aspect 16:9|9:16, resolution 720p|1080p, image (Startbild im Projekt, z.B. assets/figur.png), continue_id (ID aus einem frueheren Ergebnis: Clip fortsetzen, nur Omni).
+     Laengere Filme: mehrere Clips erzeugen und mit video_edit op=concat zusammensetzen. Gleiche Figuren in jedem Prompt gleich beschreiben"""),
     "list_files": ("read_files", '{"tool": "list_files", "path": ""}  Dateien im Projektordner auflisten (input/ = vom Besitzer hochgeladen, '
                                  'assets/ = Bilder, downloads/ = geladene Dateien, output/ = fertige Medien/Dokumente)'),
     "read_file": ("read_files", '{"tool": "read_file", "path": "datei.pdf", "offset": 0}  Datei lesen: Text, Markdown, HTML, PDF, DOCX, EPUB. '
@@ -93,7 +96,7 @@ def available(perms):
     """Namen der Werkzeuge, die dieser Agent nutzen darf."""
     if not enabled():
         return []
-    return [n for n, (right, _) in TOOLS.items() if perms.get(right)]
+    return [n for n, (right, _) in TOOLS.items() if perms.get(right) and (n != "video_generate" or video_enabled())]
 
 
 def describe(names):
@@ -290,6 +293,138 @@ def _sniff(data):
     if data.lstrip()[:5] in (b"<?xml", b"<svg ") or b"<svg" in data[:600]:
         return "svg"
     return None
+
+
+# ------------------------------------------------------------------------- Video per KI (Google)
+MAX_VIDEO_BYTES = 300_000_000
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+
+def video_enabled():
+    """Standard aus: erst mit VIDEO_PROVIDER=gemini (kostet pro Sekunde Video)."""
+    return _env("VIDEO_PROVIDER").lower() == "gemini"
+
+
+def _gemini_key():
+    key = _env("GEMINI_API_KEY").split(",")[0].strip()
+    if not key:
+        raise ToolError("VIDEO_PROVIDER=gemini, aber GEMINI_API_KEY fehlt")
+    return key
+
+
+def _gjson(r):
+    try:
+        d = r.json()
+    except ValueError:
+        d = {}
+    if r.status_code >= 400:
+        msg = (d.get("error") or {}).get("message") if isinstance(d.get("error"), dict) else None
+        raise ToolError(f"Video-API antwortet mit HTTP {r.status_code}: " + _clip(msg or r.text, 300))
+    return d
+
+
+def _video_image(root, rel):
+    f = _inside_existing(root, rel)
+    data = f.read_bytes()
+    mime = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}.get(_sniff(data))
+    if not mime:
+        raise ToolError(f"'{rel}' ist kein Bild (PNG, JPEG, WEBP)")
+    return mime, base64.b64encode(data).decode()
+
+
+def _download_video(url, key, dst):
+    with requests.get(url, headers={"x-goog-api-key": key}, stream=True, timeout=300, allow_redirects=True) as r:
+        if r.status_code >= 400:
+            raise ToolError(f"Video-Download fehlgeschlagen (HTTP {r.status_code})")
+        size = 0
+        with open(dst, "wb") as fh:
+            for chunk in r.iter_content(1 << 16):
+                size += len(chunk)
+                if size > MAX_VIDEO_BYTES:
+                    raise ToolError("Video ist zu gross")
+                fh.write(chunk)
+
+
+def _omni_video(key, model, call, root, deadline):
+    rf = {"type": "video"}
+    if call.get("aspect") in ("16:9", "9:16"):
+        rf["aspect_ratio"] = call["aspect"]
+    if call.get("resolution") in ("360p", "720p", "1080p", "4k"):
+        rf["resolution"] = call["resolution"]
+    prompt = str(call.get("prompt") or "").strip()[:2000]
+    body = {"model": model, "response_format": rf, "input": prompt}
+    if call.get("image"):
+        mime, b64 = _video_image(root, call["image"])
+        body["input"] = [{"type": "image", "mime_type": mime, "data": b64}, {"type": "text", "text": prompt}]
+    if call.get("continue_id"):
+        body["previous_interaction_id"] = str(call["continue_id"])[:200]
+    d = _gjson(requests.post(GEMINI_BASE + "/interactions", headers={"x-goog-api-key": key}, json=body, timeout=900))
+    while d.get("status") not in (None, "completed") and time.time() < deadline:
+        if d.get("status") in ("failed", "cancelled", "incomplete"):
+            raise ToolError("Video wurde nicht erzeugt: " + _clip(json.dumps(d.get("error") or d.get("status")), 300))
+        time.sleep(10)
+        d = _gjson(requests.get(f"{GEMINI_BASE}/interactions/{d.get('id')}", headers={"x-goog-api-key": key}, timeout=300))
+    for step in d.get("steps") or []:
+        if step.get("type") != "model_output":
+            continue
+        for c in step.get("content") or []:
+            if c.get("type") == "video" and c.get("data"):
+                return base64.b64decode(c["data"]), None, d.get("id")
+            if c.get("type") == "video" and c.get("uri"):
+                return None, c["uri"], d.get("id")
+    raise ToolError("Kein Video in der Antwort (Prompt evtl. vom Sicherheitsfilter abgelehnt): " + _clip(json.dumps(d)[:600], 300))
+
+
+def _veo_video(key, model, call, root, deadline):
+    inst = {"prompt": str(call.get("prompt") or "").strip()[:2000]}
+    if call.get("image"):
+        mime, b64 = _video_image(root, call["image"])
+        inst["image"] = {"bytesBase64Encoded": b64, "mimeType": mime}
+    params = {}
+    if call.get("aspect") in ("16:9", "9:16"):
+        params["aspectRatio"] = call["aspect"]
+    if call.get("resolution") in ("720p", "1080p"):
+        params["resolution"] = call["resolution"]
+    op = _gjson(requests.post(f"{GEMINI_BASE}/models/{model}:predictLongRunning", headers={"x-goog-api-key": key},
+                              json={"instances": [inst], "parameters": params}, timeout=120))
+    while not op.get("done"):
+        if time.time() > deadline:
+            raise ToolError("Zeitlimit fuer die Videoerzeugung erreicht (PCL_VIDEO_TIMEOUT)")
+        time.sleep(10)
+        op = _gjson(requests.get(f"{GEMINI_BASE}/{op['name']}", headers={"x-goog-api-key": key}, timeout=60))
+    if op.get("error"):
+        raise ToolError("Video wurde nicht erzeugt: " + _clip(json.dumps(op["error"]), 300))
+    samples = ((op.get("response") or {}).get("generateVideoResponse") or {}).get("generatedSamples") or []
+    uri = ((samples[0] if samples else {}).get("video") or {}).get("uri")
+    if not uri:
+        raise ToolError("Kein Video in der Antwort (Prompt evtl. vom Sicherheitsfilter abgelehnt)")
+    return None, uri, None
+
+
+def video_generate(root, call):
+    if not video_enabled():
+        raise ToolError("Videoerzeugung ist aus (VIDEO_PROVIDER=gemini in .env setzen)")
+    if not str(call.get("prompt") or "").strip():
+        raise ToolError("prompt fehlt")
+    key = _gemini_key()
+    model = _env("VIDEO_MODEL", "gemini-omni-1.1-flash")
+    deadline = time.time() + int(_env("PCL_VIDEO_TIMEOUT", "900") or 900)
+    gen = _veo_video if model.startswith("veo") else _omni_video
+    data, uri, iid = gen(key, model, call, root, deadline)
+    dst = _out_path(root, call, "video", "mp4")
+    if data is not None:
+        if len(data) > MAX_VIDEO_BYTES:
+            raise ToolError("Video ist zu gross")
+        dst.write_bytes(data)
+    else:
+        _download_video(uri, key, dst)
+    rel = _rel(root, dst)
+    try:
+        p = _probe(dst)
+        info = " " + _describe_probe(p) + "." if p["video"] else ""
+    except Exception:  # ffprobe fehlt: Video ist trotzdem da
+        info = ""
+    return f"Video erzeugt: {rel} ({dst.stat().st_size // 1024} KB).{info}" + (f" Fortsetzen mit continue_id: {iid}" if iid else "")
 
 
 def _safe_name(name, default):
@@ -1342,6 +1477,8 @@ def run_tool(call, root, perms):
             out = image_save(root, call.get("url"), call.get("name"))
         elif name == "image_generate":
             out = image_generate(root, call.get("prompt"), call.get("name"))
+        elif name == "video_generate":
+            out = video_generate(root, call)
         elif name == "list_files":
             out = list_files(root, call.get("path"))
         elif name == "download_file":
@@ -1360,7 +1497,7 @@ def run_tool(call, root, perms):
             out = read_file(root, call.get("path"), call.get("offset"))
         made = None
         m = re.search(r"((?:assets|downloads|output)/[\w./-]+?)(?:\s|\(|$|\.\s)", out) if name in (
-            "image_save", "image_generate", "download_file", "video_edit", "speak", "make_document") else None
+            "image_save", "image_generate", "video_generate", "download_file", "video_edit", "speak", "make_document") else None
         if m:
             made = m.group(1)
         return out, made
