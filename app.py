@@ -624,10 +624,11 @@ def build_system(agent, project, mode, final_only=False):
         s.append(f"Dein Vorgesetzter: {parent['name']} ({parent['role']}). Er prueft dein Ergebnis und kann es zur Ueberarbeitung zurueckgeben.")
     if kids:
         def _cap(k):
+            k = q1("SELECT * FROM agents WHERE id=?", (k["id"],)) or k
             kp = perms_of(k)
             can = [n for n, lab in (("write_files", "Dateien schreiben/kopieren"), ("shell", "Shell"), ("web", "Web"), ("read_files", "Dateien lesen"),
                                     ("media", "Medien"), ("delegate", "delegiert")) if kp.get(n)]
-            cli = " [CLI-Anbieter: kann nur Text/JSON liefern]" if str(k["provider"] or "").endswith("cli") or k["provider"] == "cli" else ""
+            cli = " [CLI-Anbieter: kann nur Text/JSON liefern]" if str(k["provider"] if "provider" in k.keys() else "").endswith("cli") else ""
             return f"{k['name']} ({k['role']}; kann: {', '.join(lab_of(n) for n in can) or 'nur Text antworten'}{cli})"
         s.append("Dein Team (direkte Mitarbeiter, mit ihren Rechten): " + "; ".join(_cap(k) for k in kids))
         s.append("Gib einem Mitarbeiter nur Aufgaben, die seine Rechte erlauben (z. B. Dateien nur an jemanden mit 'Dateien schreiben/kopieren'). "
