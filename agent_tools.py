@@ -66,6 +66,8 @@ TOOLS = {
                                  'assets/ = Bilder, downloads/ = geladene Dateien, output/ = fertige Medien/Dokumente)'),
     "read_file": ("read_files", '{"tool": "read_file", "path": "datei.pdf", "offset": 0}  Datei lesen: Text, Markdown, HTML, PDF, DOCX, EPUB. '
                                 'Lange Dateien in Teilen lesen (offset = Zeichenposition, steht am Ende der Ausgabe)'),
+    "copy_files": ("write_files", '{"tool": "copy_files", "from": "site", "to": "www", "move": false}  Datei oder ganzen Ordner innerhalb des Projektordners kopieren '
+                                  '(move true = verschieben). Beispiel: fertige Seite von site/ nach www/ uebernehmen. Vorhandene Dateien werden ueberschrieben'),
     "media_info": ("media", '{"tool": "media_info", "path": "input/video.mp4"}  Dauer, Aufloesung, Codecs einer Video-/Audio-/Bilddatei'),
     "video_edit": ("media", """{"tool": "video_edit", "op": "...", ...}  Video/Audio bearbeiten (ffmpeg). Pfade relativ zum Projektordner, Ergebnis landet in output/.
      op=trim: input, start, end (Sekunden oder MM:SS)
@@ -368,6 +370,50 @@ def _inside(root, rel):
     target = (root / str(rel or "")).resolve()
     target.relative_to(root.resolve())  # wirft ValueError ausserhalb
     return target
+
+
+COPY_MAX_FILES = 500
+COPY_MAX_BYTES = 100 * 1024 * 1024
+
+
+def copy_files(root, src, dst, move=False):
+    """Kopiert/verschiebt Datei oder Ordner innerhalb des Projektordners (kein Ausbruch, keine Symlinks, Limits)."""
+    import shutil
+    root = Path(root).resolve()
+    try:
+        a, b = _inside(root, src), _inside(root, dst)
+    except ValueError:
+        raise ToolError("Pfad liegt ausserhalb des Projektordners")
+    if not str(src or "").strip() or not str(dst or "").strip():
+        raise ToolError("'from' und 'to' sind Pflicht")
+    if a == root or b == root:
+        raise ToolError("Der Projektordner selbst kann nicht kopiert/ueberschrieben werden")
+    if not a.exists():
+        raise ToolError(f"Quelle nicht gefunden: {src}")
+    if a == b or b.is_relative_to(a):
+        raise ToolError("Ziel darf nicht gleich der Quelle oder darin enthalten sein")
+    top = lambda p: p.relative_to(root).parts[0]
+    if top(b).startswith(".") or top(a).startswith("."):
+        raise ToolError("Versteckte Ordner sind nicht erlaubt")
+    if top(b) == "input":
+        raise ToolError("input/ gehoert dem Besitzer, dorthin wird nicht geschrieben")
+    files = [a] if a.is_file() else [f for f in sorted(a.rglob("*")) if f.is_file() and not f.is_symlink()
+                                       and not any(x.startswith(".") for x in f.relative_to(a).parts)]
+    if len(files) > COPY_MAX_FILES or sum(f.stat().st_size for f in files) > COPY_MAX_BYTES:
+        raise ToolError(f"Zu gross (max. {COPY_MAX_FILES} Dateien / {COPY_MAX_BYTES // 1048576} MB)")
+    if not files:
+        raise ToolError("Nichts zu kopieren (leer)")
+    n = 0
+    for f in files:
+        t = b if a.is_file() and not (b.exists() and b.is_dir()) else (b / f.name if a.is_file() else b / f.relative_to(a))
+        t.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, t)
+        n += 1
+        if move:
+            f.unlink()
+    if move and a.is_dir():
+        shutil.rmtree(a, ignore_errors=True)
+    return f"{n} Datei(en) {'verschoben' if move else 'kopiert'}: {src} -> {dst}"
 
 
 def list_files(root, path=""):
@@ -1300,6 +1346,8 @@ def run_tool(call, root, perms):
             out = list_files(root, call.get("path"))
         elif name == "download_file":
             out = download_file(root, call.get("url"), call.get("name"))
+        elif name == "copy_files":
+            out = copy_files(root, call.get("from"), call.get("to"), bool(call.get("move")))
         elif name == "media_info":
             out = media_info(root, call.get("path"))
         elif name == "video_edit":

@@ -605,6 +605,13 @@ def team_of(agent):
     return q("SELECT id, name, role FROM agents WHERE parent_id=? ORDER BY id", (agent["id"],))
 
 
+_CAP_LAB = {"write_files": "Dateien schreiben/kopieren", "shell": "Shell", "web": "Web", "read_files": "Dateien lesen", "media": "Medien", "delegate": "delegiert"}
+
+
+def lab_of(n):
+    return _CAP_LAB.get(n, n)
+
+
 def build_system(agent, project, mode, final_only=False):
     """mode: 'work' = selbst erledigen, 'plan' = Chef plant/verteilt, 'review' = Chef liest Berichte und beurteilt."""
     perms = perms_of(agent)
@@ -616,7 +623,15 @@ def build_system(agent, project, mode, final_only=False):
     if parent:
         s.append(f"Dein Vorgesetzter: {parent['name']} ({parent['role']}). Er prueft dein Ergebnis und kann es zur Ueberarbeitung zurueckgeben.")
     if kids:
-        s.append("Dein Team (direkte Mitarbeiter): " + ", ".join(f"{k['name']} ({k['role']})" for k in kids))
+        def _cap(k):
+            kp = perms_of(k)
+            can = [n for n, lab in (("write_files", "Dateien schreiben/kopieren"), ("shell", "Shell"), ("web", "Web"), ("read_files", "Dateien lesen"),
+                                    ("media", "Medien"), ("delegate", "delegiert")) if kp.get(n)]
+            cli = " [CLI-Anbieter: kann nur Text/JSON liefern]" if str(k["provider"] or "").endswith("cli") or k["provider"] == "cli" else ""
+            return f"{k['name']} ({k['role']}; kann: {', '.join(lab_of(n) for n in can) or 'nur Text antworten'}{cli})"
+        s.append("Dein Team (direkte Mitarbeiter, mit ihren Rechten): " + "; ".join(_cap(k) for k in kids))
+        s.append("Gib einem Mitarbeiter nur Aufgaben, die seine Rechte erlauben (z. B. Dateien nur an jemanden mit 'Dateien schreiben/kopieren'). "
+                 "Fehlt im Team das passende Recht, melde das im Ergebnis als Blocker statt die Aufgabe ins Leere zu geben.")
     if agent["system_prompt"].strip():
         s.append("\nArbeitsanweisung:\n" + agent["system_prompt"].strip())
 
@@ -1071,8 +1086,8 @@ def execute_task(tid):
         if not perms["publish"]:
             notes.append("Veroeffentlichen nicht erlaubt - ignoriert.")
             log("denied", "publish", pid, aid, tid)
-        elif not (site_root(pid) / "index.html").is_file():
-            notes.append("Veroeffentlichen nicht moeglich: www/index.html fehlt.")
+        elif site_legacy(pid) or not (site_root(pid) / "index.html").is_file():
+            notes.append("Veroeffentlichen nicht moeglich: www/index.html fehlt (Ordner www/ anlegen, z. B. mit copy_files von site/ nach www/).")
         elif site_running(pid):
             notes.append(f"Die Webseite ist schon online: {site_urls(pid)[0]} (Aenderungen sind sofort sichtbar).")
         else:
@@ -1701,6 +1716,8 @@ def inspection_report(pid):
         flags = []
         if not a["provider"]:
             flags.append("KEINE KI ZUGEWIESEN")
+        elif str(a["provider"]).endswith("cli") or a["provider"] == "cli":
+            flags.append("CLI-Anbieter: liefert nur Text, eigene Dateien landen ausserhalb des Projektordners")
         if a["paused"]:
             flags.append("pausiert")
         if opn and not starts.get(a["id"]) and is_open(pid, now):
