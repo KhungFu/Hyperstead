@@ -447,30 +447,56 @@ def call_llm(agent, messages):
     model = agent.get("model") or cfg["model"]
     start = _key_idx.get(pid, 0)
     last = None
-    for i in range(len(keys)):
-        idx = (start + i) % len(keys)
-        try:
-            if cfg.get("kind") == "anthropic":
-                r = _post_anthropic(cfg, keys[idx], model, messages)
-            else:
-                r = _post_openai(cfg, keys[idx], model, messages)
-        except requests.RequestException as e:
-            last = f"Netzwerk: {e}"
-            continue
-        if r.status_code == 200:
-            _key_idx[pid] = idx
-            return _parse_reply(cfg, r.json(), messages)
-        last = f"HTTP {r.status_code}: {r.text[:300]}"
-        if r.status_code in (429, 500, 502, 503, 504, 529):
-            continue  # naechster Key
-        if _model_gone(r.status_code, r.text):
-            _bad_models[(pid, model or cfg["model"])] = time.time()
-            _models_cache.pop(pid, None)
-            raise RuntimeError(f"MODELL_WEG: Modell „{model or cfg['model']}“ ({cfg['label']}) gibt es nicht mehr "
-                               f"oder es ist gesperrt. Im Menü „⚠ Modelle“ auf ein anderes umstellen. ({last[:160]})")
-        break
+    # Ueberlastung (429/5xx) oder leere Antwort: alle Keys durchprobieren, dann mit wachsender Pause erneut
+    for rnd in range(LLM_RETRIES + 1):
+        wait = 0
+        for i in range(len(keys)):
+            idx = (start + i) % len(keys)
+            try:
+                if cfg.get("kind") == "anthropic":
+                    r = _post_anthropic(cfg, keys[idx], model, messages)
+                else:
+                    r = _post_openai(cfg, keys[idx], model, messages)
+            except requests.RequestException as e:
+                last = f"Netzwerk: {e}"
+                continue
+            if r.status_code == 200:
+                try:
+                    out = _parse_reply(cfg, r.json(), messages)
+                except EmptyReply as e:
+                    if "abgeschnitten" in str(e):
+                        raise  # gleiche Anfrage wuerde wieder abgeschnitten
+                    last = str(e)
+                    continue
+                _key_idx[pid] = idx
+                return out
+            last = f"HTTP {r.status_code}: {r.text[:300]}"
+            if r.status_code in (429, 500, 502, 503, 504, 529):
+                try:
+                    wait = max(wait, min(60, int(r.headers.get("Retry-After", "0"))))
+                except ValueError:
+                    pass
+                continue  # naechster Key
+            if _model_gone(r.status_code, r.text):
+                _bad_models[(pid, model or cfg["model"])] = time.time()
+                _models_cache.pop(pid, None)
+                raise RuntimeError(f"MODELL_WEG: Modell „{model or cfg['model']}“ ({cfg['label']}) gibt es nicht mehr "
+                                   f"oder es ist gesperrt. Im Menü „⚠ Modelle“ auf ein anderes umstellen. ({last[:160]})")
+            raise RuntimeError(last)
+        if rnd < LLM_RETRIES:
+            time.sleep(max(wait, LLM_RETRY_WAIT * (2 ** rnd)))
+    if (last or "").startswith(("HTTP 5", "HTTP 429")):
+        last = (f"{cfg['label']} ist überlastet, auch nach {LLM_RETRIES + 1} Versuchen. Später erneut starten oder im Menü "
+                f"„⚠ Modelle“ ein anderes Modell wählen. ({last[:200]})")
     raise RuntimeError(last or "Unbekannter Fehler")
 
+
+class EmptyReply(RuntimeError):
+    """Anbieter antwortete mit 200, aber ohne Text (gefiltert, abgebrochen, leer)."""
+
+
+LLM_RETRIES = int(os.environ.get("PCL_LLM_RETRIES", "3"))       # weitere Runden bei Ueberlastung/leerer Antwort
+LLM_RETRY_WAIT = int(os.environ.get("PCL_LLM_RETRY_WAIT", "8"))  # Sekunden, verdoppelt sich je Runde (8, 16, 32)
 
 _bad_models = {}  # (anbieter, modell) -> Zeitpunkt, an dem ein Aufruf "Modell nicht gefunden" meldete
 
@@ -516,9 +542,21 @@ def _parse_reply(cfg, d, messages):
         text = "".join(p.get("text", "") for p in d.get("content", []) if p.get("type") == "text")
         u = d.get("usage") or {}
         tok = (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
+        why = d.get("stop_reason")
     else:
-        text = d["choices"][0]["message"]["content"] or ""
+        ch = (d.get("choices") or [{}])[0] or {}
+        msg = ch.get("message") or {}
+        text = msg.get("content") or ""
+        if isinstance(text, list):  # manche Anbieter liefern Teile statt Text
+            text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
+        why = ch.get("finish_reason")
         tok = (d.get("usage") or {}).get("total_tokens")
+    if not str(text).strip():
+        hint = {"length": "Antwort zu lang abgeschnitten", "max_tokens": "Antwort zu lang abgeschnitten",
+                "content_filter": "vom Anbieter gefiltert", "safety": "vom Anbieter gefiltert"}.get(str(why).lower(), "")
+        err = (d.get("error") or {}).get("message", "") if isinstance(d.get("error"), dict) else ""
+        raise EmptyReply(f"{cfg['label']} lieferte eine leere Antwort (Grund: {why or 'unbekannt'}"
+                         f"{', ' + hint if hint else ''}{', ' + err[:160] if err else ''}).")
     tok = tok or max(1, (sum(len(m["content"]) for m in messages) + len(text)) // 4)
     return text, int(tok)
 
@@ -2041,6 +2079,38 @@ def api_models_replace():
         _bad_models.pop((old_p, old_m or PROVIDERS[old_p]["model"]), None)
     log("models_replaced", f"{old_p}/{old_m or 'Standard'} -> {new_p}/{new_m or 'Standard'} ({len(ids)} Agenten)")
     return jsonify({"ok": True, "changed": len(ids), "remaining": len(model_health(cached_only=True))})
+
+
+@app.get("/api/agents/all")
+def api_agents_all():
+    """Alle Agenten aller Projekte (fuer die Gruppen-Umstellung der KI)."""
+    rows = q("SELECT a.id, a.name, a.role, a.provider, a.model, a.project_id, p.name AS project "
+             "FROM agents a LEFT JOIN projects p ON p.id=a.project_id ORDER BY a.project_id, a.id")
+    for r in rows:
+        cfg = PROVIDERS.get(r["provider"] or "")
+        r["provider_label"] = cfg["label"] if cfg else ("noch keine KI" if not r["provider"] else r["provider"])
+        r["effective"] = r["model"] or (cfg["model"] if cfg else "")
+    return jsonify(rows)
+
+
+@app.post("/api/models/assign")
+def api_models_assign():
+    """Stellt ausgewaehlte Agenten (Gruppe) auf einen Anbieter + Modell um."""
+    d = request.get_json(force=True)
+    pid, model = d.get("provider"), str(d.get("model") or "")[:100]
+    if pid not in PROVIDERS:
+        abort(400, "Unbekannter Anbieter")
+    try:
+        ids = sorted({int(i) for i in (d.get("agent_ids") or [])})[:500]
+    except (TypeError, ValueError):
+        abort(400, "Ungueltige Agenten")
+    if not ids:
+        abort(400, "Keine Agenten ausgewaehlt")
+    rows = q(f"SELECT id, name FROM agents WHERE id IN ({','.join('?' * len(ids))})", tuple(ids))
+    for r in rows:
+        ex("UPDATE agents SET provider=?, model=? WHERE id=?", (pid, model, r["id"]))
+    log("models_assigned", f"{len(rows)} Agenten -> {pid}/{model or 'Standard'}: " + ", ".join(r["name"] for r in rows)[:400])
+    return jsonify({"ok": True, "changed": len(rows)})
 
 
 @app.post("/api/providers/test")

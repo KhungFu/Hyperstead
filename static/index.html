@@ -151,6 +151,7 @@ a.btn.pri{color:#fff}
     <div class="side-sec">
       <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
+      <button class="side-btn" id="btnGroupAI" title="Mehrere Agenten auswählen und gemeinsam auf eine KI / ein Modell umstellen">🔀 KI für Gruppe</button>
       <button class="side-btn" id="btnModels" title="Agenten, deren KI-Modell nicht mehr existiert, auf ein anderes umstellen">⚠ Modelle <span class="badge" id="mdbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnSched" title="Öffnungszeiten der Firma und tägliche Aufgaben je Mitarbeiter">🕘 Zeitplan <span class="badge" id="schbadge" style="display:none">zu</span></button>
       <button class="side-btn" id="btnFiles">📁 Dateien dieses Projekts</button>
@@ -667,6 +668,37 @@ $('#btnModels').onclick=()=>{
     const rf=$('#mdref'); if(rf) rf.onclick=e=>{ e.preventDefault(); load(true); };
   }
   load(false);
+};
+$('#btnGroupAI').onclick=()=>{
+  openOv('KI für ausgewählte Agenten ändern'); const body=$('#ovbody');
+  async function load(){
+    body.innerHTML='<div style="color:var(--mute)">lade Agenten …</div>';
+    let ags; try{ ags=await api('/agents/all'); }catch(e){ return; }
+    const byP={}; ags.forEach(a=>(byP[a.project_id]=byP[a.project_id]||{name:a.project||'ohne Projekt',list:[]}).list.push(a));
+    const defProv=(S.providers.find(p=>p.configured&&p.id!=='mock'&&!p.id.endsWith('cli'))||{id:'mock'}).id;
+    const order=Object.keys(byP).sort((x,y)=>(+y===S.pid)-(+x===S.pid));
+    body.innerHTML=`<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Agenten anhaken, dann Anbieter und Modell wählen. Alle markierten werden sofort umgestellt. Laufende Aufgaben nutzen das neue Modell ab dem nächsten Schritt.</div>
+      <input type="text" id="ga_f" placeholder="Filtern (Name, Rolle, Modell) …" style="margin-bottom:8px">
+      ${order.map(k=>`<div class="task" style="padding:8px;margin:6px 0" data-gp="${k}"><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" class="ga_all" data-p="${k}"> <b>${esc(byP[k].name)}</b> <span style="color:var(--mute);font-size:12px">(${byP[k].list.length})</span></label>
+        ${byP[k].list.map(a=>`<label class="ga_row" data-q="${esc((a.name+' '+(a.role||'')+' '+a.provider_label+' '+a.effective).toLowerCase())}" style="display:flex;gap:6px;align-items:center;margin:3px 0 0 18px;font-size:13px"><input type="checkbox" class="ga" value="${a.id}" data-p="${k}"> ${esc(a.name)}${a.role?' <span style="color:var(--mute)">– '+esc(a.role)+'</span>':''} <span style="color:var(--mute);font-size:12px;margin-left:auto">${esc(a.provider_label)}${a.effective?' · '+esc(a.effective):''}</span></label>`).join('')}</div>`).join('')}
+      <div class="task" style="padding:10px;margin-top:10px;position:sticky;bottom:0;background:var(--panel,#1b1b1b)"><b id="ga_cnt">0 ausgewählt</b>
+        <label>Neuer Anbieter</label><select id="ga_p">${provOptions(defProv)}</select>
+        <label>Neues Modell</label><select id="ga_m"></select>
+        <div class="row"><button class="btn pri sm" id="ga_go">Ausgewählte umstellen</button><button class="btn sm" id="ga_none">Auswahl leeren</button></div></div>`;
+    wirePicker('ga');
+    const cnt=()=>{ $('#ga_cnt').textContent=body.querySelectorAll('.ga:checked').length+' ausgewählt'; };
+    body.querySelectorAll('.ga').forEach(c=>c.onchange=cnt);
+    body.querySelectorAll('.ga_all').forEach(c=>c.onchange=()=>{ body.querySelectorAll(`.ga[data-p="${c.dataset.p}"]`).forEach(x=>{ if(x.closest('.ga_row').style.display!=='none') x.checked=c.checked; }); cnt(); });
+    $('#ga_f').oninput=e=>{ const t=e.target.value.toLowerCase().trim(); body.querySelectorAll('.ga_row').forEach(r=>r.style.display=!t||r.dataset.q.includes(t)?'flex':'none'); };
+    $('#ga_none').onclick=()=>{ body.querySelectorAll('.ga,.ga_all').forEach(x=>x.checked=false); cnt(); };
+    $('#ga_go').onclick=async()=>{
+      const ids=[...body.querySelectorAll('.ga:checked')].map(x=>+x.value);
+      if(!ids.length){ toast('Bitte zuerst Agenten anhaken.'); return; }
+      const res=await api('/models/assign','POST',{agent_ids:ids,provider:$('#ga_p').value,model:$('#ga_m').value});
+      toast(res.changed+' Agent(en) umgestellt'); await load(); refresh(true);
+    };
+  }
+  load();
 };
 $('#btnSched').onclick=()=>{
   if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
