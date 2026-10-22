@@ -165,10 +165,11 @@ PROVIDERS = {
 # web        = Websuche + Webseiten lesen   images = Bilder suchen/speichern/erzeugen   read_files = Projektdateien lesen
 # recruit    = stellt anhand des Auftrags selbst ein Team zusammen (legt Mitarbeiter ohne KI an; der Besitzer weist KI/Modell zu)
 DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False,
-                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False}
+                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False}
+# code       = Programmieren: Quellcode jeder Sprache schreiben und pruefen/kompilieren (ohne Ausfuehrung)
 # publish    = darf die Webseite (index.html im Projektordner) zur Veroeffentlichung vorschlagen; der Besitzer gibt frei
 RECRUIT_MAX = 20                                                    # Mitarbeiter je Einstellungsrunde
-RECRUIT_PERMS = ("web", "images", "read_files", "write_files", "media")  # mehr darf der Chef Neuen nie mitgeben
+RECRUIT_PERMS = ("web", "images", "read_files", "write_files", "media", "code")  # mehr darf der Chef Neuen nie mitgeben
 MAX_TOOL_STEPS = int(os.environ.get("PCL_MAX_TOOL_STEPS", "6"))    # Werkzeug-Runden pro Lauf
 TOOL_RESULT_CHARS = 4500                                            # Ergebnis je Werkzeugaufruf im Prompt
 
@@ -605,7 +606,7 @@ def team_of(agent):
     return q("SELECT id, name, role FROM agents WHERE parent_id=? ORDER BY id", (agent["id"],))
 
 
-_CAP_LAB = {"write_files": "Dateien schreiben/kopieren", "shell": "Shell", "web": "Web", "read_files": "Dateien lesen", "media": "Medien", "delegate": "delegiert"}
+_CAP_LAB = {"write_files": "Dateien schreiben/kopieren", "shell": "Shell", "web": "Web", "read_files": "Dateien lesen", "media": "Medien", "code": "Programmieren", "delegate": "delegiert"}
 
 
 def lab_of(n):
@@ -627,7 +628,7 @@ def build_system(agent, project, mode, final_only=False):
             k = q1("SELECT * FROM agents WHERE id=?", (k["id"],)) or k
             kp = perms_of(k)
             can = [n for n, lab in (("write_files", "Dateien schreiben/kopieren"), ("shell", "Shell"), ("web", "Web"), ("read_files", "Dateien lesen"),
-                                    ("media", "Medien"), ("delegate", "delegiert")) if kp.get(n)]
+                                    ("media", "Medien"), ("code", "Programmieren"), ("delegate", "delegiert")) if kp.get(n)]
             cli = " [CLI-Anbieter: kann nur Text/JSON liefern]" if str(k["provider"] if "provider" in k.keys() else "").endswith("cli") else ""
             return f"{k['name']} ({k['role']}; kann: {', '.join(lab_of(n) for n in can) or 'nur Text antworten'}{cli})"
         s.append("Dein Team (direkte Mitarbeiter, mit ihren Rechten): " + "; ".join(_cap(k) for k in kids))
@@ -651,7 +652,7 @@ def build_system(agent, project, mode, final_only=False):
         rules.append(f"Du hast noch kein Team. Analysiere den Auftrag und stelle genau die Mitarbeiter ein, die du dafuer brauchst (so wenige wie sinnvoll, "
                      f"hoechstens {RECRUIT_MAX}). Gib jedem eine klare Rolle und eine konkrete Arbeitsanweisung (Aufgabe, Qualitaetskriterien, Format). "
                      "Fuer groessere Bereiche darfst du Abteilungsleiter einstellen und ihnen weitere Mitarbeiter ueber reports_to unterstellen. "
-                     "tools ist optional; erlaubt: web, images, read_files, write_files, media. Verteile in diesem Schritt KEINE Aufgaben: "
+                     "tools ist optional; erlaubt: web, images, read_files, write_files, media, code (Programmieren). Verteile in diesem Schritt KEINE Aufgaben: "
                      "Der Besitzer weist den Mitarbeitern zuerst KI und Modell zu, danach startest du die Arbeit.")
     elif mode == "review":
         fields[0] = '"result": "konsolidiertes Gesamtergebnis, das an deinen Vorgesetzten bzw. als Endergebnis geht"'

@@ -68,6 +68,10 @@ TOOLS = {
                                 'Lange Dateien in Teilen lesen (offset = Zeichenposition, steht am Ende der Ausgabe)'),
     "copy_files": ("write_files", '{"tool": "copy_files", "from": "site", "to": "www", "move": false}  Datei oder ganzen Ordner innerhalb des Projektordners kopieren '
                                   '(move true = verschieben). Beispiel: fertige Seite von site/ nach www/ uebernehmen. Vorhandene Dateien werden ueberschrieben'),
+    "write_code": ("code", '{"tool": "write_code", "path": "src/main.py", "content": "..."}  Quellcode-Datei im Projektordner anlegen/ueberschreiben '
+                           '(jede Sprache: .py .rs .java .js .ts .go .c .cpp .sh .rb .php .lua .kt .cs .html .css ...). Danach mit check_code pruefen'),
+    "check_code": ("code", '{"tool": "check_code", "path": "src/main.py"}  Syntax pruefen bzw. kompilieren OHNE das Programm auszufuehren; '
+                           'liefert Fehler mit Zeilennummer. Bei Fehlern korrigieren und erneut pruefen'),
     "media_info": ("media", '{"tool": "media_info", "path": "input/video.mp4"}  Dauer, Aufloesung, Codecs einer Video-/Audio-/Bilddatei'),
     "video_edit": ("media", """{"tool": "video_edit", "op": "...", ...}  Video/Audio bearbeiten (ffmpeg). Pfade relativ zum Projektordner, Ergebnis landet in output/.
      op=trim: input, start, end (Sekunden oder MM:SS)
@@ -414,6 +418,97 @@ def copy_files(root, src, dst, move=False):
     if move and a.is_dir():
         shutil.rmtree(a, ignore_errors=True)
     return f"{n} Datei(en) {'verschoben' if move else 'kopiert'}: {src} -> {dst}"
+
+
+# ------------------------------------------------------------------ Programmieren (Recht "code")
+CODE_MAX_BYTES = 500_000
+CODE_TIMEOUT = int(_env("PCL_CODE_TIMEOUT", "120"))
+
+
+def write_code(root, path, content):
+    """Schreibt eine Quelltext-Datei in den Projektordner (nicht input/, keine Dotordner)."""
+    root = Path(root).resolve()
+    if not str(path or "").strip():
+        raise ToolError("'path' ist Pflicht")
+    try:
+        f = _inside(root, path)
+    except ValueError:
+        raise ToolError("Pfad liegt ausserhalb des Projektordners")
+    parts = f.relative_to(root).parts
+    if f == root or any(x.startswith(".") for x in parts):
+        raise ToolError("Versteckte Dateien/Ordner sind nicht erlaubt")
+    if parts[0] == "input":
+        raise ToolError("input/ gehoert dem Besitzer, dorthin wird nicht geschrieben")
+    data = str(content or "").encode("utf-8")
+    if len(data) > CODE_MAX_BYTES:
+        raise ToolError(f"Zu gross (max. {CODE_MAX_BYTES // 1000} KB je Datei, Code auf mehrere Dateien aufteilen)")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(data)
+    rel = f.relative_to(root).as_posix()
+    lines = data.count(b"\n") + 1
+    return f"Gespeichert: {rel} ({len(data)} Bytes, {lines} Zeilen)"
+
+
+# Endung -> (Sprache, Pruefbefehl). {f} = Datei, {o} = leerer Temp-Ordner. Nur Werkzeuge, die den Code NICHT ausfuehren
+# (kein perl -c / ghc: BEGIN-Bloecke bzw. Template Haskell wuerden laufen).
+CODE_CHECKERS = {
+    ".js": ("JavaScript", ["node", "--check", "{f}"]), ".mjs": ("JavaScript", ["node", "--check", "{f}"]),
+    ".cjs": ("JavaScript", ["node", "--check", "{f}"]),
+    ".ts": ("TypeScript", ["tsc", "--noEmit", "--skipLibCheck", "{f}"]),
+    ".rs": ("Rust", ["rustc", "--edition", "2021", "--emit=metadata", "--out-dir", "{o}", "{f}"]),
+    ".java": ("Java", ["javac", "-proc:none", "-d", "{o}", "{f}"]),
+    ".go": ("Go", ["gofmt", "-e", "-l", "{f}"]),
+    ".c": ("C", ["gcc", "-fsyntax-only", "-Wall", "{f}"]), ".h": ("C", ["gcc", "-fsyntax-only", "{f}"]),
+    ".cpp": ("C++", ["g++", "-fsyntax-only", "-Wall", "{f}"]), ".cc": ("C++", ["g++", "-fsyntax-only", "-Wall", "{f}"]),
+    ".hpp": ("C++", ["g++", "-fsyntax-only", "{f}"]),
+    ".sh": ("Shell", ["bash", "-n", "{f}"]), ".bash": ("Shell", ["bash", "-n", "{f}"]),
+    ".rb": ("Ruby", ["ruby", "-c", "{f}"]), ".php": ("PHP", ["php", "-l", "{f}"]),
+    ".lua": ("Lua", ["luac", "-p", "{f}"]),
+    ".kt": ("Kotlin", ["kotlinc", "{f}", "-d", "{o}"]),
+    ".cs": ("C#", ["mcs", "-target:library", "-out:{o}/x.dll", "{f}"]),
+    ".swift": ("Swift", ["swiftc", "-parse", "{f}"]),
+}
+
+
+def check_code(root, path):
+    """Prueft Syntax/Kompilierbarkeit ohne Ausfuehrung. Python/JSON intern, sonst mit installiertem Compiler."""
+    f = _inside_existing(Path(root).resolve(), path)
+    ext = f.suffix.lower()
+    if ext in (".py", ".pyw"):
+        src = f.read_text(encoding="utf-8", errors="replace")
+        try:
+            compile(src, str(path), "exec", dont_inherit=True)  # kompiliert nur, fuehrt nichts aus
+        except SyntaxError as e:
+            return f"Python: FEHLER in Zeile {e.lineno}, Spalte {e.offset}: {e.msg}\n  {(e.text or '').rstrip()}"
+        return f"Python: {path} ist syntaktisch korrekt."
+    if ext == ".json":
+        try:
+            json.loads(f.read_text(encoding="utf-8"))
+        except ValueError as e:
+            return f"JSON: FEHLER: {e}"
+        return f"JSON: {path} ist gueltig."
+    spec = CODE_CHECKERS.get(ext)
+    if not spec:
+        return (f"Fuer '{ext or 'ohne Endung'}' gibt es keine automatische Pruefung. Code sorgfaeltig selbst pruefen. "
+                f"Pruefbar: .py .json " + " ".join(sorted(CODE_CHECKERS)))
+    lang, cmd = spec
+    if not shutil.which(cmd[0]):
+        return (f"{lang}: Pruefwerkzeug '{cmd[0]}' ist auf dem Server nicht installiert. Code wurde gespeichert, aber nicht geprueft "
+                f"(der Besitzer kann es nachinstallieren).")
+    # Minimale Umgebung: Compiler sehen keine API-Keys aus .env
+    env = {k: os.environ[k] for k in ("PATH", "HOME", "LANG", "JAVA_HOME", "GOROOT", "RUSTUP_HOME", "CARGO_HOME") if k in os.environ}
+    with tempfile.TemporaryDirectory(prefix="pcl-code-") as o:
+        args = [a.replace("{f}", str(f)).replace("{o}", o) for a in cmd]
+        try:
+            r = subprocess.run(args, cwd=o, env=env, capture_output=True, text=True, timeout=CODE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return f"{lang}: Pruefung nach {CODE_TIMEOUT} s abgebrochen (zu langsam/zu gross)."
+    out = (r.stdout + r.stderr).replace(str(f.parent) + os.sep, "").strip()
+    if ext == ".go" and r.returncode == 0:
+        return f"Go: {path} ist syntaktisch korrekt."
+    if r.returncode == 0:
+        return f"{lang}: {path} OK." + (f"\nHinweise:\n{out[:3000]}" if out else "")
+    return f"{lang}: FEHLER (Code {r.returncode}):\n{out[:4000] or '(keine Ausgabe)'}"
 
 
 def list_files(root, path=""):
@@ -1348,6 +1443,10 @@ def run_tool(call, root, perms):
             out = download_file(root, call.get("url"), call.get("name"))
         elif name == "copy_files":
             out = copy_files(root, call.get("from"), call.get("to"), bool(call.get("move")))
+        elif name == "write_code":
+            out = write_code(root, call.get("path"), call.get("content"))
+        elif name == "check_code":
+            out = check_code(root, call.get("path"))
         elif name == "media_info":
             out = media_info(root, call.get("path"))
         elif name == "video_edit":
