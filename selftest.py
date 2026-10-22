@@ -2,7 +2,7 @@
 """PaperclipLite Selbsttest: prueft auf dem echten Rechner (Pi), ob alles funktioniert, was die Agenten brauchen.
 
     ./venv/bin/python selftest.py            # alles pruefen
-    ./venv/bin/python selftest.py web        # nur Gruppe: web | llm | telegram | media | ocr
+    ./venv/bin/python selftest.py web        # nur Gruppe: web | llm | telegram | media | ocr | code
 
 Jede Zeile: OK / FEHLT (optional) / FEHLER, bei Problemen mit konkretem Hinweis. Es werden keine Keys ausgegeben.
 Die LLM-Tests senden je Anbieter eine winzige Anfrage (kostet praktisch nichts). Bilder werden nur im Temp-Ordner erzeugt.
@@ -157,7 +157,33 @@ def group_ocr():
         line("warn", "Deutsch fuer OCR", "sudo apt install tesseract-ocr-deu (Umlaute werden sonst schlechter erkannt)")
 
 
-GROUPS = {"web": group_web, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr}
+CODE_SAMPLES = {  # Datei -> fehlerfreies Mini-Programm (wird nur geprueft, nicht ausgefuehrt)
+    "t.py": "print('ok')\n", "t.js": "console.log('ok');\n", "t.ts": "const x: number = 1;\n",
+    "Main.java": "public class Main { public static void main(String[] a) { System.out.println(1); } }\n",
+    "t.rs": "fn main() { println!(\"ok\"); }\n", "t.go": "package main\n\nfunc main() {}\n",
+    "t.c": "int main(void) { return 0; }\n", "t.cpp": "int main() { return 0; }\n", "t.sh": "echo ok\n",
+    "t.rb": "puts 1\n", "t.php": "<?php echo 1;\n", "t.lua": "print(1)\n",
+}
+
+
+def group_code():
+    print("\nProgrammieren (Recht 'Programmieren': Code pruefen/kompilieren)")
+    with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
+        for fn, src in CODE_SAMPLES.items():
+            (Path(td) / fn).write_text(src)
+            def run(fn=fn):
+                r = T.check_code(td, fn)
+                if "nicht installiert" in r:
+                    raise RuntimeError(r.split(".")[0] + "  -> ./install.sh --code")
+                if "FEHLER" in r:
+                    raise RuntimeError(r[:200])
+                return "ok"
+            ext = Path(fn).suffix.lower()
+            lang = "Python" if ext == ".py" else T.CODE_CHECKERS[ext][0]
+            check(f"{lang} ({fn})", run, optional=True)
+
+
+GROUPS = {"web": group_web, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr, "code": group_code}
 
 if __name__ == "__main__":
     wanted = [a for a in sys.argv[1:] if a in GROUPS] or list(GROUPS)

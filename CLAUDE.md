@@ -37,6 +37,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - Medien-Werkzeuge (`video_edit` per ffmpeg-Argumentlisten ohne Shell, `speak`, `make_document`, `download_file`, PDF/DOCX/EPUB lesen) liegen ebenfalls in `agent_tools.py`, Recht `media`. Pfade immer per `_inside` auf den Projektordner begrenzt, Temp-Ordner `.tmp-*` sind versteckt.
 - Anbieter: `PROVIDERS` mit `kind` (openai/anthropic) und `models_url`; `list_models` (Cache 10 min), `/api/providers/<id>/models`, `/api/providers/test`.
 - Chat: Tabelle `chats`, `/api/agents/<id>/chat` (+`/order`). Uploads: `/api/projects/<id>/upload` → `input/`.
+- Installer: `install.sh --system` (Medien/OCR per apt), `--code` (Compiler aus `CODE_PKGS`), `--all` (alles inkl. Piper + Dienst). `selftest.py code` prüft alle Sprachen.
 - OCR: `ocr_pdf`/`ocr_image` (tesseract + pdftoppm) als Rückfall in `_doc_text`/`read_file`. Piper: `_piper()` sucht im venv und in `models/piper/`. `selftest.py` prüft auf dem Pi alle externen Dienste (Suche, Bilder, LLMs, Telegram, Medien, OCR). Ollama-Zeitlimit `OLLAMA_TIMEOUT`.
 - `call_llm`: bei 429/5xx oder leerer Antwort (`EmptyReply` aus `_parse_reply`, z. B. Gemini ohne `content` bei Filter) erst alle Keys, dann `PCL_LLM_RETRIES` (3) weitere Runden mit Pause `PCL_LLM_RETRY_WAIT` (8 s, verdoppelt, Retry-After beachtet). Abgeschnittene leere Antworten (`length`) werden nicht wiederholt.
 - Gruppen-Umstellung: Menü „🔀 KI für Gruppe“, `GET /api/agents/all`, `POST /api/models/assign` (`agent_ids`, `provider`, `model`).
