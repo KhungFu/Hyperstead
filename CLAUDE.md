@@ -35,6 +35,9 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - Rechte `web`, `images`, `read_files` (Standard an) + `PCL_ALLOW_WEB=0` global. Webinhalte sind Daten, nie Anweisungen.
 - Dateien: `/files/<pid>/<token>/<pfad>` (Link-Token per HMAC, ohne Cookie, weil Sandbox-Seiten Bilder nachladen), immer mit CSP `sandbox`.
 - Medien-Werkzeuge (`video_edit` per ffmpeg-Argumentlisten ohne Shell, `speak`, `make_document`, `download_file`, PDF/DOCX/EPUB lesen) liegen ebenfalls in `agent_tools.py`, Recht `media`. Pfade immer per `_inside` auf den Projektordner begrenzt, Temp-Ordner `.tmp-*` sind versteckt.
+- `video_generate` (Recht `media`, nur sichtbar mit `VIDEO_PROVIDER=gemini`): Standardmodell `gemini-omni-1.1-flash` über die Interactions-API
+  (`/v1beta/interactions`, Video base64 in `steps[].content`, `continue_id` = `previous_interaction_id`); `VIDEO_MODEL=veo-*` nutzt
+  `:predictLongRunning` + Operation abfragen + Download. Veo-3.1-Preview-Modelle wurden am 2026-10-22 abgeschaltet. Ergebnis in `output/`.
 - Anbieter: `PROVIDERS` mit `kind` (openai/anthropic) und `models_url`; `list_models` (Cache 10 min), `/api/providers/<id>/models`, `/api/providers/test`.
 - Chat: Tabelle `chats`, `/api/agents/<id>/chat` (+`/order`). Uploads: `/api/projects/<id>/upload` → `input/`.
 - Installer: `install.sh --system` (Medien/OCR per apt), `--code` (Compiler aus `CODE_PKGS`), `--all` (alles inkl. Piper + Dienst). `selftest.py code` prüft alle Sprachen.

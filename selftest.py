@@ -58,6 +58,16 @@ def group_web():
         root = Path(td)
         check(f"Bild erzeugen ({T._env('IMAGE_PROVIDER', 'pollinations')})", lambda: T.image_generate(root, "a red apple, simple illustration", "test")[:80],
               hint="IMAGE_PROVIDER=gemini oder openai mit Key waehlen, wenn Pollinations nicht erreichbar ist")
+    if T.video_enabled():
+        def vmodel():
+            key, model = T._gemini_key(), T._env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001
+            r = requests.get(f"{T.GEMINI_BASE}/models/{model}", headers={"x-goog-api-key": key}, timeout=20)
+            if r.status_code >= 400:
+                raise RuntimeError(f"Modell '{model}' nicht verfuegbar (HTTP {r.status_code})")
+            return f"{model} verfuegbar (kein Clip erzeugt, das kostet Geld)"
+        check("Video-Modell (Gemini)", vmodel, optional=True, hint="GEMINI_API_KEY mit Abrechnung? VIDEO_MODEL pruefen")
+    else:
+        line("warn", "Videoerzeugung", "aus (optional: VIDEO_PROVIDER=gemini in .env)")
     check("SSRF-Schutz blockt lokale Adressen", lambda: "ok" if _blocked() else (_ for _ in ()).throw(RuntimeError("nicht blockiert!")))
 
 

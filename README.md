@@ -104,13 +104,15 @@ Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem P
 | `video_edit` | Video schneiden (`trim`), zusammenfügen (`concat`), **Diashow-Animation mit Zoom** aus Bildern (`slideshow`, optional mit Ton), Text/Untertitel/Logo einblenden, Ton ersetzen/mischen, Tempo ändern, in GIF/WebM/MP3 umwandeln, Standbild ziehen |
 | `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen) |
 | `make_document` | aus Markdown-Kapiteln **PDF, DOCX, EPUB oder HTML** (A4/A5, Cover, Bilder, Umlaute und türkische Zeichen) |
+| `video_generate` | **KI-Videoclip** aus Text (optional mit Startbild), ca. 4–10 s, über Googles Gemini-API (Modell hinter Google Flow). Standard aus, einschalten mit `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Kostet pro Sekunde Video**, ein Flow-/Google-One-Abo zählt hier nicht |
 | `media_info` | Dauer, Auflösung, Codecs |
 | `download_file` | PDFs, EPUB, Office, Audio, Video, ZIP aus dem Netz in `downloads/` laden |
 | `read_file` | liest Text, Markdown, HTML, **PDF, DOCX, EPUB**, auch lange Dateien in Abschnitten |
 
 **Eigene Dateien** (Videos zum Bearbeiten, PDFs, Bilder, Texte) lädst du in „📁 Dateien dieses Projekts“ hoch, sie landen in
-`input/`; fertige Ergebnisse liegen in `output/`, Bilder in `assets/`. Ehrliche Grenzen: Es gibt **keine KI-Videogenerierung**
-(Text-zu-Video). „Animation“ heißt hier: Szenenbilder per Bild-KI + Zoom/Schwenk + Sprecher + Schnitt. Auf dem Raspberry Pi
+`input/`; fertige Ergebnisse liegen in `output/`, Bilder in `assets/`. Ehrliche Grenzen: Ohne `video_generate` gibt es **keine KI-Videogenerierung**
+(Text-zu-Video), „Animation“ heißt dann: Szenenbilder per Bild-KI + Zoom/Schwenk + Sprecher + Schnitt. Mit `video_generate` entstehen
+kurze Clips, längere Filme setzt `video_edit op=concat` zusammen. MagicLight hat keine API: dort erzeugte Videos lädst du nach `input/` hoch. Auf dem Raspberry Pi
 rechnet ffmpeg langsam (eine Minute 720p-Video kann mehrere Minuten dauern), Zeitlimit `PCL_FFMPEG_TIMEOUT` (Standard 1 Stunde je Schritt).
 
 **Gescannte PDFs und Bilder (OCR):** `read_file` liest Scans automatisch per `tesseract` (`sudo apt install tesseract-ocr tesseract-ocr-deu poppler-utils`). Das ist langsam (ca. 5–15 s je Seite auf dem Pi, Limit `PCL_OCR_MAX_PAGES`) und kann Fehler enthalten.
