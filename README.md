@@ -77,6 +77,7 @@ fertig sind (max. `PCL_MAX_TOOL_STEPS`). Rechte pro Agent: **Internet recherchie
 |---|---|---|
 | `web_search` | Websuche (Gesetze, Preise, Wettbewerb …) | DuckDuckGo; besser: `SEARXNG_URL`, `BRAVE_API_KEY` oder `TAVILY_API_KEY` |
 | `fetch_url` | Webseite als Text lesen | ja |
+| `browse_page` | Seite in einem echten Browser öffnen (JavaScript läuft), optional mit Screenshot, den der Agent als Bild sieht | ja, braucht `./install.sh --browser` |
 | `image_search` / `image_save` | frei lizenzierte Fotos suchen und in `assets/` speichern, mit Urheber und Lizenz | Openverse; optional `PEXELS_API_KEY` |
 | `image_generate` | KI-Bild erzeugen | Pollinations; besser `IMAGE_PROVIDER=gemini` oder `openai` |
 | `list_files` / `read_file` | Dateien im Projektordner lesen (z. B. Texte der Kollegen) | ja |
@@ -167,6 +168,7 @@ Die App fragt Telegram nur nach außen ab, es wird kein Port geöffnet (geht auc
 - **Ergebnisse beurteilen**: der Chef darf Arbeit mit Feedback zur Überarbeitung zurückgeben (max. 2 Runden je Mitarbeiter).
 - **Lesen**: Chefs sehen immer die Berichte ihrer Mitarbeiter, dafür ist kein eigenes Recht nötig.
 - **Dateien schreiben**: nur in `workspace/<projekt-id>/`, Pfade außerhalb werden abgelehnt.
+- **Code ausführen** (Standard aus): `run_code` startet Python, JavaScript, Bash, Ruby, PHP oder Lua in einer Sandbox, siehe unten.
 - **Shell vorschlagen**: nur wenn der Server `PCL_ALLOW_SHELL=1` hat, und dann immer erst nach Freigabe.
 - **Pause**: blockiert alle neuen Aufgaben des Agenten.
 
@@ -243,6 +245,20 @@ Läuft ohne Internet und ohne Keys (Anbieter `mock`, eigene Datenbank).
   einen Auftrag an den Chef an (z. B. aus n8n, iOS-Kurzbefehlen oder DEXTER). Ohne Login, geschützt nur durch den Schlüssel in der Adresse:
   „Neuen Schlüssel“ macht die alte Adresse ungültig. Erreichbar ist sie nur so weit wie PaperclipLite selbst (z. B. nur im Tailnet).
 
+## 🌐 Echter Browser und ▶ Code ausführen
+
+- **Browser** (`./install.sh --browser`, installiert Playwright + Chromium, ca. 400 MB, nur 64-Bit-System): Agenten mit dem Recht
+  „Internet recherchieren“ bekommen `browse_page`. Die Seite läuft mit JavaScript, der Agent bekommt den sichtbaren Text, die Links und
+  auf Wunsch einen Screenshot (sieht ihn wie bei `view_image`, `save` legt ihn in `assets/screenshots/` ab). Jede Anfrage der Seite
+  (Skripte, Frames, XHR, WebSockets) muss an eine öffentliche Adresse gehen, LAN/localhost wird blockiert, WebRTC und Downloads sind aus.
+  Immer nur ein Browser gleichzeitig (RAM), Zeitlimit `PCL_BROWSER_TIMEOUT` (30 s). Eigenes Chromium: `PCL_BROWSER_PATH`, aus: `PCL_BROWSER=0`.
+- **Code ausführen** (`./install.sh --run`, installiert bubblewrap): Recht „Darf Code ausführen“ (Standard aus) gibt `run_code`.
+  Das Skript läuft abgeschottet: **kein Internet**, nur `/usr` und der Projektordner (schreibgeschützt unter `/projekt`) sichtbar,
+  keine `.env`, keine Datenbank, kein Home. Was das Skript in sein Arbeitsverzeichnis schreibt, landet in `output/run/<zeit>/`
+  (max. 50 Dateien/50 MB). Grenzen: `PCL_RUN_TIMEOUT` (60 s), `PCL_RUN_MEM_MB` (1024). Es läuft das Python/Node des Systems,
+  also nur Pakete, die per apt installiert sind (z. B. `sudo apt install python3-pandas python3-matplotlib`). Global aus: `PCL_ALLOW_RUN=0`.
+  Prüfen: `./venv/bin/python selftest.py run browser`.
+
 ## Parallele Arbeit
 
 Bis zu `PCL_WORKERS` Aufgaben laufen gleichzeitig (Standard 2, höchstens 6), z. B. mehrere Mitarbeiter eines Chefs oder Aufträge
@@ -253,7 +269,7 @@ verschiedener Projekte. Ein Agent bearbeitet nie zwei Aufgaben auf einmal, und e
 
 - Kein automatischer Heartbeat nach Zeitplan (Aufgaben starten manuell oder per Delegation).
 - Keine Text-zu-Video-KI, keine Scan-/Bild-PDFs (OCR), keine eigene Anstellung neuer Agenten durch den CEO (Organigramm legst du an).
-- Kein echter Browser: Seiten werden als Text gelesen, JavaScript-lastige Seiten liefern oft wenig. Die DuckDuckGo-Suche ohne Key kann begrenzt oder geändert werden.
+- Der echte Browser (`browse_page`) liest Seiten, klickt aber nicht und füllt keine Formulare aus (keine Logins, keine Käufe). Die DuckDuckGo-Suche ohne Key kann begrenzt oder geändert werden.
 - Kein Budget: Tokens und geschätzte Kosten werden nur angezeigt (📊). Die Rundenlimits (Überarbeitungen, Prüfdurchgänge, Tiefe) verhindern Endlosschleifen.
 - Sitzungen sind einfache signierte Cookies, ein einzelnes Gerät lässt sich nicht gezielt abmelden
   (Passwort ändern macht alle Sitzungen ungültig).

@@ -5,13 +5,15 @@
 #   ./install.sh --piper    -> zusaetzlich Piper (gute deutsche Offline-Stimme) einrichten
 #   ./install.sh --system   -> fehlende Systemprogramme fuer Video, Sprache, OCR, PDF-Schriften per apt installieren (sudo)
 #   ./install.sh --code     -> Compiler/Pruefer fuer das Recht "Programmieren" per apt installieren (sudo, ca. 1,5 GB)
-#   ./install.sh --all      -> alles oben zusammen (system + code + piper + service)
+#   ./install.sh --browser  -> echter Browser (Chromium ueber Playwright) fuer Seiten mit JavaScript (ca. 400 MB)
+#   ./install.sh --run      -> bubblewrap fuer das Recht "Code ausfuehren" (abgeschottet, ohne Internet)
+#   ./install.sh --all      -> alles oben zusammen (system + code + piper + browser + run + service)
 #   Optionen sind kombinierbar. Danach pruefen:  ./venv/bin/python selftest.py
 set -euo pipefail
 cd "$(dirname "$0")"
 DIR="$(pwd)"
 OPT=" $* "
-case "$OPT" in *" --all "*) OPT="$OPT --system --code --piper --service ";; esac
+case "$OPT" in *" --all "*) OPT="$OPT --system --code --piper --browser --run --service ";; esac
 has() { case "$OPT" in *" $1 "*) return 0;; esac; return 1; }
 
 command -v python3 >/dev/null || { echo "python3 fehlt: sudo apt install python3 python3-venv"; exit 1; }
@@ -50,6 +52,27 @@ if [ -n "$CMISS" ]; then
     sudo apt-get update -qq && sudo apt-get install -y $CMISS
   else
     echo "Fuer das Recht 'Programmieren' (Code pruefen/kompilieren) fehlen:$CMISS  -> ./install.sh --code"
+  fi
+fi
+
+# Code ausfuehren (Recht "run_code"): bubblewrap schottet jedes Skript ab (kein Netz, nur /usr + Projekt lesbar)
+if ! command -v bwrap >/dev/null; then
+  if has --run; then
+    sudo apt-get update -qq && sudo apt-get install -y bubblewrap
+  else
+    echo "Fuer das Recht 'Code ausfuehren' fehlt bubblewrap  -> ./install.sh --run"
+  fi
+fi
+
+# Echter Browser fuer browse_page: Playwright + Chromium (nur 64-Bit; sonst PCL_BROWSER_PATH=/usr/bin/chromium in .env)
+if has --browser; then
+  echo "Browser wird eingerichtet (Playwright + Chromium, ca. 400 MB) ..."
+  if ./venv/bin/pip install -q playwright; then
+    sudo ./venv/bin/python -m playwright install-deps chromium || echo "Hinweis: Systembibliotheken fuer Chromium bitte pruefen (playwright install-deps)."
+    ./venv/bin/python -m playwright install chromium \
+      || echo "Chromium von Playwright nicht verfuegbar. Alternative: sudo apt install chromium und in .env PCL_BROWSER_PATH=/usr/bin/chromium"
+  else
+    echo "Playwright liess sich nicht installieren (32-Bit-System?). browse_page bleibt aus, fetch_url funktioniert weiter."
   fi
 fi
 
