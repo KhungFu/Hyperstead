@@ -18,6 +18,7 @@ command -v python3 >/dev/null || { echo "python3 fehlt: sudo apt install python3
 [ -d venv ] || python3 -m venv venv || { echo "Tipp: sudo apt install python3-venv"; exit 1; }
 ./venv/bin/pip install -q --upgrade pip
 ./venv/bin/pip install -q -r requirements.txt
+./venv/bin/pip install -q "weasyprint>=60" || echo "Hinweis: WeasyPrint (HTML -> PDF) liess sich nicht installieren, make_document mit Markdown geht trotzdem."
 echo "Abhaengigkeiten installiert."
 # Systemprogramme fuer Video/Sprache/Schriften (optional, aber noetig fuer Medien-Agenten)
 MISSING=""
@@ -28,6 +29,7 @@ command -v tesseract >/dev/null && ! tesseract --list-langs 2>/dev/null | grep -
 command -v tesseract >/dev/null && ! tesseract --list-langs 2>/dev/null | grep -qx tur && MISSING="$MISSING tesseract-ocr-tur"
 command -v pdftoppm >/dev/null || case "$MISSING" in *poppler-utils*) ;; *) MISSING="$MISSING poppler-utils";; esac
 fc-list 2>/dev/null | grep -qi dejavu || MISSING="$MISSING fonts-dejavu-core"
+ldconfig -p 2>/dev/null | grep -q libpangoft2-1.0 || MISSING="$MISSING libpango-1.0-0 libpangoft2-1.0-0"
 if [ -n "$MISSING" ]; then
   if has --system; then
     echo "Installiere Systemprogramme:$MISSING"
