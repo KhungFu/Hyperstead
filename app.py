@@ -1388,6 +1388,7 @@ HELP_DE = ("PaperclipLite – so geht's:\n"
            "• Einfach schreiben = neuer Auftrag an den Chef (mit „@Name text“ an einen bestimmten Agenten)\n"
            "• Auf eine Post-Nachricht antworten = Auftrag neu bearbeiten (dein Text ist die Anweisung)\n"
            "• Antwort „ok“ oder Button ✅ = als erledigt markieren\n"
+           "• Datei/Foto senden = landet in input/ (Bildunterschrift = Auftrag dazu, sonst geht sie an den nächsten Auftrag)\n"
            "/post – offene Post anzeigen\n/status – was läuft gerade\n/ok <Nr> – Auftrag erledigt\n"
            "/neu <Text> – neuer Auftrag\n/projekt [Nr] – Projekt anzeigen/wechseln")
 
@@ -1462,10 +1463,100 @@ def tg_new_order(chat, text):
                       "Ich melde mich, sobald Post da ist.", task_id=tid)
 
 
+TG_MAX_FILE_MB = 20  # Grenze der Telegram-Bot-API fuer getFile
+_tg_pending = {}  # chat -> Dateien ohne Text, gehen an den naechsten Auftrag
+_tg_groups = {}  # media_group_id -> {"chat", "msg", "files", "text"} (Alben kommen als mehrere Nachrichten)
+
+
+def tg_file_of(m):
+    """(file_id, Dateiname, Groesse) einer Datei-Nachricht oder None."""
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(m.get("date") or time.time()))
+    if m.get("photo"):
+        ph = m["photo"][-1]  # groesste Aufloesung
+        return ph["file_id"], f"foto-{stamp}.jpg", ph.get("file_size", 0)
+    for kind, default in (("document", "datei"), ("video", "video-{}.mp4"), ("audio", "audio-{}.mp3"),
+                          ("voice", "sprachnachricht-{}.ogg"), ("video_note", "videonachricht-{}.mp4"),
+                          ("animation", "animation-{}.mp4")):
+        f = m.get(kind)
+        if f:
+            return f["file_id"], f.get("file_name") or default.format(stamp), f.get("file_size", 0)
+    return None
+
+
+def tg_save_file(chat, m):
+    """Laedt die Datei einer Telegram-Nachricht nach input/ des aktiven Projekts. Gibt (Pfad|None, Meldung)."""
+    pr = active_project()
+    if not pr:
+        return None, "Es gibt noch kein Projekt. Lege zuerst im Web eins an."
+    fid, name, size = tg_file_of(m)
+    if size and size > min(TG_MAX_FILE_MB, MAX_UPLOAD_MB) * 1024 * 1024:
+        return None, (f"„{name}“ ist zu groß (Telegram-Bots dürfen nur bis {TG_MAX_FILE_MB} MB laden). "
+                      "Lade größere Dateien im Web hoch (📁 Dateien oder 📎 im Chat).")
+    try:
+        info = tg("getFile", file_id=fid)
+
+        def write(path):
+            with requests.get(f"{TG_API}/file/bot{TG_TOKEN}/{info['file_path']}", stream=True, timeout=(5, 120)) as r:
+                r.raise_for_status()
+                with open(path, "wb") as out:
+                    for chunk in r.iter_content(65536):
+                        out.write(chunk)
+
+        path, renamed = save_input(pr["id"], name, write)
+    except ValueError as e:
+        return None, f"„{name}“: {e}"
+    except Exception as e:
+        log("telegram_error", "Datei: " + _safe(e))
+        return None, f"„{name}“ konnte nicht geladen werden: {_safe(e)[:200]}"
+    return path, f"📎 Gespeichert: {path}" + (f" („{name}“ gab es schon)" if renamed else "") + f" (Projekt {pr['name']})"
+
+
+def tg_with_files(chat, m, files, text):
+    """Dateien (schon gespeichert) + Begleittext verarbeiten: Antwort auf Post = Ueberarbeitung, Text = neuer Auftrag,
+    ohne Text = fuer den naechsten Auftrag merken."""
+    if not files:
+        return
+    rt = (m.get("reply_to_message") or {}).get("message_id")
+    mapped = q1("SELECT task_id FROM tg_msgs WHERE chat=? AND message_id=?", (chat, rt)) if rt else None
+    if not text and not mapped:
+        _tg_pending.setdefault(chat, []).extend(files)
+        return tg_send_now(chat, "Die Datei(en) liegen bereit und gehen an deinen nächsten Auftrag. "
+                                 "Schreib jetzt, was das Team damit tun soll.")
+    text = (files_note(_tg_pending.pop(chat, []) + files) + "\n\n" + text).strip()
+    if mapped:
+        ok, msg = inbox_rework(mapped["task_id"], text)
+        return tg_send_now(chat, msg, task_id=mapped["task_id"] if ok else None)
+    tg_new_order(chat, text)
+
+
+def tg_handle_file(chat, m):
+    path, msg = tg_save_file(chat, m)
+    text = (m.get("caption") or "").strip()
+    gid = m.get("media_group_id")
+    if gid:  # Album: sammeln, nach dem Abruf-Durchgang gemeinsam verarbeiten (tg_flush_groups)
+        g = _tg_groups.setdefault(gid, {"chat": chat, "msg": m, "files": [], "text": "", "notes": [], "ts": time.time()})
+        g["files"] += [path] if path else []
+        g["notes"].append(msg)
+        g["text"] = g["text"] or text
+        return
+    tg_send_now(chat, msg)
+    tg_with_files(chat, m, [path] if path else [], text)
+
+
+def tg_flush_groups(min_age=0):
+    for gid, g in list(_tg_groups.items()):
+        if time.time() - g["ts"] >= min_age:
+            _tg_groups.pop(gid, None)
+            tg_send_now(g["chat"], "\n".join(g["notes"]))
+            tg_with_files(g["chat"], g["msg"], g["files"], g["text"])
+
+
 def tg_handle(u):
     if u.get("callback_query"):
         return tg_callback(u["callback_query"])
     m = u.get("message")
+    if m and str(m["chat"]["id"]) in TG_CHATS and tg_file_of(m):
+        return tg_handle_file(str(m["chat"]["id"]), m)
     if not m or not m.get("text"):
         return
     chat, text = str(m["chat"]["id"]), m["text"].strip()
@@ -1512,6 +1603,8 @@ def tg_handle(u):
             return tg_send_now(chat, inbox_close(mapped["task_id"])[1])
         ok, msg = inbox_rework(mapped["task_id"], text)
         return tg_send_now(chat, msg, task_id=mapped["task_id"] if ok else None)
+    if _tg_pending.get(chat):
+        text = files_note(_tg_pending.pop(chat)) + "\n\n" + text
     tg_new_order(chat, text)
 
 
@@ -1533,6 +1626,7 @@ def tg_poll():
                 except Exception as e:
                     print("Telegram-Handler:", _safe(e))
                     log("telegram_error", "Handler: " + _safe(e))
+            tg_flush_groups(min_age=1)  # Alben: restliche Bilder kommen meist im selben Durchgang
         except Exception as e:
             print("Telegram-Abruf:", _safe(e))
             time.sleep(10)
@@ -2558,8 +2652,36 @@ def api_files(pid):
 
 MAX_UPLOAD_MB = int(os.environ.get("PCL_MAX_UPLOAD_MB", "500"))
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
-UPLOAD_EXT = {"mp4", "mov", "webm", "mkv", "avi", "mp3", "wav", "ogg", "m4a", "pdf", "epub", "docx", "xlsx", "pptx", "txt", "md",
-              "csv", "json", "srt", "png", "jpg", "jpeg", "gif", "webp", "svg", "zip"}
+UPLOAD_EXT = {"mp4", "mov", "webm", "mkv", "avi", "mp3", "wav", "ogg", "oga", "m4a", "pdf", "epub", "docx", "xlsx", "pptx", "txt", "md",
+              "csv", "json", "srt", "png", "jpg", "jpeg", "gif", "webp", "svg", "zip",
+              "tif", "tiff", "bmp", "heic", "odt", "ods", "odp", "rtf", "html", "htm", "xml", "psd", "ai", "eps"}
+
+
+def save_input(pid, filename, write):
+    """Speichert eine Datei des Besitzers unter input/ im Projektordner. Name wird bereinigt (kein Pfad, nur
+    sichere Zeichen), vorhandene Dateien werden nie ueberschrieben (-1, -2 ...). write(pfad) schreibt den Inhalt.
+    Gibt (relativer Pfad, umbenannt?) zurueck oder wirft ValueError mit deutscher Meldung."""
+    name = re.split(r"[\\/]", str(filename or ""))[-1]
+    stem, _, ext = name.rpartition(".")
+    ext = ext.lower()
+    if not stem or ext not in UPLOAD_EXT:
+        raise ValueError(f"Dateityp .{ext} nicht erlaubt. Erlaubt: " + ", ".join(sorted(UPLOAD_EXT)))
+    base = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-")[:60] or "datei"
+    d = proj_dir(pid) / "input"
+    d.mkdir(parents=True, exist_ok=True)
+    target, i = d / f"{base}.{ext}", 1
+    while target.exists():
+        target = d / f"{base}-{i}.{ext}"
+        i += 1
+    write(str(target))
+    log("file_uploaded", f"input/{target.name} ({target.stat().st_size // 1024} KB)", pid)
+    return f"input/{target.name}", target.name != f"{base}.{ext}"
+
+
+def files_note(paths):
+    """Hinweis fuer Chat/Auftrag, welche Dateien der Besitzer mitgeschickt hat."""
+    return ("📎 Vom Besitzer mitgeschickte Dateien (liegen im Projektordner, mit den Dateiwerkzeugen lesbar): "
+            + ", ".join(paths)) if paths else ""
 
 
 @app.post("/api/projects/<int:pid>/upload")
@@ -2570,20 +2692,11 @@ def api_upload(pid):
     f = request.files.get("file")
     if not f or not f.filename:
         abort(400, "Keine Datei")
-    stem, _, ext = f.filename.rpartition(".")
-    ext = ext.lower()
-    if ext not in UPLOAD_EXT:
-        abort(400, f"Dateityp .{ext} nicht erlaubt. Erlaubt: " + ", ".join(sorted(UPLOAD_EXT)))
-    base = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-")[:60] or "datei"
-    d = proj_dir(pid) / "input"
-    d.mkdir(parents=True, exist_ok=True)
-    target, i = d / f"{base}.{ext}", 1
-    while target.exists():
-        target = d / f"{base}-{i}.{ext}"
-        i += 1
-    f.save(str(target))
-    log("file_uploaded", f"input/{target.name} ({target.stat().st_size // 1024} KB)", pid)
-    return jsonify({"path": f"input/{target.name}"})
+    try:
+        path, renamed = save_input(pid, f.filename, f.save)
+    except ValueError as e:
+        abort(400, str(e))
+    return jsonify({"path": path, "renamed": renamed, "original": f.filename})
 
 
 @app.delete("/api/projects/<int:pid>/files")
@@ -2705,7 +2818,9 @@ def chat_system(agent, project):
     s.append("\nDu fuehrst jetzt ein freies GESPRAECH mit dem Besitzer des Unternehmens. Antworte in normalem Text (Markdown erlaubt), kein JSON, "
              "in der Sprache des Besitzers. Denke mit, stelle gezielte Rueckfragen, nenne Gegenargumente und Alternativen, bleibe ehrlich statt zu schmeicheln. "
              "Du kannst in diesem Gespraech keine Werkzeuge benutzen und nichts ausfuehren. Will der Besitzer, dass das Team etwas umsetzt, sag ihm, "
-             "er kann das Gespraech mit dem Knopf 'Als Auftrag erteilen' direkt an dich und dein Team uebergeben.")
+             "er kann das Gespraech mit dem Knopf 'Als Auftrag erteilen' direkt an dich und dein Team uebergeben. "
+             "Schickt der Besitzer Dateien mit (Zeile mit 📎), liegen sie unter input/ im Projektordner. Im Gespraech kannst du sie "
+             "nicht oeffnen, sag das ehrlich; sobald er das Gespraech als Auftrag erteilt, lesen du und dein Team sie mit den Dateiwerkzeugen.")
     return "\n".join(s)
 
 
@@ -2719,7 +2834,20 @@ def api_chat_post(aid):
     a = q1("SELECT * FROM agents WHERE id=?", (aid,))
     if not a:
         abort(404)
-    msg = str(request.get_json(force=True).get("message", "")).strip()[:8000]
+    body = request.get_json(force=True)
+    msg = str(body.get("message", "")).strip()[:8000]
+    files, root = [], (proj_dir(a["project_id"]) / "input").resolve()
+    for f in body.get("files") or []:
+        try:
+            p = (root / str(f).removeprefix("input/")).resolve()
+            p.relative_to(root)
+        except ValueError:
+            abort(400, "Ungueltiger Dateipfad")
+        if not p.is_file():
+            abort(400, f"Datei {f} gibt es nicht in input/")
+        files.append("input/" + p.relative_to(root).as_posix())
+    if files:
+        msg = (files_note(files) + "\n\n" + msg).strip()[:8000]
     if not msg:
         abort(400, "Nachricht fehlt")
     proj = q1("SELECT * FROM projects WHERE id=?", (a["project_id"],))

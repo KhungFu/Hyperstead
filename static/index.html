@@ -40,7 +40,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .pal{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:grab;user-select:none}
 .pal:hover{border-color:var(--accent)}
 .hint{color:var(--mute);font-size:12px;margin-left:6px}
-#vp{position:relative;flex:1;overflow:hidden;cursor:grab;
+#vp{position:relative;flex:1;overflow:hidden;cursor:grab;touch-action:none;
   background-image:radial-gradient(#2a2a2f 1px,transparent 1px);background-size:24px 24px}
 #vp.panning{cursor:grabbing}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
@@ -99,6 +99,17 @@ textarea{resize:vertical;min-height:110px}
 .bub.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:3px}
 .bub.assistant{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:3px}
 .bub.wait{opacity:.6;font-style:italic}
+#chatbox{position:relative}
+#chatbox.drop::after{content:'Dateien hier ablegen → input/';position:absolute;inset:0;display:grid;place-items:center;
+  border:2px dashed var(--accent);border-radius:10px;background:rgba(249,115,22,.12);color:var(--text);font-weight:600;pointer-events:none}
+#chatatt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+#chatatt:empty{display:none}
+.att{display:inline-flex;align-items:center;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:2px 4px 2px 9px;font-size:12px;max-width:100%}
+.att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.att.up{opacity:.6}
+.att.err{border-color:var(--red)}
+#btnMenu{display:none;flex:none;font-size:20px}
+#sideBack{display:none}
 a.btn{text-decoration:none;color:var(--text);display:inline-block}
 a.btn.pri{color:#fff}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -137,10 +148,35 @@ a.btn.pri{color:#fff}
 #ovbody{padding:14px 16px;overflow:auto}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2a1212;border:1px solid var(--red);
   padding:8px 14px;border-radius:10px;display:none;z-index:99;max-width:80vw}
+@media (max-width:1100px) and (min-width:821px){
+  #app{grid-template-columns:200px 1fr 0}
+  #app.panel-open{grid-template-columns:200px 1fr 340px}
+  #pname{flex-basis:150px}
+}
 @media (max-width:820px){
-  #app,#app.panel-open{grid-template-columns:0 1fr 0}
+  #app,#app.panel-open{grid-template-columns:1fr;height:100dvh}
+  #main{grid-column:1;grid-row:1}
   #side{display:none}
+  #app.side-open #side{display:flex;position:fixed;left:0;top:0;bottom:0;width:min(290px,86vw);z-index:40;box-shadow:4px 0 24px rgba(0,0,0,.5)}
+  #app.side-open #sideBack{display:block;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:39}
+  #btnMenu{display:block}
   #app.panel-open #panel{position:fixed;right:0;top:0;bottom:0;width:min(400px,100vw);z-index:20}
+  #topbar{flex-wrap:wrap;padding:8px 10px;gap:8px}
+  #pname{flex:1 1 120px;min-width:0}
+  #pgoal{flex:1 1 100%;order:3}
+  #palette{flex-wrap:nowrap;overflow-x:auto;padding:6px 10px;-webkit-overflow-scrolling:touch}
+  #palette>span:first-child,.hint{display:none}
+  .pal{white-space:nowrap;flex:none}
+  .side-btn{padding:11px 10px}
+  .btn{padding:9px 13px}
+  .icon-btn{padding:4px 8px;font-size:18px}
+  .tab{padding:11px 4px;font-size:13px}
+  input[type=text],input[type=number],select,textarea{font-size:16px} /* verhindert Auto-Zoom auf iOS */
+  #ovbox{width:100vw;max-height:100%;height:100%;border-radius:0}
+  #ov.on{place-items:stretch}
+  #chatlog{max-height:calc(100dvh - 300px)}
+  .att span{max-width:150px}
+  #toast{max-width:94vw;bottom:14px}
 }
 </style>
 </head>
@@ -162,8 +198,10 @@ a.btn.pri{color:#fff}
     <div id="projlist" class="side-sec"></div>
   </aside>
 
+  <div id="sideBack"></div>
   <section id="main">
     <div id="topbar">
+      <button class="icon-btn" id="btnMenu" title="Menü">☰</button>
       <input id="pname" type="text" placeholder="Projektname" disabled>
       <input id="pgoal" type="text" placeholder="Ziel des Projekts (alle Agenten kennen es)" disabled>
       <button class="btn danger sm" id="btnDelProj" style="display:none">Projekt löschen</button>
@@ -339,6 +377,23 @@ $('#edges').addEventListener('click', async e=>{
   if(confirm('Verbindung trennen?')){ await api('/agents/'+id,'PUT',{parent_id:null}); refresh(true); }
 });
 
+/* ---------- Menü auf dem Handy ---------- */
+$('#btnMenu').onclick=()=>$('#app').classList.toggle('side-open');
+$('#sideBack').onclick=()=>$('#app').classList.remove('side-open');
+$('#side').addEventListener('click',e=>{ if(e.target.closest('.side-btn')) $('#app').classList.remove('side-open'); });
+
+/* ---------- Dateien hochladen (landen in input/) ---------- */
+async function uploadFile(f){
+  const fd=new FormData(); fd.append('file',f,f.name||('bild-'+Date.now()+'.png'));
+  const resp=await fetch('/api/projects/'+S.pid+'/upload',{method:'POST',headers:{'X-PCL':'1'},body:fd});
+  if(resp.status===401){ location.href='/login'; throw new Error('Sitzung abgelaufen'); }
+  if(resp.status===413) throw new Error('„'+f.name+'“ ist zu groß (Grenze PCL_MAX_UPLOAD_MB).');
+  if(!resp.ok) throw new Error((await resp.text()).slice(0,200)||'Upload fehlgeschlagen');
+  const r=await resp.json();
+  if(r.renamed) toast('„'+f.name+'“ gab es schon in input/, gespeichert als '+r.path+' (nichts überschrieben).');
+  return r;
+}
+
 /* ---------- Ansicht (Pan/Zoom) ---------- */
 function applyView(){
   $('#world').style.transform = `translate(${V.x}px,${V.y}px) scale(${V.s})`;
@@ -363,8 +418,18 @@ $('#zfit').onclick=fit;
 $('#vp').addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.deltaY<0?1.1:1/1.1,e.clientX,e.clientY)},{passive:false});
 
 /* ---------- Maus: Pan / Knoten ziehen / verbinden ---------- */
-$('#vp').addEventListener('mousedown',e=>{
+const touches=new Map(); let pinch=null;  // Touch: zwei Finger = zoomen
+$('#vp').addEventListener('pointerdown',e=>{
   if(e.target.closest('.zoom')) return;
+  if(e.pointerType==='touch'){
+    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(touches.size===2){
+      if(drag&&drag.type==='link'){ const t=$('#tmp'); if(t) t.remove(); }
+      drag=null; const [a,b]=[...touches.values()];
+      pinch={d:Math.hypot(a.x-b.x,a.y-b.y)}; return;
+    }
+    if(touches.size>2) return;
+  }
   const port = e.target.closest('.port.bot'); const node = e.target.closest('.node');
   if(port && node){
     e.preventDefault();
@@ -382,7 +447,14 @@ $('#vp').addEventListener('mousedown',e=>{
   if(e.target.closest('#edges path.hit')) return;
   drag={type:'pan',sx:e.clientX,sy:e.clientY,vx:V.x,vy:V.y}; $('#vp').classList.add('panning');
 });
-window.addEventListener('mousemove',e=>{
+window.addEventListener('pointermove',e=>{
+  if(touches.has(e.pointerId)){
+    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pinch&&touches.size===2){
+      const [a,b]=[...touches.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y);
+      if(pinch.d>0) zoomAt(d/pinch.d,(a.x+b.x)/2,(a.y+b.y)/2); pinch.d=d; return;
+    }
+  }
   if(!drag) return;
   if(drag.type==='pan'){ V.x=drag.vx+e.clientX-drag.sx; V.y=drag.vy+e.clientY-drag.sy; applyView(); }
   else if(drag.type==='node'){
@@ -394,7 +466,10 @@ window.addEventListener('mousemove',e=>{
     $('#tmp').setAttribute('d',`M${drag.x1},${drag.y1} V${my} H${w.x} V${w.y}`);
   }
 });
-window.addEventListener('mouseup',async e=>{
+const endTouch=e=>{ touches.delete(e.pointerId); if(touches.size<2) pinch=null; };
+window.addEventListener('pointercancel',e=>{ endTouch(e); if(drag&&drag.type==='link'){ const t=$('#tmp'); if(t) t.remove(); } drag=null; $('#vp').classList.remove('panning'); });
+window.addEventListener('pointerup',async e=>{
+  endTouch(e);
   if(!drag) return; const d=drag; drag=null; $('#vp').classList.remove('panning');
   if(d.type==='node' && d.moved){ const a=agentById(d.id); api('/agents/'+d.id,'PUT',{x:a.x,y:a.y}); }
   if(d.type==='link'){
@@ -548,22 +623,55 @@ function drawSettings(a){
 const miniMd = t => esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|\s)\*(\S[^*]*?)\*(?=\s|$|[.,;:!?])/g,'$1<i>$2</i>');
 async function drawChat(a){
   $('#pbody').innerHTML=`
-    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Freies Gespräch mit ${esc(a.name)} – zum Nachdenken, Philosophieren, Ideen entwickeln. Ohne Werkzeuge; zum Umsetzen gib das Gespräch als Auftrag ans Team.</div>
+    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Freies Gespräch mit ${esc(a.name)} – zum Nachdenken, Philosophieren, Ideen entwickeln. Ohne Werkzeuge; zum Umsetzen gib das Gespräch als Auftrag ans Team. Dateien (📎, hineinziehen oder einfügen) landen in <code>input/</code>, das Team liest sie dort.</div>
     <div id="chatlog"></div>
-    <textarea id="chatin" style="min-height:70px" placeholder="Schreib etwas … (Enter sendet, Shift+Enter = neue Zeile)"></textarea>
-    <div class="row"><button class="btn pri" id="chatsend">Senden</button><button class="btn" id="chatorder">📋 Als Auftrag erteilen</button><button class="btn danger sm" id="chatclear">Verlauf leeren</button></div>`;
-  const log=$('#chatlog');
+    <div id="chatbox">
+      <div id="chatatt"></div>
+      <textarea id="chatin" style="min-height:70px" placeholder="Schreib etwas … (Enter sendet, Shift+Enter = neue Zeile)"></textarea>
+    </div>
+    <input type="file" id="chatfile" multiple style="display:none">
+    <div class="row"><button class="btn pri" id="chatsend">Senden</button><button class="btn" id="chatattach" title="Dateien anhängen (z. B. muster.png, PDFs, Layouts). Sie werden nach input/ gespeichert.">📎 Datei</button><button class="btn" id="chatorder">📋 Als Auftrag erteilen</button><button class="btn danger sm" id="chatclear">Verlauf leeren</button></div>`;
+  const log=$('#chatlog'), att=[];  // att: {file, el, path, busy}
   const add=(role,text,cls='')=>{ const d=document.createElement('div'); d.className='bub '+role+' '+cls; d.innerHTML=role==='assistant'?miniMd(text):esc(text); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; };
   (await api('/agents/'+a.id+'/chat')).forEach(m=>add(m.role,m.content));
+  function attach(files){
+    if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+    for(const f of files){
+      const it={file:f,path:null,busy:true}; att.push(it);
+      it.el=document.createElement('span'); it.el.className='att up'; it.el.innerHTML='<span></span><button class="icon-btn" title="Entfernen">✕</button>';
+      it.el.firstChild.textContent='⏳ '+(f.name||'Bild');
+      it.el.lastChild.onclick=()=>{ att.splice(att.indexOf(it),1); it.el.remove(); };
+      $('#chatatt').appendChild(it.el);
+      it.up=uploadFile(f).then(r=>{ it.path=r.path; it.el.className='att'; it.el.firstChild.textContent='📎 '+r.path; it.el.title=r.path; })
+        .catch(e=>{ it.el.className='att err'; it.el.firstChild.textContent='⚠ '+(f.name||'Datei'); it.el.title=e.message; toast(e.message); })
+        .finally(()=>{ it.busy=false; });
+    }
+  }
   async function send(){
-    const inp=$('#chatin'), msg=inp.value.trim(); if(!msg) return;
-    inp.value=''; add('user',msg); const w=add('assistant','denkt nach …','wait'); $('#chatsend').disabled=true;
-    try{ const r=await api('/agents/'+a.id+'/chat','POST',{message:msg}); w.className='bub assistant'; w.innerHTML=miniMd(r.reply); }
-    catch(e){ w.remove(); inp.value=msg; }
+    const inp=$('#chatin'); let msg=inp.value.trim();
+    if(att.some(x=>x.busy)){ $('#chatsend').disabled=true; $('#chatsend').textContent='Lädt hoch …'; await Promise.all(att.map(x=>x.up)); $('#chatsend').textContent='Senden'; }
+    const files=att.filter(x=>x.path).map(x=>x.path);
+    if(!msg && !files.length){ $('#chatsend').disabled=false; return; }
+    const shown=(files.length?'📎 '+files.join(', ')+(msg?'\n\n':''):'')+msg;
+    inp.value=''; const ub=add('user',shown); const w=add('assistant','denkt nach …','wait'); $('#chatsend').disabled=true;
+    try{
+      const r=await api('/agents/'+a.id+'/chat','POST',{message:msg,files});
+      w.className='bub assistant'; w.innerHTML=miniMd(r.reply);
+      att.splice(0).forEach(x=>x.el.remove());
+    }
+    catch(e){ w.remove(); ub.remove(); inp.value=msg; }
     $('#chatsend').disabled=false; log.scrollTop=log.scrollHeight; inp.focus();
   }
   $('#chatsend').onclick=send;
   $('#chatin').onkeydown=e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } };
+  $('#chatattach').onclick=()=>$('#chatfile').click();
+  $('#chatfile').onchange=e=>{ attach([...e.target.files]); e.target.value=''; };
+  const box=$('#pbody'), zone=$('#chatbox'); let dz=0;
+  box.ondragenter=e=>{ if([...e.dataTransfer.types].includes('Files')){ e.preventDefault(); dz++; zone.classList.add('drop'); } };
+  box.ondragover=e=>{ if([...e.dataTransfer.types].includes('Files')) e.preventDefault(); };
+  box.ondragleave=()=>{ if(--dz<=0){ dz=0; zone.classList.remove('drop'); } };
+  box.ondrop=e=>{ if(!e.dataTransfer.files.length) return; e.preventDefault(); dz=0; zone.classList.remove('drop'); attach([...e.dataTransfer.files]); };
+  $('#chatin').onpaste=e=>{ const fs=[...(e.clipboardData&&e.clipboardData.files||[])]; if(fs.length){ e.preventDefault(); attach(fs); } };
   $('#chatorder').onclick=async()=>{
     const t=prompt('Titel des Auftrags (leer = aus deiner letzten Nachricht):',''); if(t===null) return;
     const r=await api('/agents/'+a.id+'/chat/order','POST',{title:t}); toast('Auftrag #'+r.id+' erteilt, das Ergebnis kommt als Post.'); refresh(true);
@@ -814,9 +922,8 @@ async function showFiles(){
   $('#upf').onchange=async e=>{
     const st=$('#upst');
     for(const f of e.target.files){
-      st.textContent='Lade hoch: '+f.name+' …'; const fd=new FormData(); fd.append('file',f);
-      const resp=await fetch('/api/projects/'+S.pid+'/upload',{method:'POST',headers:{'X-PCL':'1'},body:fd});
-      if(!resp.ok){ toast((await resp.text()).slice(0,200)||'Upload fehlgeschlagen'); break; }
+      st.textContent='Lade hoch: '+f.name+' …';
+      try{ await uploadFile(f); }catch(err){ toast(err.message); break; }
     }
     showFiles();
   };
