@@ -87,6 +87,13 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   Abo-Warnung `PCL_ABO_WARN_5H` einmal je 5 h (`settings abo_warn:<anbieter>`). API `/api/usage?days=`.
 - Tests: `tests/` (pytest, `conftest.drain()` arbeitet die Queue synchron ab). Neue Funktionen dort mit abdecken.
 
+## Verbindungen (Webhooks)
+- Tabelle `connections` (Besitzer legt URL/Methode/Kopfzeilen fest, `${ENV}` in Kopfzeilen aus .env, `confirm`, `on_post`). Recht `connect`
+  -> `connections_doc` im Werkzeugblock, `call_connection` in `run_with_tools` (confirm -> `approvals.kind='connect'`, Task endet `waiting_approval`).
+  `conn_request` ohne Redirects, max. 200 KB, `PCL_CONN_TIMEOUT`. Private Adressen erlaubt (nur Besitzer setzt sie).
+  `notify_connections_post` aus `inbox_arrived` (Thread). Eingang `POST /hook/<pid>/<hook_token>` (guard-Ausnahme, `settings hook:<pid>`,
+  Schluessel per `hook_nonce:<pid>` erneuerbar) -> `inbox_new_order`. Generische Freigabe beendet nur Aufgaben in `waiting_approval`.
+
 ## Post / Telegram
 - `tasks.inbox`: `''` / `new` / `closed`, nur für oberste Aufgaben. `finish()` → `inbox_arrived()` → Telegram-Nachricht.
 - `inbox_close`, `inbox_rework` (setzt feedback/prev_result, passes=0), `inbox_new_order` werden von Web-API und Telegram geteilt.

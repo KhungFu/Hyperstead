@@ -204,6 +204,7 @@ a.btn.pri{color:#fff}
       <button class="side-btn" id="btnFiles">📁 Dateien dieses Projekts</button>
       <button class="side-btn" id="btnGoals" title="Ziele und Unterziele des Projekts mit Fortschritt">🎯 Ziele</button>
       <button class="side-btn" id="btnUsage" title="Aufrufe, Tokens und geschätzte Kosten je Projekt, Agent und Modell">📊 Nutzung &amp; Kosten</button>
+      <button class="side-btn" id="btnConn" title="Webhooks: Agenten rufen deine Dienste auf, Aufträge kommen von außen">🔌 Verbindungen</button>
       <button class="side-btn" id="btnKnow" title="Was alle Agenten dieses Projekts immer wissen sollen">🧠 Firmenwissen</button>
       <button class="side-btn" id="btnAudit">📜 Verlauf (Audit-Log)</button>
       <button class="side-btn" id="btnLogout" style="display:none" onclick="location.href='/logout'">🚪 Abmelden</button>
@@ -584,6 +585,7 @@ function drawSettings(a){
     <div class="chk"><input type="checkbox" id="p_code" ${pm.code?'checked':''}><div>Darf programmieren<small>Quellcode in jeder Sprache schreiben (Python, Rust, Java, JavaScript, Go, C/C++ …) und auf Fehler prüfen bzw. kompilieren. Ausgeführt wird der Code dabei nicht.</small></div></div>
     <div class="chk"><input type="checkbox" id="p_recruit" ${pm.recruit?'checked':''}><div>Darf sein Team selbst zusammenstellen<small>Nur solange er noch keine Mitarbeiter hat: analysiert den Auftrag und legt Mitarbeiter mit Rollen an (ohne KI – die weist du zu)</small></div></div>
     <div class="chk"><input type="checkbox" id="p_publish" ${pm.publish?'checked':''}><div>Darf die Webseite zur Veröffentlichung vorschlagen<small>„veröffentlichen“ legt dir eine Freigabe vor; erst nach deinem Klick geht der Ordner www/ des Projekts online</small></div></div>
+    <div class="chk"><input type="checkbox" id="p_connect" ${pm.connect?'checked':''}><div>Darf Verbindungen nutzen<small>Webhooks aus 🔌 Verbindungen aufrufen (n8n, Zapier, eigene Dienste); Verbindungen mit Freigabe laufen erst nach deinem Klick</small></div></div>
     <div class="chk"><input type="checkbox" id="p_shell" ${pm.shell?'checked':''} ${S.info.allow_shell?'':'disabled'}><div>Darf Shell-Befehle vorschlagen<small>${S.info.allow_shell?'läuft erst nach deiner Freigabe (Sidebar „Freigaben“)':'auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env)'}</small></div></div>
     <small style="color:var(--mute)">${(a.used_tokens||0).toLocaleString('de-AT')} Tokens diesen Monat verbraucht (nur zur Info, kein Limit).</small>
     <div class="chk" style="margin-top:12px"><input type="checkbox" id="f_pause" ${a.paused?'checked':''}><div>Agent pausiert</div></div>
@@ -626,7 +628,7 @@ function drawSettings(a){
   $('#saveAg').onclick=async()=>{
     const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,...($('#f_prov').value?{provider:$('#f_prov').value}:{}),model:$('#f_model').value.trim(),
       system_prompt:$('#f_sys').value,...($('#f_mem').value!==(a.memory||'')?{memory:$('#f_mem').value}:{}),paused:$('#f_pause').checked,
-      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,publish:$('#p_publish').checked,code:$('#p_code').checked,shell:$('#p_shell').checked}};
+      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,publish:$('#p_publish').checked,code:$('#p_code').checked,connect:$('#p_connect').checked,shell:$('#p_shell').checked}};
     if($('#cliwrap').style.display!=='none') body.cli_command=$('#f_cli').value;
     const np=$('#f_parent').value; body.parent_id=np?+np:null;
     await api('/agents/'+a.id,'PUT',body); toast('Gespeichert'); $('#toast').style.borderColor='var(--green)';
@@ -806,12 +808,14 @@ $('#btnApprovals').onclick=async()=>{
       <div class="task" style="padding:10px">
         ${(r.kind==='plan'||r.kind==='recruit')?`<div><b>${esc(r.agent_name||'?')}</b> legt dir ${r.kind==='plan'?'seinen <b>Plan</b>':'ein <b>neues Team</b>'} vor <span style="color:var(--mute)">(Auftrag: ${esc(r.task_title||'—')})</span></div>
         <pre style="white-space:pre-wrap">${esc(r.payload)}</pre>`
+        :r.kind==='connect'?`<div><b>${esc(r.agent_name||'?')}</b> möchte eine <b>Verbindung aufrufen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
+        <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Daten gehen an deinen Dienst; prüfe, ob das so raus soll.</div>`
         :r.kind==='publish'?`<div><b>${esc(r.agent_name||'?')}</b> möchte die <b>Webseite veröffentlichen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">Der Projektordner (ohne <code>input/</code>) wird als Webseite ausgeliefert, standardmäßig nur auf dem Pi selbst (localhost).</div>`
         :`<div><b>${esc(r.agent_name||'?')}</b> will einen <b>${esc(r.kind)}</b>-Befehl ausführen <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre>$ ${esc(r.payload)}</pre>
         <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der PaperclipLite startet — Befehl genau prüfen!</div>`}
-        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
+        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':r.kind==='connect'?'Freigeben & senden':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
       </div>`).join(''):'<div style="color:var(--mute)">Keine offenen Freigaben.</div>');
     if(gates) ['plan','recruit'].forEach(k=>$('#g_'+k).onchange=async e=>{ await api('/projects/'+S.pid+'/gates','PUT',{[k]:e.target.checked}); toast('Gespeichert'); });
     body.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await api('/approvals/'+b.dataset.ok,'POST',{decision:'approve'}); await load(); refresh(true); });
@@ -999,6 +1003,49 @@ async function showFiles(){
   body.querySelectorAll('[data-delf]').forEach(b=>b.onclick=async()=>{ if(confirm('„'+b.dataset.delf+'“ löschen?')){ await fetch('/api/projects/'+S.pid+'/files?path='+encodeURIComponent(b.dataset.delf),{method:'DELETE',headers:{'X-PCL':'1'}}); showFiles(); } });
 }
 $('#btnFiles').onclick=showFiles;
+
+/* ---------- Verbindungen (Webhooks) ---------- */
+async function showConn(){
+  if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+  openOv('🔌 Verbindungen'); const body=$('#ovbody');
+  const r=await api('/projects/'+S.pid+'/connections'); const hookUrl=location.origin+r.hook.path;
+  const form=(c)=>{ c=c||{method:'POST',confirm:1,headers:'{}'}; return `
+    <input type="text" id="cn_name" placeholder="Name, z. B. n8n-kunden" value="${esc(c.name||'')}">
+    <input type="text" id="cn_url" placeholder="https://… oder http://127.0.0.1:5678/webhook/…" value="${esc(c.url||'')}" style="margin-top:6px">
+    <div class="row" style="margin-top:6px"><select id="cn_method" style="width:auto">${['POST','GET','PUT'].map(m=>`<option ${m===c.method?'selected':''}>${m}</option>`).join('')}</select></div>
+    <label>Was macht sie? (lesen die Agenten)</label><textarea id="cn_desc" style="min-height:60px" placeholder="z. B. Legt einen Kunden im CRM an. data: {name, email, notiz}">${esc(c.description||'')}</textarea>
+    <label>Kopfzeilen (JSON, optional). Geheimnisse besser aus .env: <code>\${NAME}</code></label><input type="text" id="cn_head" value="${esc(c.headers||'{}')}" placeholder='{"Authorization": "Bearer \${N8N_TOKEN}"}'>
+    <div class="chk"><input type="checkbox" id="cn_confirm" ${c.confirm?'checked':''}><div>Nur nach meiner Freigabe aufrufen<small>Empfohlen für alles, was etwas auslöst (E-Mail, Bestellung, Eintrag). Aus = Agent ruft sofort auf und bekommt die Antwort</small></div></div>
+    <div class="chk"><input type="checkbox" id="cn_post" ${c.on_post?'checked':''}><div>Bei Post benachrichtigen<small>Jedes fertige Ergebnis eines obersten Auftrags geht als JSON an diese Adresse</small></div></div>`; };
+  const val=()=>({name:$('#cn_name').value,url:$('#cn_url').value,method:$('#cn_method').value,description:$('#cn_desc').value,headers:$('#cn_head').value,confirm:$('#cn_confirm').checked,on_post:$('#cn_post').checked});
+  body.innerHTML=`
+    <div style="color:var(--mute);font-size:12px;margin-bottom:10px">Agenten mit dem Recht „Darf Verbindungen nutzen“ rufen hier eingetragene Adressen auf. Adresse und Kopfzeilen legst nur du fest, der Agent schickt nur Daten.</div>
+    <div class="task" style="padding:10px;margin-bottom:12px"><b>📥 Aufträge von außen</b>
+      <div style="color:var(--mute);font-size:12px;margin:3px 0 6px">n8n, Zapier, Kurzbefehle oder DEXTER schicken einen Auftrag an den Chef dieses Projekts: <code>POST</code> mit JSON <code>{"text": "…", "agent": "optional Name"}</code>.</div>
+      <div class="chk"><input type="checkbox" id="hk_on" ${r.hook.enabled?'checked':''}><div>Eingang aktiv</div></div>
+      ${r.hook.enabled?`<input type="text" readonly value="${esc(hookUrl)}" onclick="this.select()"><div class="row" style="margin-top:6px"><button class="btn sm" id="hk_copy">📋 Kopieren</button><button class="btn sm" id="hk_reset">Neuen Schlüssel</button></div>
+      <pre style="white-space:pre-wrap;font-size:11px">curl -X POST -H 'Content-Type: application/json' -d '{"text":"Bitte Wochenbericht erstellen"}' ${esc(hookUrl)}</pre>`:''}
+    </div>
+    <div class="task" style="padding:10px;margin-bottom:12px"><b>📤 Neue Verbindung</b>${form()}<div class="row" style="margin-top:8px"><button class="btn pri sm" id="cn_add">Anlegen</button></div></div>
+    ${r.connections.map(c=>`<div class="task" style="padding:10px;${c.enabled?'':'opacity:.55'}">
+      <div style="display:flex;gap:8px;align-items:center"><b style="flex:1;word-break:break-all">${esc(c.name)}</b><span style="color:var(--mute);font-size:12px">${esc(c.method)}${c.confirm?' · Freigabe':''}${c.on_post?' · Post':''}</span></div>
+      <div style="color:var(--mute);font-size:12px;word-break:break-all">${esc(c.url)}</div><div style="font-size:13px;margin-top:4px">${esc(c.description||'')}</div>
+      <div class="row" style="margin-top:6px"><button class="btn sm" data-ctest="${c.id}">▶ Testen</button><button class="btn sm" data-cedit="${c.id}">✎</button><button class="btn sm" data-ctog="${c.id}">${c.enabled?'Aus':'An'}</button><button class="icon-btn" data-cdel="${c.id}">🗑</button></div>
+      <pre id="ct_${c.id}" style="display:none;white-space:pre-wrap;font-size:11px"></pre></div>`).join('')||'<div style="color:var(--mute)">Noch keine Verbindungen.</div>'}`;
+  $('#hk_on').onchange=async e=>{ await api('/projects/'+S.pid+'/hook','PUT',{enabled:e.target.checked}); showConn(); };
+  if($('#hk_reset')) $('#hk_reset').onclick=async()=>{ if(confirm('Neuen Schlüssel erzeugen? Die alte Adresse funktioniert dann nicht mehr.')){ await api('/projects/'+S.pid+'/hook','PUT',{reset:true}); showConn(); } };
+  if($('#hk_copy')) $('#hk_copy').onclick=()=>copyText(hookUrl);
+  $('#cn_add').onclick=async()=>{ try{ await api('/projects/'+S.pid+'/connections','POST',val()); toast('Verbindung angelegt'); showConn(); }catch(_){} };
+  body.querySelectorAll('[data-ctest]').forEach(b=>b.onclick=async()=>{ const el=$('#ct_'+b.dataset.ctest); el.style.display=''; el.textContent='teste …';
+    try{ const x=await api('/connections/'+b.dataset.ctest+'/test','POST',{}); el.textContent=(x.ok?'✅ ':'❌ ')+x.output; }catch(e){ el.textContent='❌ '+e.message; } });
+  body.querySelectorAll('[data-ctog]').forEach(b=>b.onclick=async()=>{ const c=r.connections.find(x=>x.id===+b.dataset.ctog); await api('/connections/'+c.id,'PUT',{enabled:!c.enabled}); showConn(); });
+  body.querySelectorAll('[data-cdel]').forEach(b=>b.onclick=async()=>{ if(confirm('Verbindung löschen?')){ await api('/connections/'+b.dataset.cdel,'DELETE'); showConn(); } });
+  body.querySelectorAll('[data-cedit]').forEach(b=>b.onclick=()=>{ const c=r.connections.find(x=>x.id===+b.dataset.cedit);
+    openOv('🔌 '+c.name+' bearbeiten'); $('#ovbody').innerHTML=form(c)+'<div class="row" style="margin-top:8px"><button class="btn pri sm" id="cn_save">Speichern</button><button class="btn sm" id="cn_back">Zurück</button></div>';
+    $('#cn_save').onclick=async()=>{ try{ await api('/connections/'+c.id,'PUT',val()); toast('Gespeichert'); showConn(); }catch(_){} };
+    $('#cn_back').onclick=showConn; });
+}
+$('#btnConn').onclick=showConn;
 
 /* ---------- Ziele ---------- */
 async function showGoals(){
