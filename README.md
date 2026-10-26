@@ -213,6 +213,25 @@ bezahlten APIs und vielen Werkzeug-Runden können Kosten entstehen, die Tokens s
   was funktioniert hat). Sie stehen im Agenten-Panel unter „🧠 Gedächtnis“, du kannst sie ändern oder leeren. Grenze `PCL_MEMORY_CHARS`
   (4000), die ältesten Einträge fallen zuerst heraus. Jede neue Notiz steht im Audit-Log.
 
+## Ziele, Freigaben, Nutzung (wie bei Paperclip)
+
+- **🎯 Ziele**: Ziele und Unterziele je Projekt. Beim Zuweisen einer Aufgabe wählst du optional das Ziel, delegierte Aufgaben erben es.
+  Chefs sehen die Ziele mit Fortschritt im Prompt, der CEO-Kontrollgang berichtet ihn. Abhaken = erreicht.
+- **Vorher fragen** (Fenster ✋ Freigaben, je Projekt, Standard aus): *Plan des obersten Chefs freigeben* hält einen neuen Auftrag an,
+  bis du den Verteilungsplan freigibst; *Neue Mitarbeiter freigeben* hält das Selbst-Einstellen des CEO an. Freigeben/Ablehnen auch per
+  Telegram-Knopf. Abgelehnt = der Auftrag landet als ❌ in der Post, deine Antwort darauf lässt den Chef neu planen.
+  Shell-Freigaben gehen weiterhin nur im Web.
+- **📊 Nutzung & Kosten**: Aufrufe, Tokens und geschätzte Kosten je Projekt, Agent und Modell (heute, 7, 30 Tage). Kein Limit.
+  Abo-CLIs und Ollama zählen als 0 $; ab `PCL_ABO_WARN_5H` Abo-Aufrufen in 5 Stunden (Standard 150, 0 = aus) kommt eine Telegram-Warnung.
+  Preise sind grobe Schätzungen, eigene per `PCL_PRICES='{"sonnet": 5}'` (US-$ je 1 Mio. Tokens, Teil des Modellnamens).
+
+## Tests
+
+```bash
+./venv/bin/pip install pytest && ./venv/bin/python -m pytest -q tests
+```
+Läuft ohne Internet und ohne Keys (Anbieter `mock`, eigene Datenbank).
+
 ## Parallele Arbeit
 
 Bis zu `PCL_WORKERS` Aufgaben laufen gleichzeitig (Standard 2, höchstens 6), z. B. mehrere Mitarbeiter eines Chefs oder Aufträge
@@ -224,7 +243,7 @@ verschiedener Projekte. Ein Agent bearbeitet nie zwei Aufgaben auf einmal, und e
 - Kein automatischer Heartbeat nach Zeitplan (Aufgaben starten manuell oder per Delegation).
 - Keine Text-zu-Video-KI, keine Scan-/Bild-PDFs (OCR), keine eigene Anstellung neuer Agenten durch den CEO (Organigramm legst du an).
 - Kein echter Browser: Seiten werden als Text gelesen, JavaScript-lastige Seiten liefern oft wenig. Die DuckDuckGo-Suche ohne Key kann begrenzt oder geändert werden.
-- Kein Budget: Tokens werden nur gezählt. Die Rundenlimits (Überarbeitungen, Prüfdurchgänge, Tiefe) verhindern Endlosschleifen.
+- Kein Budget: Tokens und geschätzte Kosten werden nur angezeigt (📊). Die Rundenlimits (Überarbeitungen, Prüfdurchgänge, Tiefe) verhindern Endlosschleifen.
 - Sitzungen sind einfache signierte Cookies, ein einzelnes Gerät lässt sich nicht gezielt abmelden
   (Passwort ändern macht alle Sitzungen ungültig).
 

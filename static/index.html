@@ -202,6 +202,8 @@ a.btn.pri{color:#fff}
       <button class="side-btn" id="btnModels" title="Agenten, deren KI-Modell nicht mehr existiert, auf ein anderes umstellen">⚠ Modelle <span class="badge" id="mdbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnSched" title="Öffnungszeiten der Firma und tägliche Aufgaben je Mitarbeiter">🕘 Zeitplan <span class="badge" id="schbadge" style="display:none">zu</span></button>
       <button class="side-btn" id="btnFiles">📁 Dateien dieses Projekts</button>
+      <button class="side-btn" id="btnGoals" title="Ziele und Unterziele des Projekts mit Fortschritt">🎯 Ziele</button>
+      <button class="side-btn" id="btnUsage" title="Aufrufe, Tokens und geschätzte Kosten je Projekt, Agent und Modell">📊 Nutzung &amp; Kosten</button>
       <button class="side-btn" id="btnKnow" title="Was alle Agenten dieses Projekts immer wissen sollen">🧠 Firmenwissen</button>
       <button class="side-btn" id="btnAudit">📜 Verlauf (Audit-Log)</button>
       <button class="side-btn" id="btnLogout" style="display:none" onclick="location.href='/logout'">🚪 Abmelden</button>
@@ -767,12 +769,16 @@ function drawTasks(a){
     <label>Neue Aufgabe für ${esc(a.name)}</label>
     <input type="text" id="t_title" placeholder="Titel, z.B. Landingpage-Text schreiben">
     <label>Beschreibung (optional)</label><textarea id="t_desc" style="min-height:80px"></textarea>
+    <div id="t_goalwrap" style="display:none"><label>Dient dem Ziel (optional)</label><select id="t_goal"></select></div>
     <div class="chk"><input type="checkbox" id="t_run" checked><div>Sofort starten</div></div>
     <div class="row"><button class="btn pri" id="t_add">Aufgabe zuweisen</button></div>
     <div id="tlist" style="margin-top:16px"></div>`;
+  api('/projects/'+S.pid+'/goals').then(gs=>{ const open=gs.filter(g=>g.status!=='done'); if(!open.length||!$('#t_goal')) return;
+    $('#t_goal').innerHTML='<option value="">— kein bestimmtes Ziel —</option>'+open.map(g=>`<option value="${g.id}">${'· '.repeat(g.depth)}${esc(g.title)}</option>`).join('');
+    $('#t_goalwrap').style.display=''; }).catch(()=>{});
   $('#t_add').onclick=async()=>{
     const title=$('#t_title').value.trim(); if(!title){ toast('Titel fehlt'); return; }
-    await api('/agents/'+a.id+'/tasks','POST',{title,description:$('#t_desc').value,run:$('#t_run').checked});
+    await api('/agents/'+a.id+'/tasks','POST',{title,description:$('#t_desc').value,run:$('#t_run').checked,goal_id:+($('#t_goal').value||0)});
     $('#t_title').value=''; $('#t_desc').value=''; refresh(true);
   };
   loadTasks();
@@ -791,15 +797,23 @@ $('#btnApprovals').onclick=async()=>{
   openOv('Freigaben'); const body=$('#ovbody');
   async function load(){
     const rows=await api('/approvals');
-    body.innerHTML=rows.length?rows.map(r=>`
+    const gates=S.pid?await api('/projects/'+S.pid+'/gates'):null;
+    const gateHtml=gates?`<div class="task" style="padding:10px;margin-bottom:12px"><b>Vorher fragen (dieses Projekt)</b>
+      <div style="color:var(--mute);font-size:12px;margin:3px 0 6px">Wie ein Aufsichtsrat: Der Chef legt dir vor, bevor er loslegt. Freigeben geht hier oder per Telegram-Knopf.</div>
+      <div class="chk"><input type="checkbox" id="g_plan" ${gates.plan?'checked':''}><div>Plan des obersten Chefs freigeben<small>Bevor er einen Auftrag an sein Team verteilt (nicht bei täglichen Aufgaben)</small></div></div>
+      <div class="chk"><input type="checkbox" id="g_recruit" ${gates.recruit?'checked':''}><div>Neue Mitarbeiter freigeben<small>Bevor der CEO sein Team selbst anlegt</small></div></div></div>`:'';
+    body.innerHTML=gateHtml+(rows.length?rows.map(r=>`
       <div class="task" style="padding:10px">
-        ${r.kind==='publish'?`<div><b>${esc(r.agent_name||'?')}</b> möchte die <b>Webseite veröffentlichen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
+        ${(r.kind==='plan'||r.kind==='recruit')?`<div><b>${esc(r.agent_name||'?')}</b> legt dir ${r.kind==='plan'?'seinen <b>Plan</b>':'ein <b>neues Team</b>'} vor <span style="color:var(--mute)">(Auftrag: ${esc(r.task_title||'—')})</span></div>
+        <pre style="white-space:pre-wrap">${esc(r.payload)}</pre>`
+        :r.kind==='publish'?`<div><b>${esc(r.agent_name||'?')}</b> möchte die <b>Webseite veröffentlichen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">Der Projektordner (ohne <code>input/</code>) wird als Webseite ausgeliefert, standardmäßig nur auf dem Pi selbst (localhost).</div>`
         :`<div><b>${esc(r.agent_name||'?')}</b> will einen <b>${esc(r.kind)}</b>-Befehl ausführen <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre>$ ${esc(r.payload)}</pre>
         <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der PaperclipLite startet — Befehl genau prüfen!</div>`}
-        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
-      </div>`).join(''):'<div style="color:var(--mute)">Keine offenen Freigaben.</div>';
+        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
+      </div>`).join(''):'<div style="color:var(--mute)">Keine offenen Freigaben.</div>');
+    if(gates) ['plan','recruit'].forEach(k=>$('#g_'+k).onchange=async e=>{ await api('/projects/'+S.pid+'/gates','PUT',{[k]:e.target.checked}); toast('Gespeichert'); });
     body.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await api('/approvals/'+b.dataset.ok,'POST',{decision:'approve'}); await load(); refresh(true); });
     body.querySelectorAll('[data-no]').forEach(b=>b.onclick=async()=>{ await api('/approvals/'+b.dataset.no,'POST',{decision:'deny'}); await load(); refresh(true); });
   }
@@ -985,6 +999,55 @@ async function showFiles(){
   body.querySelectorAll('[data-delf]').forEach(b=>b.onclick=async()=>{ if(confirm('„'+b.dataset.delf+'“ löschen?')){ await fetch('/api/projects/'+S.pid+'/files?path='+encodeURIComponent(b.dataset.delf),{method:'DELETE',headers:{'X-PCL':'1'}}); showFiles(); } });
 }
 $('#btnFiles').onclick=showFiles;
+
+/* ---------- Ziele ---------- */
+async function showGoals(){
+  if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+  openOv('🎯 Ziele'); const body=$('#ovbody');
+  const gs=await api('/projects/'+S.pid+'/goals');
+  const opts='<option value="">— oberstes Ziel —</option>'+gs.map(g=>`<option value="${g.id}">${'· '.repeat(g.depth)}${esc(g.title)}</option>`).join('');
+  body.innerHTML=`
+    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Ziele ordnen die Arbeit: Projektziel → Ziele → Unterziele. Chefs sehen die Ziele mit Fortschritt, jede Aufgabe kann einem Ziel dienen (Auswahl beim Zuweisen), delegierte Aufgaben erben es. Der CEO-Kontrollgang berichtet den Fortschritt.</div>
+    <div class="task" style="padding:10px;margin-bottom:12px">
+      <input type="text" id="gl_t" placeholder="Neues Ziel, z. B. Webseite bis Ende November online">
+      <div class="row" style="margin-top:6px"><select id="gl_p" style="flex:1;min-width:0">${opts}</select><button class="btn pri sm" id="gl_add">＋ Ziel</button></div>
+    </div>
+    ${gs.length?gs.map(g=>{ const pct=g.tasks?Math.round(100*g.tasks_done/g.tasks):0;
+      return `<div class="task" style="padding:8px;margin-left:${Math.min(g.depth,5)*14}px;${g.status==='done'?'opacity:.6':''}">
+        <div style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-gdone="${g.id}" ${g.status==='done'?'checked':''} title="erreicht" style="width:auto">
+          <span style="flex:1;word-break:break-word">${g.status==='done'?'<s>'+esc(g.title)+'</s>':esc(g.title)}</span>
+          <button class="icon-btn" title="Umbenennen" data-gren="${g.id}">✎</button><button class="icon-btn" title="Löschen" data-gdel="${g.id}">🗑</button></div>
+        <div style="color:var(--mute);font-size:12px;margin-top:4px">${g.tasks?`${g.tasks_done}/${g.tasks} Aufgaben fertig`:'noch keine Aufgaben'}</div>
+        ${g.tasks?`<div style="height:4px;background:var(--line);border-radius:2px;margin-top:4px"><div style="height:4px;width:${pct}%;background:var(--accent);border-radius:2px"></div></div>`:''}
+      </div>`; }).join(''):'<div style="color:var(--mute)">Noch keine Ziele.</div>'}`;
+  $('#gl_add').onclick=async()=>{ const t=$('#gl_t').value.trim(); if(!t){ toast('Titel fehlt'); return; } await api('/projects/'+S.pid+'/goals','POST',{title:t,parent_id:+($('#gl_p').value||0)}); showGoals(); };
+  body.querySelectorAll('[data-gdone]').forEach(c=>c.onchange=async()=>{ await api('/goals/'+c.dataset.gdone,'PUT',{status:c.checked?'done':'open'}); showGoals(); });
+  body.querySelectorAll('[data-gren]').forEach(b=>b.onclick=async()=>{ const g=gs.find(x=>x.id===+b.dataset.gren); const t=prompt('Ziel umbenennen:',g.title); if(t&&t.trim()){ await api('/goals/'+g.id,'PUT',{title:t}); showGoals(); } });
+  body.querySelectorAll('[data-gdel]').forEach(b=>b.onclick=async()=>{ if(confirm('Ziel löschen? Unterziele und Aufgaben rutschen eine Ebene hoch.')){ await api('/goals/'+b.dataset.gdel,'DELETE'); showGoals(); } });
+}
+$('#btnGoals').onclick=showGoals;
+
+/* ---------- Nutzung & Kosten ---------- */
+async function showUsage(days){
+  days=days||7; openOv('📊 Nutzung & Kosten'); const body=$('#ovbody');
+  const r=await api('/usage?days='+days);
+  const n=x=>(x||0).toLocaleString('de-AT');
+  const usd=(c,un)=>c==null?(un?'?':'0 $'):(c<0.01&&c>0?'< 0,01 $':c.toLocaleString('de-AT',{maximumFractionDigits:2})+' $')+(un?' + ?':'');
+  const tbl=(rows,head,cell)=>rows.length?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="color:var(--mute);text-align:left">${head}<th>Aufrufe</th><th>Tokens</th><th>Kosten*</th></tr>`
+    +rows.map(x=>`<tr style="border-top:1px solid var(--line)">${cell(x)}<td>${n(x.calls)}</td><td>${n(x.tokens)}</td><td>${usd(x.cost,x.unpriced)}</td></tr>`).join('')+'</table></div>':'<div style="color:var(--mute)">Keine Aufrufe in diesem Zeitraum.</div>';
+  const t=r.total||{}; const abo=Object.entries(r.abo_5h||{});
+  body.innerHTML=`
+    <div class="row" style="margin-bottom:10px">${[1,7,30].map(d=>`<button class="btn sm ${d===days?'pri':''}" data-days="${d}">${d===1?'Heute (24 h)':d+' Tage'}</button>`).join('')}</div>
+    <div class="task" style="padding:10px;margin-bottom:12px"><b>${n(t.calls)} KI-Aufrufe · ${n(t.tokens)} Tokens · ${usd(t.cost,t.unpriced)}</b>
+      <div style="color:var(--mute);font-size:12px;margin-top:4px">Kein Limit, nur Übersicht. Abo (Claude-/Codex-CLI) und Ollama kosten hier 0 $, zählen aber gegen dein Abo bzw. den Pi.</div>
+      ${abo.length?`<div style="margin-top:6px">${abo.map(([k,v])=>`${esc(r.labels[k]||k)}: <b>${v}</b> Aufrufe in den letzten 5 h${r.abo_warn?` (Telegram-Warnung ab ${r.abo_warn})`:''}`).join('<br>')}</div>`:''}</div>
+    <b>Nach Projekt</b>${tbl(r.by_project,'<th>Projekt</th>',x=>`<td>${esc(x.name)}</td>`)}
+    <br><b>Nach Agent</b>${tbl(r.by_agent,'<th>Agent</th>',x=>`<td>${esc(x.name)} <span style="color:var(--mute);font-size:11px">${esc(x.project)}</span></td>`)}
+    <br><b>Nach KI-Modell</b>${tbl(r.by_model,'<th>Modell</th>',x=>`<td>${esc(r.labels[x.name]||x.name)}<br><span style="color:var(--mute);font-size:11px">${esc(x.model||'')}</span></td>`)}
+    <div style="color:var(--mute);font-size:11px;margin-top:10px">* Geschätzt aus Tokens × grobem Mischpreis je Modell; „?“ = Preis unbekannt. Eigene Preise: <code>PCL_PRICES</code> in .env. Die Rechnung des Anbieters gilt.</div>`;
+  body.querySelectorAll('[data-days]').forEach(b=>b.onclick=()=>showUsage(+b.dataset.days));
+}
+$('#btnUsage').onclick=()=>showUsage(7);
 
 /* ---------- Firmenwissen (Ordner wissen/) ---------- */
 async function showKnowledge(){
