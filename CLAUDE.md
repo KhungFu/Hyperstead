@@ -44,6 +44,11 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   und hängt den INHALT an (`chat_attachment_block`: Text/PDF/DOCX über `tools.read_file`, Bilder als Bild über `call_llm(..., images=)`:
   API als image_url/image-Block, `claude_cli` per `--input-format stream-json`, `codex_cli` per `-i`; lehnt das Modell Bilder ab, Text-Retry mit Hinweis).
   `chats.files` merkt die Anhänge, ältere Nachrichten bekommen den Text gekürzt. `chat_system` listet die Dateien in `input/`.
+- Bilder in Aufgaben: Werkzeug `view_image` (Recht `read_files`, Bilder und Seiten gescannter PDFs über `tools.pdf_page_images`:
+  pdftoppm, sonst eingebettete Scanbilder per pypdf). `run_with_tools` fängt es ab und schickt alle Bilder des Laufs (`seen`, max.
+  `PCL_RUN_MAX_IMAGES`) in jeder Runde mit; `task_images` hängt im Auftrag genannte Bilder/Scans aus `input/` gleich an. `call_llm_img` = mit Text-Rückfall.
+  `read_file` liest PDFs bis `PCL_MAX_READ_MB` (200). UI: Ergebnisse mit 📋 Kopieren (`resHtml`/`copyText`, Fallback ohne HTTPS),
+  `loadTasks` zeichnet nur bei Änderungen neu und nie während einer Markierung.
   Telegram: Datei-Nachrichten (`tg_file_of`) → `tg_save_file` → Bildunterschrift = Auftrag/Überarbeitung, ohne Text in `_tg_pending` für den nächsten Auftrag, Alben über `_tg_groups`/`tg_flush_groups`.
 - Oberfläche responsive: unter 820 px Menü ☰ (`#app.side-open`), Panel als Vollbild, Canvas per Pointer-Events (Touch, zwei Finger = Zoom).
 - Installer: `install.sh --system` (Medien/OCR per apt), `--code` (Compiler aus `CODE_PKGS`), `--all` (alles inkl. Piper + Dienst). `selftest.py code` prüft alle Sprachen.
