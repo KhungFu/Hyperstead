@@ -103,12 +103,15 @@ Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem P
 |---|---|
 | `video_edit` | Video schneiden (`trim`), zusammenfügen (`concat`), **Diashow-Animation mit Zoom** aus Bildern (`slideshow`, optional mit Ton), Text/Untertitel/Logo einblenden, Ton ersetzen/mischen, Tempo ändern, in GIF/WebM/MP3 umwandeln, Standbild ziehen |
 | `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen) |
-| `make_document` | aus Markdown-Kapiteln **PDF, DOCX, EPUB oder HTML** (A4/A5, Cover, Bilder, Umlaute und türkische Zeichen) |
+| `make_document` | aus Markdown-Kapiteln **PDF, DOCX, EPUB oder HTML** (A4/A5, Cover, Bilder, Umlaute und türkische Zeichen); mit `html` aus **HTML+CSS** ein PDF mit freiem Layout (Vorlagen nachbauen, per WeasyPrint, lädt nur Dateien aus dem Projekt) |
 | `video_generate` | **KI-Videoclip** aus Text (optional mit Startbild), ca. 4–10 s, über Googles Gemini-API (Modell hinter Google Flow). Standard aus, einschalten mit `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Kostet pro Sekunde Video**, ein Flow-/Google-One-Abo zählt hier nicht |
 | `media_info` | Dauer, Auflösung, Codecs |
 | `download_file` | PDFs, EPUB, Office, Audio, Video, ZIP aus dem Netz in `downloads/` laden |
 | `read_file` | liest Text, Markdown, HTML, **PDF, DOCX, EPUB**, auch lange Dateien in Abschnitten |
 | `view_image` | **sieht** Bilder, Screenshots, Karten, Layouts und Seiten gescannter PDFs an (braucht ein Modell mit Bildverständnis, z. B. Claude, GPT-4o, Gemini) |
+
+**Selbstkontrolle:** Erzeugt ein Agent ein PDF, rendert der Server es danach als Bild (Übersicht aller Seiten + Seite 1 groß) und schickt es
+ihm mit der Pflicht, jede Anforderung des Auftrags zu prüfen und Fehler zu beheben, bevor er meldet (`PCL_SELF_CHECKS`, Standard 1, 0 = aus).
 
 **Eigene Dateien** (Videos zum Bearbeiten, PDFs, Bilder, Layouts, Texte) lädst du in „📁 Dateien dieses Projekts“ hoch oder schickst sie
 direkt im **💬 Chat** mit einem Agenten mit (📎-Knopf, hineinziehen oder Bild einfügen, mehrere auf einmal). Sie landen in
@@ -182,7 +185,7 @@ mit **▶ Testen** prüfst du Key und Modell sofort. So setzt du das passende Mo
 | OpenRouter | `OPENROUTER_API_KEY` | ein Key für hunderte Modelle (Claude, GPT, Gemini, DeepSeek, Qwen, Llama …) |
 | Groq, Gemini, DeepSeek, Qwen | `GROQ_API_KEY`, `GEMINI_API_KEY`, … | mehrere Keys mit Komma = Rotation bei Limit |
 | Ollama | – | lokale Modelle auf dem Pi |
-| Claude (CLI, dein Abo) / ChatGPT (Codex-CLI, dein Abo) | – | fest eingebaut: `claude -p --tools "" --no-session-persistence` (Claude ohne eigene Werkzeuge, nur Text) bzw. `codex exec --skip-git-repo-check --ephemeral -` (Codex läuft von sich aus im Nur-Lesen-Sandkasten), Modell im Dropdown (Claude: sonnet/opus/haiku); braucht `PCL_ALLOW_CLI=1` und das angemeldete Programm auf dem Pi |
+| Claude (CLI, dein Abo) / ChatGPT (Codex-CLI, dein Abo) | – | fest eingebaut: `claude -p --tools "" --strict-mcp-config --no-session-persistence` (Claude ohne eigene Werkzeuge und ohne Konnektoren, nur Text; die Arbeitsanweisung ersetzt den Claude-Code-Systemprompt) bzw. `codex exec --skip-git-repo-check --ephemeral -` (Codex läuft von sich aus im Nur-Lesen-Sandkasten), Modell im Dropdown (Claude: sonnet/opus/haiku); braucht `PCL_ALLOW_CLI=1` und das angemeldete Programm auf dem Pi |
 | CLI-Agent | – | Befehl, der den Prompt von stdin liest, z. B. `claude -p --model sonnet`; braucht `PCL_ALLOW_CLI=1` |
 
 **Wichtig:** Ein Web-Login (OAuth, „Abo“) von ChatGPT oder Claude lässt sich nicht sauber als API nutzen, das Abgreifen von

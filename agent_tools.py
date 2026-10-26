@@ -95,7 +95,11 @@ TOOLS = {
     "speak": ("media", '{"tool": "speak", "text": "Sprechertext", "lang": "de", "name": "sprecher1"}  Text zu gesprochener Audiodatei (output/audio/). lang: de, en, tr ...'),
     "make_document": ("media", """{"tool": "make_document", "format": "pdf", "title": "Buchtitel", "author": "Name", "sources": ["kapitel1.md", "kapitel2.md"], "name": "buch"}
      Erzeugt aus Markdown-Dateien ein fertiges Dokument in output/. format: pdf | docx | epub | html. Optional: content (Markdown direkt statt sources),
-     cover (Bildpfad, nur epub), page A4|A5 (pdf). Markdown: # Kapitel, ## Abschnitt, ### Unterabschnitt, - Listen, 1. nummeriert, > Zitat, **fett**, *kursiv*, ![Text](assets/bild.png)"""),
+     cover (Bildpfad, nur epub), page A4|A5 (pdf). Markdown: # Kapitel, ## Abschnitt, ### Unterabschnitt, - Listen, 1. nummeriert, > Zitat, **fett**, *kursiv*, ![Text](assets/bild.png)""
+     Freies Layout (Vorlage nachbauen: Farben, Spalten, Kästen, Reiter): {"tool": "make_document", "html": "<!doctype html><html><head><style>
+     @page { size: A4; margin: 0 } ...</style></head><body>...</body></html>", "name": "Spiel_A"} -> PDF in output/ (das HTML wird als
+     work/<name>.html gespeichert und kann später als "html": "work/spiel_a.html" wieder gerendert werden). Bilder im HTML mit Pfaden
+     relativ zu work/ (z. B. ../input/karte.png), Internetadressen werden nicht geladen."""),
 }
 
 
@@ -676,9 +680,12 @@ def read_file(root, path, offset=0):
             t = ocr_image(f)
         except Exception as e:
             raise ToolError(f"OCR fehlgeschlagen ({type(e).__name__})")
-        return (f"{path}: Text aus dem Bild (OCR, Fehler moeglich):\n{t[:READ_CHARS]}" if t
-                else f"{path}: Bild ohne erkennbaren Text ({f.stat().st_size // 1024} KB).")
-    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".zip"):
+        return (f"{path}: NUR der Text aus dem Bild (OCR, Fehler moeglich). Den Bildinhalt (Karte, Layout, Foto) siehst du mit "
+                f"view_image:\n{t[:READ_CHARS]}" if t
+                else f"{path}: Bild ohne erkennbaren Text ({f.stat().st_size // 1024} KB). Den Inhalt siehst du mit view_image.")
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+        return f"{path}: Bild ({f.stat().st_size // 1024} KB). Ansehen mit view_image, read_file liest keine Bilder."
+    if ext in (".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".zip"):
         return f"{path}: Mediendatei ({f.stat().st_size // 1024} KB). Fuer Videos/Audio: media_info."
     cap = int(_env("PCL_MAX_READ_MB", "200")) * 1_000_000 if ext == ".pdf" else 30_000_000  # Scans sind oft sehr gross
     raw = f.read_bytes()[:cap]
@@ -750,15 +757,25 @@ def ocr_image(path):
 
 def ocr_pdf(data, max_pages=None):
     """Gescannte PDF seitenweise per pdftoppm + tesseract lesen (langsam auf dem Pi, daher Seitenlimit PCL_OCR_MAX_PAGES)."""
-    if not (shutil.which("tesseract") and shutil.which("pdftoppm")):
+    if not shutil.which("tesseract"):
         return ""
     max_pages = max_pages or int(_env("PCL_OCR_MAX_PAGES", "25"))
     parts, total = [], 0
     with tempfile.TemporaryDirectory(prefix="pcl-ocr-") as td:
         pdf = Path(td) / "in.pdf"
         pdf.write_bytes(data)
-        subprocess.run(["pdftoppm", "-r", "200", "-gray", "-l", str(max_pages), "-png", str(pdf), str(Path(td) / "p")],
-                       capture_output=True, timeout=600)
+        if shutil.which("pdftoppm"):
+            subprocess.run(["pdftoppm", "-r", "200", "-gray", "-l", str(max_pages), "-png", str(pdf), str(Path(td) / "p")],
+                           capture_output=True, timeout=600)
+        else:  # ohne poppler: die eingebetteten Scanbilder der Seiten nehmen
+            try:
+                from pypdf import PdfReader
+                for i, pg in enumerate(list(PdfReader(str(pdf)).pages)[:max_pages], 1):
+                    imgs = list(pg.images)
+                    if imgs:
+                        (Path(td) / f"p-{i:04d}.png").write_bytes(max(imgs, key=lambda x: len(x.data)).data)
+            except Exception:
+                pass
         pages = sorted(Path(td).glob("p-*.png"))
         total = len(pages)
         for i, img in enumerate(pages, 1):
@@ -839,6 +856,29 @@ def pdf_page_images(path, first=1, count=4):
     except Exception:
         pass
     return out
+
+
+def pdf_overview(path, max_pages=16, cols=4):
+    """Alle Seiten (bis max_pages) verkleinert auf einem Uebersichtsbild, fuer die Selbstkontrolle. (Bild, Seitenzahl) oder (None, 0)."""
+    if not shutil.which("pdftoppm"):
+        return None, 0
+    try:
+        from PIL import Image
+        with tempfile.TemporaryDirectory(prefix="pcl-pdfov-") as td:
+            subprocess.run(["pdftoppm", "-r", "45", "-l", str(max_pages), "-jpeg", str(path), str(Path(td) / "p")],
+                           capture_output=True, timeout=300)
+            pages = sorted(Path(td).glob("p-*.jpg"), key=lambda x: int(x.stem.rsplit("-", 1)[1]))
+            if not pages:
+                return None, 0
+            ims = [Image.open(x).convert("RGB") for x in pages]
+            w, h = max(i.width for i in ims), max(i.height for i in ims)
+            c = min(cols, len(ims))
+            sheet = Image.new("RGB", (c * (w + 8) + 8, ((len(ims) + c - 1) // c) * (h + 8) + 8), "#888888")
+            for n, im in enumerate(ims):
+                sheet.paste(im, (8 + (n % c) * (w + 8), 8 + (n // c) * (h + 8)))
+            return _pil_b64(sheet), len(ims)
+    except Exception:
+        return None, 0
 
 
 def view_image(root, path, page=None):
@@ -1380,7 +1420,66 @@ def _md_sources(root, call):
     return "\n\n".join(_inside_existing(root, s).read_text(encoding="utf-8", errors="replace") for s in srcs[:100])
 
 
+def _html_pdf(root, call):
+    """HTML + CSS -> PDF per WeasyPrint. Nachladen nur aus dem Projektordner (keine Netz-, keine fremden Dateien)."""
+    if not isinstance(call.get("html"), str) or not call["html"].strip():
+        raise ToolError("html: Pfad zur HTML-Datei oder der HTML-Text selbst")
+    if "<" in call["html"]:  # HTML direkt im Aufruf -> work/<name>.html, dann rendern
+        if len(call["html"].encode()) > 2_000_000:
+            raise ToolError("html ist zu gross (max. 2 MB)")
+        work = Path(root) / "work"
+        work.mkdir(parents=True, exist_ok=True)
+        src = work / (_safe_name(call.get("name"), "dokument") + ".html")
+        src.write_text(call["html"], encoding="utf-8")
+        call = dict(call, html=_rel(root, src))
+    try:
+        f = _inside(root, call.get("html"))
+    except ValueError:
+        raise ToolError("html: Pfad liegt ausserhalb des Projektordners")
+    if not f.is_file() or f.suffix.lower() not in (".html", ".htm"):
+        raise ToolError(f"html: '{call.get('html')}' ist keine HTML-Datei im Projekt (erst mit write_file anlegen)")
+    try:
+        import weasyprint
+    except Exception:
+        raise ToolError("WeasyPrint fehlt auf dem Server (./install.sh --system). Ersatz: make_document mit Markdown (sources/content)")
+    top = Path(root).resolve()
+
+    def allowed(url):
+        if url.startswith("data:"):
+            return True
+        if url.startswith("file://"):
+            from urllib.parse import unquote, urlparse
+            p = Path(unquote(urlparse(url).path)).resolve()
+            return (p == top or top in p.parents) and p.is_file() and not any(x.startswith(".") for x in p.relative_to(top).parts)
+        return False
+
+    if hasattr(weasyprint, "URLFetcher"):  # WeasyPrint ab 66
+        class Fetcher(weasyprint.URLFetcher):
+            def fetch(self, url, headers=None):
+                if not allowed(url):
+                    raise ValueError("nur Dateien aus dem Projektordner erlaubt")
+                return super().fetch(url, headers)
+        fetch = Fetcher(allowed_protocols=("file", "data"), allow_redirects=False)
+    else:
+        def fetch(url, *a, **kw):
+            if not allowed(url):
+                raise ValueError("nur Dateien aus dem Projektordner erlaubt")
+            return weasyprint.default_url_fetcher(url, *a, **kw)
+
+    out = _out_path(root, call, _safe_name(f.stem, "dokument"), "pdf")
+    weasyprint.HTML(filename=str(f), encoding="utf-8", base_url=str(f.parent), url_fetcher=fetch).write_pdf(str(out))
+    return out
+
+
 def make_document(root, call):
+    if call.get("html"):
+        out = _html_pdf(root, call)
+        try:
+            from pypdf import PdfReader
+            n = f", {len(PdfReader(str(out)).pages)} Seiten"
+        except Exception:
+            n = ""
+        return f"Dokument erstellt: {_rel(root, out)} ({out.stat().st_size // 1024} KB{n}) aus HTML."
     fmt = str(call.get("format") or "pdf").lower()
     if fmt not in ("pdf", "docx", "epub", "html"):
         raise ToolError("format: pdf, docx, epub oder html")
