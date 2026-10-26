@@ -74,6 +74,8 @@ TOOLS = {
                                  'Das Bild haengt nur an der naechsten Runde: schreib dir sofort auf, was du siehst'),
     "copy_files": ("write_files", '{"tool": "copy_files", "from": "site", "to": "www", "move": false}  Datei oder ganzen Ordner innerhalb des Projektordners kopieren '
                                   '(move true = verschieben). Beispiel: fertige Seite von site/ nach www/ uebernehmen. Vorhandene Dateien werden ueberschrieben'),
+    "write_file": ("write_files", '{"tool": "write_file", "path": "buch/kapitel-01.md", "content": "..."}  Textdatei im Projektordner anlegen/ueberschreiben '
+                                  '(Markdown, HTML, CSS, TXT, CSV, JSON, SVG ...; nicht input/, max. 500 KB). Sofort vorhanden, z. B. danach make_document mit sources'),
     "write_code": ("code", '{"tool": "write_code", "path": "src/main.py", "content": "..."}  Quellcode-Datei im Projektordner anlegen/ueberschreiben '
                            '(jede Sprache: .py .rs .java .js .ts .go .c .cpp .sh .rb .php .lua .kt .cs .html .css ...). Danach mit check_code pruefen'),
     "check_code": ("code", '{"tool": "check_code", "path": "src/main.py"}  Syntax pruefen bzw. kompilieren OHNE das Programm auszufuehren; '
@@ -107,7 +109,9 @@ def available(perms):
     """Namen der Werkzeuge, die dieser Agent nutzen darf."""
     if not enabled():
         return []
-    return [n for n, (right, _) in TOOLS.items() if perms.get(right) and (n != "video_generate" or video_enabled())]
+    return [n for n, (right, _) in TOOLS.items()
+            if (perms.get(right) or (n == "make_document" and perms.get("write_files")))  # Dokumente bauen gehoert zum Dateien schreiben
+            and (n != "video_generate" or video_enabled())]
 
 
 def describe(names):
@@ -1773,6 +1777,8 @@ def run_tool(call, root, perms):
             out = download_file(root, call.get("url"), call.get("name"))
         elif name == "copy_files":
             out = copy_files(root, call.get("from"), call.get("to"), bool(call.get("move")))
+        elif name == "write_file":
+            out = write_code(root, call.get("path"), call.get("content"))
         elif name == "write_code":
             out = write_code(root, call.get("path"), call.get("content"))
         elif name == "check_code":

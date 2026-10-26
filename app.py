@@ -723,6 +723,16 @@ def lab_of(n):
     return _CAP_LAB.get(n, n)
 
 
+def descendants(aid, depth=0):
+    """Alle Agenten unterhalb von aid (rekursiv, Zyklen ausgeschlossen durch Tiefengrenze)."""
+    if depth > MAX_DEPTH:
+        return []
+    out = []
+    for k in q("SELECT * FROM agents WHERE parent_id=?", (aid,)):
+        out += [k] + descendants(k["id"], depth + 1)
+    return out
+
+
 def build_system(agent, project, mode, final_only=False):
     """mode: 'work' = selbst erledigen, 'plan' = Chef plant/verteilt, 'review' = Chef liest Berichte und beurteilt."""
     perms = perms_of(agent)
@@ -739,11 +749,14 @@ def build_system(agent, project, mode, final_only=False):
             kp = perms_of(k)
             can = [n for n, lab in (("write_files", "Dateien schreiben/kopieren"), ("shell", "Shell"), ("web", "Web"), ("read_files", "Dateien lesen"),
                                     ("media", "Medien"), ("code", "Programmieren"), ("delegate", "delegiert")) if kp.get(n)]
-            cli = " [CLI-Anbieter: kann nur Text/JSON liefern]" if str(k["provider"] if "provider" in k.keys() else "").endswith("cli") else ""
-            return f"{k['name']} ({k['role']}; kann: {', '.join(lab_of(n) for n in can) or 'nur Text antworten'}{cli})"
+            below = sorted({n for d in descendants(k["id"]) for n in ("write_files", "media", "web", "read_files", "code") if perms_of(d).get(n)} - set(can))
+            sub = f"; sein Team darunter kann zusaetzlich: {', '.join(lab_of(n) for n in below)}" if below else ""
+            return f"{k['name']} ({k['role']}; kann: {', '.join(lab_of(n) for n in can) or 'nur Text antworten'}{sub})"
         s.append("Dein Team (direkte Mitarbeiter, mit ihren Rechten): " + "; ".join(_cap(k) for k in kids))
-        s.append("Gib einem Mitarbeiter nur Aufgaben, die seine Rechte erlauben (z. B. Dateien nur an jemanden mit 'Dateien schreiben/kopieren'). "
-                 "Fehlt im Team das passende Recht, melde das im Ergebnis als Blocker statt die Aufgabe ins Leere zu geben.")
+        s.append("Gib einem Mitarbeiter nur Aufgaben, die seine Rechte oder die seines Teams erlauben (z. B. Dateien an jemanden, der selbst oder "
+                 "ueber sein Team 'Dateien schreiben/kopieren' kann; eine Fuehrungskraft gibt sie weiter). Alle Anbieter, auch CLI, erzeugen Dateien "
+                 "ueber die Server-Werkzeuge. Fehlt das Recht wirklich bei allen, nenne im Ergebnis genau, welchem Agenten welches Recht fehlt "
+                 "(der Besitzer hakt es im Agenten-Panel an), und liefere bis dahin den Inhalt selbst im result.")
     if agent["system_prompt"].strip():
         s.append("\nArbeitsanweisung:\n" + agent["system_prompt"].strip())
 
@@ -754,7 +767,8 @@ def build_system(agent, project, mode, final_only=False):
         fields.append('"delegate": [{"to": "Name des Mitarbeiters", "title": "...", "description": "..."}]')
         rules.append("Du bist Fuehrungskraft: Entweder verteilst du Teilaufgaben an dein Team (delegate) oder du erledigst die Aufgabe selbst "
                      "(dann kein delegate). Mitarbeiter kennen NUR ihre Aufgabe, nicht deine: gib in description alles mit, was sie brauchen "
-                     "(Ziel, Umfang, gewuenschtes Format, Qualitaetskriterien). Delegiere nur an exakt benannte Mitarbeiter.")
+                     "(Ziel, Umfang, gewuenschtes Format, Qualitaetskriterien). Delegiere nur an exakt benannte Mitarbeiter. Plane bis zum fertigen Produkt: "
+                     "lege fest, wer am Ende die verlangte Datei (PDF, DOCX, EPUB ...) in output/ erzeugt.")
     elif mode == "recruit":
         fields[0] = '"result": "deine Analyse des Auftrags und warum du genau dieses Team brauchst"'
         fields.append('"recruit": [{"name": "Kurzer eindeutiger Name", "role": "Rolle/Titel", "reports_to": "Name eines anderen Teammitglieds oder leer = direkt an dich", '
@@ -768,12 +782,15 @@ def build_system(agent, project, mode, final_only=False):
         fields[0] = '"result": "konsolidiertes Gesamtergebnis, das an deinen Vorgesetzten bzw. als Endergebnis geht"'
         rules.append("Du hast die Berichte deines Teams gelesen. Pruefe sie kritisch gegen die urspruengliche Aufgabe, fasse zusammen und entscheide.")
         if final_only:
-            rules.append("Das ist deine LETZTE Pruefrunde: gib jetzt das Gesamtergebnis ab, ohne weitere Aufgaben oder Rueckgaben.")
+            rules.append("Das ist deine LETZTE Pruefrunde: gib jetzt das Gesamtergebnis ab, ohne weitere Aufgaben oder Rueckgaben. Fehlt noch das "
+                         "verlangte Produkt (z. B. das PDF) und hast du die Werkzeuge dafuer, erstelle es jetzt selbst aus den vorhandenen Dateien.")
         else:
             if perms["judge"]:
                 fields.append('"review": [{"task_id": 12, "verdict": "approve oder revise", "feedback": "konkret, was besser werden muss"}]')
                 rules.append("Mit review gibst du unzureichende Arbeit mit konkretem Feedback zurueck (verdict revise). Was ausreicht, laesst du weg "
-                             "oder markierst approve. Gibst du nichts zurueck, ist deine Aufgabe mit dem Gesamtergebnis abgeschlossen.")
+                             "oder markierst approve. Gibst du nichts zurueck, ist deine Aufgabe mit dem Gesamtergebnis abgeschlossen. Zurueckgeben nur, "
+                             "wenn ein verlangter Teil fehlt oder etwas falsch ist, nicht fuer Stilkleinigkeiten (die notierst du). Ist der Inhalt brauchbar, "
+                             "bring ihn zum fertigen Produkt: beauftrage den Mitarbeiter, der die Datei (PDF, DOCX ...) baut, oder baue sie selbst.")
             if perms["delegate"] and kids:
                 fields.append('"delegate": [{"to": "Name", "title": "...", "description": "..."}]')
                 rules.append("delegate ist hier optional und nur fuer Folgeaufgaben gedacht.")
@@ -789,7 +806,7 @@ def build_system(agent, project, mode, final_only=False):
         rules.append("publish: true bittet den Besitzer, die fertige Webseite lokal zu veroeffentlichen; er muss es freigeben. "
                      "Veroeffentlicht wird NUR der Ordner www/ des Projekts: lege die fertige Seite dort ab (www/index.html, dazu CSS, Bilder und Skripte "
                      "in www/ mit relativen Pfaden). Nur setzen, wenn die Seite fertig ist und www/index.html existiert. Ist sie schon online, aktualisieren sich Aenderungen automatisch.")
-    tool_names = [] if final_only else tools.available(perms)
+    tool_names = tools.available(perms)  # auch in der letzten Runde: dort darf der Chef das Produkt noch selbst bauen
     if tool_names:
         s.append(
             "\nWERKZEUGE (du darfst sie nutzen):\n" + tools.describe(tool_names) + "\n"
@@ -812,6 +829,9 @@ def build_system(agent, project, mode, final_only=False):
                if "view_image" in tool_names else "") +
             "- Lange Texte (Buchkapitel, Berichte) schreibst du NICHT komplett in 'result', sondern mit write_file als Markdown-Dateien (z. B. buch/kapitel1.md) "
             "und nennst nur Pfade und eine Kurzfassung. make_document baut daraus PDF, DOCX oder EPUB.\n"
+            + ("- Dateien entstehen NUR ueber diese Werkzeuge (write_file, make_document ...), der Server legt sie im Projektordner an; das gilt fuer "
+               "jeden Anbieter, auch wenn du ueber eine CLI laeufst. Ein verlangtes Produkt (PDF, DOCX, Markdown) erstellst du wirklich, statt es nur "
+               "zu planen, und pruefst danach mit list_files, dass es in output/ liegt.\n" if "write_file" in tool_names else "") +
             "- Du fuehrst KEINE echten Geschaefte aus (keine Kaeufe, Orders, Zahlungen, E-Mails): dafuer hast du keine Werkzeuge. "
             "Liefere Entwuerfe, Analysen und Empfehlungen.")
     s.append("\nARBEITSWEISE: Sieh dir zuerst alle Eingaben an (Bilder als Bilder). Rueckfragen nur, wenn ohne Antwort wirklich nichts geht, "
@@ -928,18 +948,32 @@ RUN_MAX_IMAGES = int(os.environ.get("PCL_RUN_MAX_IMAGES", "8"))  # Bilder je Auf
 SELF_CHECKS = int(os.environ.get("PCL_SELF_CHECKS", "1"))  # wie oft erzeugte PDFs als Bild gegen den Auftrag geprueft werden (0 = aus)
 
 
-def run_with_tools(a, perms, messages, final_only, root, ids, images=None):
+PRODUCT_EXT = {"pdf": ".pdf", "docx": ".docx", "word": ".docx", "epub": ".epub"}
+
+
+def wanted_products(text):
+    """Dateiformate, die ein Auftrag ausdruecklich verlangt (z. B. 'als PDF')."""
+    return sorted({e for w, e in PRODUCT_EXT.items() if re.search(r"\b" + w + r"\b", text or "", re.I)})
+
+
+def products_since(root, exts, since):
+    out = Path(root) / "output"
+    return [f for f in out.rglob("*") if f.is_file() and f.suffix.lower() in exts and f.stat().st_mtime >= since] if out.is_dir() else []
+
+
+def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=None):
     """Ruft das Modell auf; fordert es Werkzeuge an, werden sie serverseitig ausgefuehrt und das Modell macht weiter.
     images: Bilder zur ersten Runde (im Auftrag genannte Dateien), view_image liefert weitere fuer die naechste Runde.
+    want: (Endungen, seit) = Produkt, das der Auftrag verlangt; fehlt es bei der Endantwort, fordert der Server es einmal ein.
     Gibt (endgueltiger_text, tokens, erzeugte_dateien) zurueck."""
     pid, aid, tid = ids
-    allowed = [] if final_only else tools.available(perms)
+    allowed = tools.available(perms)
     seen = list(images or [])[:RUN_MAX_IMAGES]  # Bilder dieses Laufs gehen in jeder Runde mit (Nr. = Position)
     text, total, hint = call_llm_img(a, messages, seen)
     if hint:
         log("tool", "Bilder: " + hint, pid, aid, tid)
     made, steps, result_idx = [], 0, []
-    checked, checks = set(), 0
+    checked, checks, pushed = set(), 0, False
     while True:
         while allowed:
             calls = parse_output(text).get("tools")
@@ -988,9 +1022,23 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None):
             if hint:
                 log("tool", "view_image: " + hint, pid, aid, tid)
             total += t2
+        # Produktpflicht: verlangt der Auftrag ein PDF/DOCX/EPUB und liegt keins in output/, wird es jetzt gebaut statt nur geplant
+        if want and not pushed and "make_document" in allowed and not products_since(root, want[0], want[1]):
+            d = parse_output(text)
+            if not d.get("delegate") and not any(str(r.get("verdict", "")).lower() == "revise" for r in (d.get("review") or []) if isinstance(r, dict)):
+                pushed = True
+                log("tool", "Produktpflicht: " + ", ".join(want[0]), pid, aid, tid)
+                messages += [{"role": "assistant", "content": text},
+                             {"role": "user", "content": "PRODUKTPFLICHT (vom Server): Der Auftrag verlangt " + ", ".join(e[1:].upper() for e in want[0])
+                              + ", in output/ liegt aber noch keins. Erstelle es JETZT mit make_document aus den vorhandenen Dateien (list_files zeigt sie). "
+                              "Offene Kleinigkeiten sind kein Grund zu warten: nenne sie im result als offene Punkte. Danach dein fertiges JSON mit dem Pfad."}]
+                steps = max(0, MAX_TOOL_STEPS - 4)
+                text, t2, hint = call_llm_img(a, messages, seen)
+                total += t2
+                continue
         # Selbstkontrolle: erzeugte PDFs rendert der Server als Bild, das Modell prueft sie gegen den Auftrag
         pdfs = [m for m in dict.fromkeys(made) if m.lower().endswith(".pdf") and m not in checked]
-        if final_only or not pdfs or checks >= SELF_CHECKS or "view_image" not in allowed:
+        if not pdfs or checks >= SELF_CHECKS or "view_image" not in allowed:
             break
         checks += 1
         checked.update(pdfs)
@@ -1130,8 +1178,13 @@ def execute_task(tid):
             messages[-1]["content"] += ("\n\nANGEHÄNGTE BILDER (vom Server mitgeschickt): "
                                         + ", ".join(f"Nr. {i} = {p}" for i, (p, _) in enumerate(imgs, 1))
                                         + ". Weitere Bilder oder Seiten gescannter PDFs: Werkzeug view_image.")
+        top = t
+        while top["parent_task_id"]:
+            top = q1("SELECT * FROM tasks WHERE id=?", (top["parent_task_id"],)) or {**dict(top), "parent_task_id": None}
+        exts = wanted_products(t["title"] + "\n" + t["description"])
+        want = (exts, top["created"]) if exts and (not t["parent_task_id"] or (mode == "work" and perms["media"])) else None  # Chef oben bzw. Satz/Herstellung
         text, tokens, made_files = run_with_tools(a, perms, messages, final_only, proj_dir(pid), (pid, aid, tid),
-                                                  [i for _, i in imgs])
+                                                  [i for _, i in imgs], want)
     except Exception as e:
         msg = str(e)
         if msg.startswith("MODELL_WEG: "):
@@ -1999,8 +2052,6 @@ def inspection_report(pid):
         flags = []
         if not a["provider"]:
             flags.append("KEINE KI ZUGEWIESEN")
-        elif str(a["provider"]).endswith("cli") or a["provider"] == "cli":
-            flags.append("CLI-Anbieter: liefert nur Text, eigene Dateien landen ausserhalb des Projektordners")
         if a["paused"]:
             flags.append("pausiert")
         if opn and not starts.get(a["id"]) and is_open(pid, now):

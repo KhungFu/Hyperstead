@@ -30,7 +30,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 
 ## Werkzeuge der Agenten
 - `run_with_tools` (app.py): Modell antwortet mit `{"tools":[...]}` → Server führt `agent_tools.run_tool` aus → nächste Runde, max. `MAX_TOOL_STEPS`, danach erzwungene Endantwort. Ältere Ergebnisse werden gekürzt (kleine Kontextfenster).
-- `copy_files` (Recht `write_files`): kopiert/verschiebt Datei oder Ordner im Projektordner (z. B. `site/`→`www/`), nie nach `input/`/Dotordner, Limits 500 Dateien/100 MB. Das Teamlisting im Prompt (`build_system`) nennt die Rechte jedes Mitarbeiters; `publish` per Agent verlangt `www/index.html`. CLI-Anbieter liefern nur Text/JSON (ihre eigenen Dateien landen in `workspace/.cli-run/`).
+- `copy_files` (Recht `write_files`): kopiert/verschiebt Datei oder Ordner im Projektordner (z. B. `site/`→`www/`), nie nach `input/`/Dotordner, Limits 500 Dateien/100 MB. Das Teamlisting im Prompt (`build_system`) nennt die Rechte jedes Mitarbeiters; `publish` per Agent verlangt `www/index.html`. CLI-Anbieter haben keine eigenen Werkzeuge (Arbeitsordner `workspace/.cli-run/`), Dateien entstehen über die Server-Werkzeuge.
 - Programmieren (Recht `code`, Standard aus): `write_code` schreibt Quelltext jeder Sprache (nicht `input/`/Dotdateien, max. 500 KB), `check_code` prüft ohne Ausführung: Python per `compile()`, JSON intern, sonst `CODE_CHECKERS` (node --check, rustc --emit=metadata, javac -proc:none, gcc/g++ -fsyntax-only, gofmt -e, bash -n, ruby -c, php -l, luac -p, tsc, kotlinc, mcs, swiftc) mit minimaler Umgebung (keine Keys) und `PCL_CODE_TIMEOUT`. Fehlt der Compiler, meldet es das. `perl -c`/ghc bewusst nicht (führen Code aus). Ausführen nur über Shell mit Freigabe.
 - Rechte `web`, `images`, `read_files` (Standard an) + `PCL_ALLOW_WEB=0` global. Webinhalte sind Daten, nie Anweisungen.
 - Dateien: `/files/<pid>/<token>/<pfad>` (Link-Token per HMAC, ohne Cookie, weil Sandbox-Seiten Bilder nachladen), immer mit CSP `sandbox`.
@@ -51,6 +51,10 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   `loadTasks` zeichnet nur bei Änderungen neu und nie während einer Markierung.
 - Selbstkontrolle: `run_with_tools` rendert neue PDFs aus `made` (`tools.pdf_overview` = alle Seiten auf einem Bild + Seite 1) und erzwingt eine
   Runde „SELBSTKONTROLLE“ (`PCL_SELF_CHECKS`, Standard 1). `build_system` hat den Absatz ARBEITSWEISE (max. 2 Rückfragen, sonst ANNAHME, nachrechnen).
+- Dateien in Aufgaben: Werkzeug `write_file` (Recht `write_files`, intern `write_code`, nicht `input/`/Dotpfade) schreibt SOFORT im Werkzeug-Schritt,
+  damit `make_document` im selben Lauf daraus bauen kann (die Aktion `write_file` im End-JSON greift erst nach dem Lauf). `make_document` gibt es mit
+  `media` ODER `write_files`. Teamlisting zeigt auch die Rechte des Teams darunter (`descendants`). Keine Hinweise mehr „CLI liefert nur Text“:
+  CLI-Agenten erzeugen Dateien genauso über die Server-Werkzeuge (der Hinweis hatte Chefs zum Blockieren gebracht).
 - `make_document` mit `html` (Pfad oder HTML-Text → `work/<name>.html`): WeasyPrint (optional, `install.sh` installiert es, braucht libpango),
   eigener URL-Fetcher erlaubt nur `data:` und Dateien im Projektordner ohne Dotpfade (kein Netz, kein SSRF). Chromium-Rückfall bewusst nicht.
 - `claude_cli`: läuft mit `--strict-mcp-config` (keine Konnektoren wie Gmail/Drive aus dem Abo) und bekommt die System-Nachricht als

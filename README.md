@@ -103,6 +103,7 @@ Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem P
 |---|---|
 | `video_edit` | Video schneiden (`trim`), zusammenfügen (`concat`), **Diashow-Animation mit Zoom** aus Bildern (`slideshow`, optional mit Ton), Text/Untertitel/Logo einblenden, Ton ersetzen/mischen, Tempo ändern, in GIF/WebM/MP3 umwandeln, Standbild ziehen |
 | `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen) |
+| `write_file` | mit dem Recht **Dateien schreiben**: legt Kapitel, HTML, CSV usw. sofort an, damit im selben Auftrag daraus ein PDF/DOCX/EPUB wird |
 | `make_document` | aus Markdown-Kapiteln **PDF, DOCX, EPUB oder HTML** (A4/A5, Cover, Bilder, Umlaute und türkische Zeichen); mit `html` aus **HTML+CSS** ein PDF mit freiem Layout (Vorlagen nachbauen, per WeasyPrint, lädt nur Dateien aus dem Projekt) |
 | `video_generate` | **KI-Videoclip** aus Text (optional mit Startbild), ca. 4–10 s, über Googles Gemini-API (Modell hinter Google Flow). Standard aus, einschalten mit `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Kostet pro Sekunde Video**, ein Flow-/Google-One-Abo zählt hier nicht |
 | `media_info` | Dauer, Auflösung, Codecs |
