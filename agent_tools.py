@@ -57,6 +57,9 @@ TOOLS = {
     "web_search": ("web", '{"tool": "web_search", "query": "Suchbegriff"}  Websuche: aktuelle Infos, Gesetze, Preise, Wettbewerb, Quellen. '
                           'PDFs/Dokumente finden: Suchbegriff + " filetype:pdf"'),
     "fetch_url": ("web", '{"tool": "fetch_url", "url": "https://..."}  Webseite oder PDF (Textinhalt) lesen'),
+    "browse_page": ("web", '{"tool": "browse_page", "url": "https://...", "screenshot": true}  Seite in einem ECHTEN Browser oeffnen (JavaScript laeuft): '
+                           'fuer Seiten, bei denen fetch_url leer/unvollstaendig ist (Web-Apps, Shops, Karten). screenshot true = du siehst die Seite als Bild; '
+                           'optional wait (Sekunden, max. 10), save "name" = Screenshot in assets/screenshots/ ablegen. Langsamer als fetch_url'),
     "download_file": ("web", '{"tool": "download_file", "url": "https://.../x.pdf", "name": "kurzname"}  Datei (PDF, EPUB, Office, Audio, Video, ZIP) '
                              'in downloads/ speichern. Urheberrecht/Lizenz beachten, nur fuer erlaubte Nutzung'),
     "image_search": ("images", '{"tool": "image_search", "query": "mountain lake sunrise"}  frei nutzbare Fotos suchen (Lizenz/Urheber werden mitgeliefert)'),
@@ -80,6 +83,10 @@ TOOLS = {
                            '(jede Sprache: .py .rs .java .js .ts .go .c .cpp .sh .rb .php .lua .kt .cs .html .css ...). Danach mit check_code pruefen'),
     "check_code": ("code", '{"tool": "check_code", "path": "src/main.py"}  Syntax pruefen bzw. kompilieren OHNE das Programm auszufuehren; '
                            'liefert Fehler mit Zeilennummer. Bei Fehlern korrigieren und erneut pruefen'),
+    "run_code": ("run_code", '{"tool": "run_code", "path": "src/analyse.py"}  Skript AUSFUEHREN (Python, JavaScript, Bash, Ruby, PHP, Lua) '
+                             'in einer abgeschotteten Umgebung: KEIN Internet, Zeit-/RAM-Limit, Projektdateien nur lesbar unter /projekt (z. B. /projekt/input/daten.csv). '
+                             'Was das Skript in sein aktuelles Verzeichnis schreibt, landet danach in output/run/<zeit>/. '
+                             'Statt path auch "code": "print(1+1)", "lang": "python". Optional args [..], stdin. Nur Standardbibliothek/Systempakete'),
     "media_info": ("media", '{"tool": "media_info", "path": "input/video.mp4"}  Dauer, Aufloesung, Codecs einer Video-/Audio-/Bilddatei'),
     "video_edit": ("media", """{"tool": "video_edit", "op": "...", ...}  Video/Audio bearbeiten (ffmpeg). Pfade relativ zum Projektordner, Ergebnis landet in output/.
      op=trim: input, start, end (Sekunden oder MM:SS)
@@ -111,7 +118,9 @@ def available(perms):
         return []
     return [n for n, (right, _) in TOOLS.items()
             if (perms.get(right) or (n == "make_document" and perms.get("write_files")))  # Dokumente bauen gehoert zum Dateien schreiben
-            and (n != "video_generate" or video_enabled())]
+            and (n != "video_generate" or video_enabled())
+            and (n != "browse_page" or browser_enabled())
+            and (n != "run_code" or run_enabled())]
 
 
 def describe(names):
@@ -263,6 +272,129 @@ def fetch_url(url):
         title, body = "", text
     head = f"Quelle: {url}" + (f"\nTitel: {title}" if title else "") + ("\n(Seite war sehr gross, nur der Anfang wurde gelesen)" if cut else "")
     return head + "\n\n" + _clip(body, PAGE_CHARS)
+
+
+# ------------------------------------------------------------- Echter Browser (Recht "web")
+BROWSER_TIMEOUT = int(_env("PCL_BROWSER_TIMEOUT", "30"))
+_browser_lock = __import__("threading").Lock()  # Chromium braucht viel RAM: auf dem Pi immer nur eine Instanz
+
+
+def browser_enabled():
+    """browse_page gibt es nur, wenn Playwright installiert ist (install.sh --browser) und PCL_BROWSER nicht 0 ist."""
+    if _env("PCL_BROWSER", "1") == "0":
+        return False
+    import importlib.util
+    return importlib.util.find_spec("playwright") is not None
+
+
+def _browser_exe():
+    """Eigener Pfad (PCL_BROWSER_PATH) oder None = Chromium von Playwright."""
+    p = _env("PCL_BROWSER_PATH")
+    return p if p and Path(p).exists() else None
+
+
+def browse_page(root, url, screenshot=False, wait=0, save=None):
+    """Oeffnet eine Seite in Chromium (JavaScript an), gibt (Text, [Bild]) zurueck.
+    Jede Anfrage der Seite (auch Skripte, Frames, XHR, WebSocket) muss auf eine oeffentliche Adresse gehen."""
+    url = str(url or "").strip()
+    u = urlparse(url)
+    if u.scheme not in ("http", "https"):
+        raise ToolError("Nur http(s)-Adressen sind erlaubt")
+    check_public(u.hostname)
+    from playwright.sync_api import Error as PwError, sync_playwright
+    ok_hosts, blocked = {}, set()
+
+    def public(link):
+        p = urlparse(link)
+        if p.scheme in ("data", "blob", "about"):
+            return True
+        if p.scheme not in ("http", "https", "ws", "wss"):
+            return False
+        h = p.hostname or ""
+        if h not in ok_hosts:
+            try:
+                check_public(h)
+                ok_hosts[h] = True
+            except ToolError:
+                ok_hosts[h] = False
+        if not ok_hosts[h]:
+            blocked.add(h)
+        return ok_hosts[h]
+
+    def route(r):
+        if r.request.resource_type in ("media", "font") or not public(r.request.url):
+            return r.abort()
+        return r.continue_()
+
+    def ws_route(ws):
+        if public(ws.url):
+            ws.connect_to_server()
+        else:
+            ws.close()
+
+    wait = min(max(float(wait or 0), 0), 10)
+    if not _browser_lock.acquire(timeout=BROWSER_TIMEOUT * 2):
+        raise ToolError("Der Browser ist gerade belegt, gleich noch einmal versuchen")
+    try:
+        with sync_playwright() as pw:
+            # WebRTC darf nicht am Proxy/Routing vorbei ins LAN, Downloads gibt es nicht
+            b = pw.chromium.launch(executable_path=_browser_exe(),
+                                   args=["--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-dev-shm-usage"])
+            try:
+                ctx = b.new_context(user_agent=UA.replace("compatible;", "X11; Linux aarch64; compatible;"),
+                                    viewport={"width": 1280, "height": 900}, accept_downloads=False,
+                                    service_workers="block", java_script_enabled=True, locale="de-DE")
+                ctx.route("**/*", route)
+                if hasattr(ctx, "route_web_socket"):
+                    ctx.route_web_socket("**/*", ws_route)
+                ctx.set_default_timeout(BROWSER_TIMEOUT * 1000)
+                page = ctx.new_page()
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=BROWSER_TIMEOUT * 1000)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=min(8000, BROWSER_TIMEOUT * 1000))
+                    except PwError:
+                        pass  # Seiten mit Dauer-Verbindungen werden nie "idle"
+                    if wait:
+                        page.wait_for_timeout(wait * 1000)
+                except PwError as e:
+                    raise ToolError("Seite liess sich nicht laden: " + str(e).splitlines()[0][:200])
+                final = page.url
+                if not public(final):
+                    raise ToolError("Die Seite leitet auf eine lokale/private Adresse um")
+                title = page.title()
+                body = page.inner_text("body") if page.query_selector("body") else ""
+                links = page.eval_on_selector_all(
+                    "a[href]", "els => els.slice(0, 400).map(a => [a.innerText.trim().slice(0, 80), a.href])")
+                shot = page.screenshot(type="jpeg", quality=70) if screenshot or save else None
+            finally:
+                b.close()
+    finally:
+        _browser_lock.release()
+    body = re.sub(r"\n\s*\n+", "\n\n", body or "").strip()
+    seen_l, rows = set(), []
+    for t, h in links:
+        if t and h.startswith("http") and h not in seen_l:
+            seen_l.add(h)
+            rows.append(f"- {t} -> {h}")
+        if len(rows) >= 25:
+            break
+    out = f"Quelle: {final} (im Browser geoeffnet, JavaScript an)" + (f"\nTitel: {title}" if title else "")
+    if blocked:
+        out += "\n(Blockiert, weil lokal/privat: " + ", ".join(sorted(blocked))[:200] + ")"
+    out += "\n\n" + (_clip(body, PAGE_CHARS) or "(kein sichtbarer Text)")
+    if rows:
+        out += "\n\nLinks:\n" + "\n".join(rows)
+    imgs = []
+    if shot:
+        imgs = [("image/jpeg", base64.b64encode(shot).decode())]
+        if save:
+            name = re.sub(r"[^\w-]+", "-", str(save)).strip("-")[:60] or "seite"
+            d = Path(root) / "assets" / "screenshots"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{name}.jpg").write_bytes(shot)
+            out += f"\n\nScreenshot gespeichert: assets/screenshots/{name}.jpg"
+    return out, imgs
 
 
 def image_search(query, n=6):
@@ -655,6 +787,130 @@ def check_code(root, path):
     if r.returncode == 0:
         return f"{lang}: {path} OK." + (f"\nHinweise:\n{out[:3000]}" if out else "")
     return f"{lang}: FEHLER (Code {r.returncode}):\n{out[:4000] or '(keine Ausgabe)'}"
+
+
+# ------------------------------------------------- Code ausfuehren (Recht "run_code", isoliert)
+RUN_TIMEOUT = int(_env("PCL_RUN_TIMEOUT", "60"))
+RUN_MEM_MB = int(_env("PCL_RUN_MEM_MB", "1024"))
+RUN_OUT_MAX_FILES = 50
+RUN_OUT_MAX_BYTES = 50 * 1024 * 1024
+# Endung -> (Sprache, Befehl). Laeuft mit den Programmen des Systems (/usr), ohne venv und ohne Keys.
+RUNNERS = {
+    ".py": ("Python", ["python3", "-I", "{f}"]), ".js": ("JavaScript", ["node", "{f}"]), ".mjs": ("JavaScript", ["node", "{f}"]),
+    ".sh": ("Shell", ["bash", "{f}"]), ".rb": ("Ruby", ["ruby", "{f}"]), ".php": ("PHP", ["php", "{f}"]),
+    ".lua": ("Lua", ["lua", "{f}"]),
+}
+_LANG_EXT = {"python": ".py", "py": ".py", "javascript": ".js", "js": ".js", "node": ".js", "bash": ".sh", "sh": ".sh",
+             "shell": ".sh", "ruby": ".rb", "php": ".php", "lua": ".lua"}
+
+
+def run_enabled():
+    """run_code braucht bubblewrap (bwrap) fuer die Isolierung; PCL_ALLOW_RUN=0 sperrt es global."""
+    return _env("PCL_ALLOW_RUN", "1") != "0" and bool(shutil.which("bwrap"))
+
+
+def _sandbox_cmd(proj, work):
+    """bwrap-Aufruf: nur /usr + noetige /etc-Teile lesbar, Projekt schreibgeschuetzt unter /projekt, /arbeit beschreibbar,
+    kein Netz (eigener Netz-Namensraum), eigene PIDs, nichts vom Server (.env, Datenbank, Home) sichtbar."""
+    cmd = ["bwrap", "--ro-bind", "/usr", "/usr"]
+    for d in ("bin", "lib", "lib64", "lib32", "sbin"):
+        p = Path("/" + d)
+        if p.is_symlink():
+            cmd += ["--symlink", os.readlink(p), "/" + d]
+        elif p.is_dir():
+            cmd += ["--ro-bind", str(p), "/" + d]
+    for e in ("alternatives", "ssl", "ld.so.cache", "ld.so.conf", "ld.so.conf.d", "localtime", "mime.types", "nsswitch.conf"):
+        cmd += ["--ro-bind-try", "/etc/" + e, "/etc/" + e]
+    cmd += ["--ro-bind", str(proj), "/projekt", "--bind", str(work), "/arbeit", "--chdir", "/arbeit",
+            "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+            "--unshare-all", "--die-with-parent", "--new-session", "--hostname", "sandbox",
+            "--clearenv", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "HOME", "/arbeit",
+            "--setenv", "LANG", "C.UTF-8", "--setenv", "PYTHONDONTWRITEBYTECODE", "1", "--setenv", "MPLBACKEND", "Agg", "--"]
+    return cmd
+
+
+def _limits():
+    import resource
+    mem = RUN_MEM_MB * 1024 * 1024
+    for lim, val in ((resource.RLIMIT_AS, mem), (resource.RLIMIT_CPU, RUN_TIMEOUT + 5),
+                     (resource.RLIMIT_FSIZE, RUN_OUT_MAX_BYTES), (resource.RLIMIT_CORE, 0)):
+        try:
+            resource.setrlimit(lim, (val, val))
+        except (ValueError, OSError):
+            pass
+
+
+def run_code(root, path=None, code=None, lang=None, args=None, stdin=None):
+    """Fuehrt ein Skript isoliert aus: kein Netz, kein Zugriff ausser dem Projekt (nur lesen), Zeit-/RAM-Grenzen.
+    Neue Dateien aus dem Arbeitsordner landen in output/run/<zeit>/."""
+    if not run_enabled():
+        raise ToolError("Code ausfuehren ist auf diesem Server nicht eingerichtet (bubblewrap fehlt oder PCL_ALLOW_RUN=0)")
+    root = Path(root).resolve()
+    if code:
+        ext = _LANG_EXT.get(str(lang or "python").lower().strip())
+        if not ext:
+            raise ToolError("lang: python, javascript, bash, ruby, php oder lua")
+        data = str(code).encode("utf-8")
+        if len(data) > CODE_MAX_BYTES:
+            raise ToolError("Code zu gross")
+        rel = None
+    else:
+        f = _inside_existing(root, path)
+        if any(x.startswith(".") for x in f.relative_to(root).parts):
+            raise ToolError("Versteckte Dateien sind nicht erlaubt")
+        ext, rel = f.suffix.lower(), f.relative_to(root).as_posix()
+    spec = RUNNERS.get(ext)
+    if not spec:
+        return f"Ausfuehren geht fuer: {' '.join(sorted(RUNNERS))}. Andere Sprachen nur mit check_code pruefen."
+    lng, prog = spec
+    if not shutil.which(prog[0], path="/usr/local/bin:/usr/bin:/bin"):  # die Sandbox sieht nur /usr
+        return f"{lng}: '{prog[0]}' ist auf dem Server nicht installiert (in /usr/bin)."
+    argv = [str(x)[:500] for x in (args if isinstance(args, list) else [])][:20]
+    with tempfile.TemporaryDirectory(prefix="pcl-run-") as work:
+        w = Path(work)
+        if rel is None:
+            (w / ("main" + ext)).write_bytes(data)
+            target = "/arbeit/main" + ext
+        else:
+            target = "/projekt/" + rel
+        cmd = _sandbox_cmd(root, w) + [a.replace("{f}", target) for a in prog] + argv
+        t0 = time.time()
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             preexec_fn=_limits, start_new_session=True)
+        try:
+            outb, _ = p.communicate(input=str(stdin or "").encode()[:1_000_000], timeout=RUN_TIMEOUT)
+            timeout = False
+        except subprocess.TimeoutExpired:
+            import signal
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            outb, _ = p.communicate()
+            timeout = True
+        secs = time.time() - t0
+        text = (outb or b"").decode("utf-8", "replace").replace("/arbeit/", "").replace("/projekt/", "")
+        # Ergebnisdateien uebernehmen (keine Symlinks/Dotdateien, Limits)
+        kept, size = [], 0
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        for f in sorted(w.rglob("*")):
+            r = f.relative_to(w)
+            if f.is_symlink() or not f.is_file() or any(x.startswith(".") for x in r.parts) or r.as_posix() == "main" + ext:
+                continue
+            size += f.stat().st_size
+            if len(kept) >= RUN_OUT_MAX_FILES or size > RUN_OUT_MAX_BYTES:
+                break
+            dst = root / "output" / "run" / stamp / r
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(f, dst)
+            kept.append(f"output/run/{stamp}/{r.as_posix()}")
+    head = f"{lng}: " + (f"nach {RUN_TIMEOUT} s ABGEBROCHEN (Zeitlimit)" if timeout else f"Exit-Code {p.returncode}") + f", {secs:.1f} s"
+    if p.returncode in (-9, 137) and not timeout:
+        head += " (vermutlich RAM-Limit erreicht)"
+    out = head + "\n--- Ausgabe ---\n" + (_clip(text.strip(), 6000) or "(keine Ausgabe)")
+    if kept:
+        out += "\n--- Neue Dateien ---\n" + "\n".join(kept)
+    return out
 
 
 def list_files(root, path=""):
@@ -1783,6 +2039,10 @@ def run_tool(call, root, perms):
             out = write_code(root, call.get("path"), call.get("content"))
         elif name == "check_code":
             out = check_code(root, call.get("path"))
+        elif name == "browse_page":  # Screenshot haengt app.run_with_tools an
+            out = browse_page(root, call.get("url"), call.get("screenshot"), call.get("wait"), call.get("save"))[0]
+        elif name == "run_code":
+            out = run_code(root, call.get("path"), call.get("code"), call.get("lang"), call.get("args"), call.get("stdin"))
         elif name == "media_info":
             out = media_info(root, call.get("path"))
         elif name == "video_edit":
@@ -1795,7 +2055,7 @@ def run_tool(call, root, perms):
             out = read_file(root, call.get("path"), call.get("offset"))
         made = None
         m = re.search(r"((?:assets|downloads|output)/[\w./-]+?)(?:\s|\(|$|\.\s)", out) if name in (
-            "image_save", "image_generate", "video_generate", "download_file", "video_edit", "speak", "make_document") else None
+            "image_save", "image_generate", "video_generate", "download_file", "video_edit", "speak", "make_document", "run_code", "browse_page") else None
         if m:
             made = m.group(1)
         return out, made

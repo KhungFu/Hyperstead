@@ -166,7 +166,7 @@ PROVIDERS = {
 # web        = Websuche + Webseiten lesen   images = Bilder suchen/speichern/erzeugen   read_files = Projektdateien lesen
 # recruit    = stellt anhand des Auftrags selbst ein Team zusammen (legt Mitarbeiter ohne KI an; der Besitzer weist KI/Modell zu)
 DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False,
-                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False, "connect": False}
+                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False, "connect": False, "run_code": False}
 # code       = Programmieren: Quellcode jeder Sprache schreiben und pruefen/kompilieren (ohne Ausfuehrung)
 # publish    = darf die Webseite (index.html im Projektordner) zur Veroeffentlichung vorschlagen; der Besitzer gibt frei
 RECRUIT_MAX = 20                                                    # Mitarbeiter je Einstellungsrunde
@@ -784,7 +784,7 @@ def team_of(agent):
     return q("SELECT id, name, role FROM agents WHERE parent_id=? ORDER BY id", (agent["id"],))
 
 
-_CAP_LAB = {"write_files": "Dateien schreiben/kopieren", "shell": "Shell", "web": "Web", "read_files": "Dateien lesen", "media": "Medien", "code": "Programmieren", "delegate": "delegiert"}
+_CAP_LAB = {"write_files": "Dateien schreiben/kopieren", "shell": "Shell", "web": "Web", "read_files": "Dateien lesen", "media": "Medien", "code": "Programmieren", "run_code": "Code ausfuehren", "delegate": "delegiert"}
 
 
 def lab_of(n):
@@ -1043,8 +1043,8 @@ def build_system(agent, project, mode, final_only=False):
             k = q1("SELECT * FROM agents WHERE id=?", (k["id"],)) or k
             kp = perms_of(k)
             can = [n for n, lab in (("write_files", "Dateien schreiben/kopieren"), ("shell", "Shell"), ("web", "Web"), ("read_files", "Dateien lesen"),
-                                    ("media", "Medien"), ("code", "Programmieren"), ("delegate", "delegiert")) if kp.get(n)]
-            below = sorted({n for d in descendants(k["id"]) for n in ("write_files", "media", "web", "read_files", "code") if perms_of(d).get(n)} - set(can))
+                                    ("media", "Medien"), ("code", "Programmieren"), ("run_code", "Code ausfuehren"), ("delegate", "delegiert")) if kp.get(n)]
+            below = sorted({n for d in descendants(k["id"]) for n in ("write_files", "media", "web", "read_files", "code", "run_code") if perms_of(d).get(n)} - set(can))
             sub = f"; sein Team darunter kann zusaetzlich: {', '.join(lab_of(n) for n in below)}" if below else ""
             return f"{k['name']} ({k['role']}; kann: {', '.join(lab_of(n) for n in can) or 'nur Text antworten'}{sub})"
         s.append("Dein Team (direkte Mitarbeiter, mit ihren Rechten): " + "; ".join(_cap(k) for k in kids))
@@ -1397,14 +1397,20 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
             for c in calls[:4]:
                 if not isinstance(c, dict):
                     continue
-                if c.get("tool") == "view_image" and "view_image" in allowed:
+                if (c.get("tool") == "view_image" and "view_image" in allowed) or (
+                        c.get("tool") == "browse_page" and "browse_page" in allowed and c.get("screenshot")):
                     try:
-                        out, got = tools.view_image(root, c.get("path"), c.get("page"))
+                        if c.get("tool") == "browse_page":  # Screenshot geht wie view_image als Bild an das Modell
+                            out, got = tools.browse_page(root, c.get("url"), True, c.get("wait"), c.get("save"))
+                        else:
+                            out, got = tools.view_image(root, c.get("path"), c.get("page"))
                         got = got[:max(0, RUN_MAX_IMAGES - len(seen))]
                         if got:
                             seen += got
                             out += f" Du siehst es als Bild Nr. {len(seen) - len(got) + 1}" + (f"-{len(seen)}" if len(got) > 1 else "") + \
                                 " (Bilder hängen in jeder weiteren Runde an)."
+                        elif c.get("tool") == "browse_page":
+                            out += f"\n(Screenshot nicht angehaengt: Bild-Limit {RUN_MAX_IMAGES} erreicht)"
                         else:
                             out = f"FEHLER: Bild-Limit ({RUN_MAX_IMAGES}) erreicht. Arbeite mit den Bildern, die du schon hast."
                     except Exception as e:
@@ -2801,7 +2807,7 @@ def index():
 
 @app.get("/api/info")
 def api_info():
-    return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI,
+    return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI, "allow_run": tools.run_enabled(), "browser": tools.browser_enabled(),
                     "telegram": bool(TG_TOKEN and TG_CHATS), "workers": WORKERS})
 
 

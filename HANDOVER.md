@@ -26,6 +26,7 @@ mehrere Worker-Threads (`PCL_WORKERS`, Standard 2), Oberfläche als eine HTML-Da
 - Pro Agent: Anbieter, Modell, Arbeitsanweisung, **Rechte** (delegate, judge, auto_run, write_files, shell, web, images, read_files, media, recruit). Rechte werden **serverseitig** geprüft, nie dem Modell vertraut.
 - Unternehmens-Workflow: Modi `work` / `plan` / `review`; Rückgaben (max. 2 je Kind), Prüfrunden (max. 4), Tiefe max. 8.
 - Anbieter: OpenAI-kompatibel (Groq, Gemini, DeepSeek, Qwen, OpenAI, OpenRouter, Ollama), nativ Anthropic, `mock` (Tests ohne Key), generischer `cli` sowie feste CLI-Anbieter `claude_cli` (Claude-Abo) und `codex_cli` (ChatGPT-Abo).
+- **Echter Browser** (`browse_page`, JavaScript + Screenshot, LAN blockiert) und **Code ausführen** (`run_code`, bubblewrap ohne Netz, Zeit/RAM-Limit).
 - Werkzeuge: Websuche, Seiten lesen, Bilder suchen/erzeugen, Dateien lesen/schreiben, Video (ffmpeg ohne Shell), Sprache (Piper/espeak), Dokumente, OCR für gescannte PDFs.
 - Post/Telegram: Ergebnisse oberster Aufgaben, Antworten = Überarbeitung; nur die erlaubte Chat-ID darf steuern.
 - Chat mit einzelnen Agenten, Uploads in `input/`, Firmenvorlagen inkl. „alles lokal (Ollama)“.

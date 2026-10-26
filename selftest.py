@@ -2,7 +2,7 @@
 """PaperclipLite Selbsttest: prueft auf dem echten Rechner (Pi), ob alles funktioniert, was die Agenten brauchen.
 
     ./venv/bin/python selftest.py            # alles pruefen
-    ./venv/bin/python selftest.py web        # nur Gruppe: web | llm | telegram | media | ocr | code
+    ./venv/bin/python selftest.py web        # nur Gruppe: web | browser | run | llm | telegram | media | ocr | code
 
 Jede Zeile: OK / FEHLT (optional) / FEHLER, bei Problemen mit konkretem Hinweis. Es werden keine Keys ausgegeben.
 Die LLM-Tests senden je Anbieter eine winzige Anfrage (kostet praktisch nichts). Bilder werden nur im Temp-Ordner erzeugt.
@@ -193,7 +193,48 @@ def group_code():
             check(f"{lang} ({fn})", run, optional=True)
 
 
-GROUPS = {"web": group_web, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr, "code": group_code}
+def group_browser():
+    print("\nEchter Browser (browse_page)")
+    if not T.browser_enabled():
+        line("warn", "Browser", "aus (optional: ./install.sh --browser)")
+        return
+    with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
+        check("Seite im Browser oeffnen", lambda: (lambda r: f"{len(r[1])} Screenshot, " + r[0].splitlines()[1][:50])(
+            T.browse_page(td, "https://example.com", screenshot=True)),
+            hint="Chromium fehlt? ./venv/bin/python -m playwright install chromium (oder PCL_BROWSER_PATH)")
+
+    def blocked():
+        try:
+            T.browse_page(td, "http://127.0.0.1:8787/")
+        except T.ToolError:
+            return "ok"
+        raise RuntimeError("nicht blockiert!")
+    check("Browser blockt lokale Adressen", blocked)
+
+
+def group_run():
+    print("\nCode ausfuehren (Recht 'Code ausfuehren', abgeschottet)")
+    if not T.run_enabled():
+        line("warn", "Code ausfuehren", "aus (bubblewrap fehlt: ./install.sh --run, oder PCL_ALLOW_RUN=0)")
+        return
+    with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
+        def py():
+            r = T.run_code(td, code="print(6*7)", lang="python")
+            if "Exit-Code 0" not in r or "42" not in r:
+                raise RuntimeError(r[:200] + "  -> Unprivilegierte User-Namespaces aktiv? (sysctl kernel.unprivileged_userns_clone=1)")
+            return "ok"
+        check("Python in der Sandbox", py)
+
+        def nonet():
+            r = T.run_code(td, code="import socket\ntry:\n socket.create_connection(('1.1.1.1',53),3); print('NETZ')\n"
+                                    "except OSError: print('zu')", lang="python")
+            if "zu" not in r:
+                raise RuntimeError("Sandbox hat Internet! " + r[:120])
+            return "kein Internet in der Sandbox"
+        check("Sandbox ohne Netz", nonet)
+
+
+GROUPS = {"web": group_web, "browser": group_browser, "run": group_run, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr, "code": group_code}
 
 if __name__ == "__main__":
     wanted = [a for a in sys.argv[1:] if a in GROUPS] or list(GROUPS)
