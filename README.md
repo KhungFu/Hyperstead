@@ -232,6 +232,17 @@ bezahlten APIs und vielen Werkzeug-Runden können Kosten entstehen, die Tokens s
 ```
 Läuft ohne Internet und ohne Keys (Anbieter `mock`, eigene Datenbank).
 
+## 🔌 Verbindungen (Webhooks)
+
+- **Ausgang:** Im Fenster 🔌 Verbindungen trägst du Adressen ein (n8n, Zapier, Make, eigener Dienst; auch `http://127.0.0.1:…` auf dem Pi),
+  mit Beschreibung für die Agenten und optional Kopfzeilen. Geheimnisse gehören in `.env` und werden als `${NAME}` eingesetzt.
+  Agenten mit dem Recht **„Darf Verbindungen nutzen“** rufen sie per Werkzeug `call_connection` auf; Adresse und Kopfzeilen kann der Agent
+  nicht ändern, er schickt nur Daten. **„Nur nach meiner Freigabe“** (Standard an) legt jeden Aufruf erst unter ✋ Freigaben vor.
+  **„Bei Post benachrichtigen“** schickt jedes fertige Ergebnis eines obersten Auftrags als JSON an die Adresse. Zeitlimit `PCL_CONN_TIMEOUT` (30 s).
+- **Eingang:** „Aufträge von außen“ einschalten, dann nimmt `POST /hook/<projekt>/<schlüssel>` mit `{"text": "…", "agent": "optional"}`
+  einen Auftrag an den Chef an (z. B. aus n8n, iOS-Kurzbefehlen oder DEXTER). Ohne Login, geschützt nur durch den Schlüssel in der Adresse:
+  „Neuen Schlüssel“ macht die alte Adresse ungültig. Erreichbar ist sie nur so weit wie PaperclipLite selbst (z. B. nur im Tailnet).
+
 ## Parallele Arbeit
 
 Bis zu `PCL_WORKERS` Aufgaben laufen gleichzeitig (Standard 2, höchstens 6), z. B. mehrere Mitarbeiter eines Chefs oder Aufträge

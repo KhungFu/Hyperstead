@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import app as A  # noqa: E402
 
 A.init_db()
-TABLES = ("tasks", "agents", "projects", "approvals", "goals", "llm_calls", "usage", "settings", "schedules", "chats", "audit")
+TABLES = ("tasks", "agents", "projects", "approvals", "goals", "llm_calls", "usage", "settings", "schedules", "chats", "audit",
+          "connections")
 
 
 @pytest.fixture(autouse=True)
@@ -61,3 +62,42 @@ def drain(limit=60):
 
 def task(tid):
     return A.q1("SELECT * FROM tasks WHERE id=?", (tid,))
+
+
+class Echo:
+    """Kleiner HTTP-Server fuer Verbindungs-Tests: merkt sich jede Anfrage und antwortet mit JSON."""
+
+    def __init__(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.hits = []
+        outer = self
+
+        class H(BaseHTTPRequestHandler):
+            def _do(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                outer.hits.append({"method": self.command, "path": self.path, "headers": dict(self.headers),
+                                   "body": self.rfile.read(n).decode() if n else ""})
+                out = json.dumps({"ok": True, "kunde": "angelegt"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(out)))
+                self.end_headers()
+                self.wfile.write(out)
+            do_GET = do_POST = do_PUT = _do
+
+            def log_message(self, *a):
+                pass
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}/hook"
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.srv.shutdown()
+
+
+@pytest.fixture
+def echo():
+    e = Echo()
+    yield e
+    e.close()

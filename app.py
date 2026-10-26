@@ -166,7 +166,7 @@ PROVIDERS = {
 # web        = Websuche + Webseiten lesen   images = Bilder suchen/speichern/erzeugen   read_files = Projektdateien lesen
 # recruit    = stellt anhand des Auftrags selbst ein Team zusammen (legt Mitarbeiter ohne KI an; der Besitzer weist KI/Modell zu)
 DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False,
-                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False}
+                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False, "connect": False}
 # code       = Programmieren: Quellcode jeder Sprache schreiben und pruefen/kompilieren (ohne Ausfuehrung)
 # publish    = darf die Webseite (index.html im Projektordner) zur Veroeffentlichung vorschlagen; der Besitzer gibt frei
 RECRUIT_MAX = 20                                                    # Mitarbeiter je Einstellungsrunde
@@ -215,6 +215,10 @@ CREATE TABLE IF NOT EXISTS goals(
 CREATE TABLE IF NOT EXISTS llm_calls(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, agent_id INTEGER, project_id INTEGER, provider TEXT, model TEXT,
   tokens INTEGER, seconds REAL, cost REAL);
+CREATE TABLE IF NOT EXISTS connections(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL,
+  method TEXT DEFAULT 'POST', headers TEXT DEFAULT '{}', description TEXT DEFAULT '', confirm INTEGER DEFAULT 1,
+  on_post INTEGER DEFAULT 0, enabled INTEGER DEFAULT 1, created REAL);
 CREATE TABLE IF NOT EXISTS audit(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, project_id INTEGER, agent_id INTEGER,
   task_id INTEGER, event TEXT, detail TEXT);
@@ -797,6 +801,106 @@ def descendants(aid, depth=0):
     return out
 
 
+# --------------------------------------------------- Verbindungen (Webhooks nach aussen)
+CONN_TIMEOUT = int(os.environ.get("PCL_CONN_TIMEOUT", "30"))
+CONN_MAX_BYTES = 200_000
+_ENV_REF = re.compile(r"\$\{([A-Z][A-Z0-9_]{1,60})\}")
+
+
+def project_connections(pid):
+    return q("SELECT * FROM connections WHERE project_id=? AND enabled=1 ORDER BY id", (pid,))
+
+
+def connections_doc(pid, perms):
+    """Werkzeugbeschreibung fuer Agenten mit Recht 'connect'; leer, wenn es nichts zu rufen gibt."""
+    if not perms.get("connect"):
+        return ""
+    cs = project_connections(pid)
+    if not cs:
+        return ""
+    lines = [f"     - {c['name']} ({c['method']}){' [nur nach Freigabe durch den Besitzer]' if c['confirm'] else ''}: "
+             f"{c['description'] or '(keine Beschreibung)'}" for c in cs]
+    return ('  {"tool": "call_connection", "name": "Name der Verbindung", "data": {"feld": "wert"}}  Verbindung des Besitzers aufrufen '
+            "(Webhook, z. B. n8n, Zapier, eigener Dienst). data geht bei POST als JSON, bei GET als Parameter mit. Du bekommst die Antwort "
+            "zurueck; Verbindungen mit Freigabe laufen erst, wenn der Besitzer zustimmt (Ergebnis steht dann im Auftrag). Verfuegbar:\n"
+            + "\n".join(lines))
+
+
+def _conn_headers(c):
+    try:
+        h = json.loads(c.get("headers") or "{}")
+    except ValueError:
+        h = {}
+    out = {}
+    for k, v in (h.items() if isinstance(h, dict) else []):
+        # ${NAME} = Wert aus .env, damit Zugangsdaten nicht in der Datenbank stehen muessen
+        out[str(k)[:100]] = _ENV_REF.sub(lambda m: os.environ.get(m.group(1), ""), str(v))[:2000]
+    return out
+
+
+def conn_request(c, data):
+    """Fuehrt den Aufruf aus. Adresse und Kopfzeilen legt nur der Besitzer fest, der Agent bestimmt nur data."""
+    data = data if isinstance(data, (dict, list)) else ({"text": str(data)} if data not in (None, "") else {})
+    kw = {"headers": {"User-Agent": "PaperclipLite", **_conn_headers(c)}, "timeout": CONN_TIMEOUT, "allow_redirects": False, "stream": True}
+    if c["method"] == "GET":
+        kw["params"] = {str(k): v if isinstance(v, (str, int, float)) else json.dumps(v, ensure_ascii=False)
+                        for k, v in (data.items() if isinstance(data, dict) else [])}
+    else:
+        kw["json"] = data
+    try:
+        r = requests.request(c["method"], c["url"], **kw)
+        body = r.raw.read(CONN_MAX_BYTES + 1, decode_content=True) or b""
+        r.close()
+    except requests.RequestException as e:
+        return False, f"FEHLER: Verbindung '{c['name']}' nicht erreichbar ({type(e).__name__})"
+    text = body[:CONN_MAX_BYTES].decode("utf-8", "replace") + ("\n[... gekuerzt]" if len(body) > CONN_MAX_BYTES else "")
+    return 200 <= r.status_code < 300, f"HTTP {r.status_code}\n{text}"
+
+
+def call_connection(call, pid, aid, tid):
+    """Werkzeug call_connection: sofort ausfuehren oder (confirm) eine Freigabe anlegen."""
+    name = str(call.get("name") or "").strip().lower()
+    c = next((x for x in project_connections(pid) if x["name"].lower() == name), None)
+    if not c:
+        return "FEHLER: Unbekannte Verbindung. Verfuegbar: " + ", ".join(x["name"] for x in project_connections(pid))
+    data = call.get("data", {})
+    if c["confirm"]:
+        preview = json.dumps(data, ensure_ascii=False)[:1500]
+        apid = ex("INSERT INTO approvals(project_id,task_id,agent_id,kind,payload,created,data) VALUES(?,?,?,?,?,?,?)",
+                  (pid, tid, aid, "connect", f"{c['name']} ({c['method']} {c['url'][:120]})\n{preview}", time.time(),
+                   json.dumps({"conn_id": c["id"], "data": data}, ensure_ascii=False)))
+        log("approval_requested", f"connect {c['name']}", pid, aid, tid)
+        a = q1("SELECT name FROM agents WHERE id=?", (aid,)) or {"name": "?"}
+        tg_notify(f"🖐 Freigabe nötig · {a['name']}\nVerbindung „{c['name']}“ aufrufen (Auftrag #{tid})\n{preview[:800]}\n\n"
+                  "Bitte im Web unter „Freigaben“ entscheiden.")
+        return (f"Angefragt (Freigabe #{apid}): Der Besitzer muss den Aufruf von '{c['name']}' erst freigeben. Das Ergebnis erscheint dann "
+                "im Auftrag. Rufe dieselbe Verbindung in diesem Auftrag nicht noch einmal auf, mach mit dem Rest weiter.")
+    ok, out = conn_request(c, data)
+    log("connection_called", f"{c['name']}: {'ok' if ok else 'Fehler'}", pid, aid, tid)
+    return out
+
+
+def notify_connections_post(t):
+    """Fertige Post zusaetzlich an Verbindungen mit 'Bei Post benachrichtigen' schicken (im Hintergrund)."""
+    cs = [c for c in project_connections(t["project_id"]) if c["on_post"]]
+    if not cs:
+        return
+    p = q1("SELECT name FROM projects WHERE id=?", (t["project_id"],)) or {"name": ""}
+    payload = {"event": "post", "task_id": t["id"], "title": t["title"], "status": t["status"], "project": p["name"],
+               "result": (t.get("result") or "")[:20000]}
+
+    def send():
+        for c in cs:
+            ok, out = conn_request(dict(c, method="POST"), payload)
+            log("connection_post", f"{c['name']}: {out.splitlines()[0] if out else ''}", t["project_id"], None, t["id"])
+    threading.Thread(target=send, daemon=True).start()
+
+
+def hook_token(pid):
+    nonce = get_setting(f"hook_nonce:{pid}", "")
+    return hmac.new(_secret(), f"hook|{pid}|{nonce}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
 # ----------------------------------------------------------------------- Ziele
 def goal_path(gid):
     path, seen = [], set()
@@ -1001,9 +1105,10 @@ def build_system(agent, project, mode, final_only=False):
                      "Veroeffentlicht wird NUR der Ordner www/ des Projekts: lege die fertige Seite dort ab (www/index.html, dazu CSS, Bilder und Skripte "
                      "in www/ mit relativen Pfaden). Nur setzen, wenn die Seite fertig ist und www/index.html existiert. Ist sie schon online, aktualisieren sich Aenderungen automatisch.")
     tool_names = tools.available(perms)  # auch in der letzten Runde: dort darf der Chef das Produkt noch selbst bauen
-    if tool_names:
+    conn_doc = connections_doc(project["id"], perms)
+    if tool_names or conn_doc:
         s.append(
-            "\nWERKZEUGE (du darfst sie nutzen):\n" + tools.describe(tool_names) + "\n"
+            "\nWERKZEUGE (du darfst sie nutzen):\n" + "\n".join(x for x in (tools.describe(tool_names), conn_doc) if x) + "\n"
             "Diese Werkzeuge sind NICHT die eingebauten Werkzeuge deiner Umgebung (die du evtl. nicht hast): Du rufst sie auf, indem deine "
             "ganze Antwort nur das JSON {\"tools\": [...]} ist; der Server fuehrt sie aus. Sag also nie, du haettest keine Werkzeuge. "
             "Brauchst du Informationen oder Material, antworte statt mit 'result' mit {\"tools\": [Aufruf, ...]} (hoechstens 4 je Runde). "
@@ -1269,7 +1374,7 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
     want: (Endungen, seit, zurueckgebbare Kind-IDs, darf delegieren) = Produkt, das der Auftrag verlangt; fehlt es bei der Endantwort, fordert der Server es einmal ein.
     Gibt (endgueltiger_text, tokens, erzeugte_dateien) zurueck."""
     pid, aid, tid = ids
-    allowed = tools.available(perms)
+    allowed = tools.available(perms) + (["call_connection"] if connections_doc(pid, perms) else [])
     seen = list(images or [])[:RUN_MAX_IMAGES]  # Bilder dieses Laufs gehen in jeder Runde mit (Nr. = Position)
     text, total, hint = call_llm_img(a, messages, seen)
     if hint:
@@ -1305,11 +1410,14 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
                     except Exception as e:
                         out = f"FEHLER: {e}"
                     made_file = None
+                elif c.get("tool") == "call_connection":
+                    out = call_connection(c, pid, aid, tid) if "call_connection" in allowed else "FEHLER: Verbindungen nicht erlaubt"
+                    made_file = None
                 else:
                     out, made_file = tools.run_tool(c, root, perms)
                 if made_file:
                     made.append(made_file)
-                arg = str(c.get("query") or c.get("url") or c.get("prompt") or c.get("path") or "")[:120]
+                arg = str(c.get("query") or c.get("url") or c.get("prompt") or c.get("path") or c.get("name") or "")[:120]
                 log("tool", f"{c.get('tool')}: {arg} -> {out[:150]!r}", pid, aid, tid)
                 outs.append(f"### {c.get('tool')} {arg}\n{clip(out, TOOL_RESULT_CHARS)}")
             # aeltere Werkzeugergebnisse kuerzen, damit kleine Modelle nicht ueberlaufen
@@ -1653,6 +1761,7 @@ def execute_task(tid):
             tg_notify(f"🌐 Freigabe nötig · {a['name']} ({p['name']})\nWebseite veröffentlichen (Auftrag #{tid}: {t['title']})\n\nBitte im Web unter „Freigaben“ entscheiden.")
 
     final = result + ("\n\n" + "\n".join(notes) if notes else "")
+    pending += q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending' AND kind='connect'", (tid,))["c"]
     if pending:
         set_task(tid, "waiting_approval", final)
     else:
@@ -1765,6 +1874,7 @@ def inbox_arrived(t):
     ex("UPDATE tasks SET inbox='new' WHERE id=?", (t["id"],))
     log("inbox_new", f"{t['title']} [{t['status']}]", t["project_id"], t["agent_id"], t["id"])
     tg_notify_post(t["id"])
+    notify_connections_post(q1("SELECT * FROM tasks WHERE id=?", (t["id"],)) or t)
 
 
 def inbox_close(tid):
@@ -2658,8 +2768,8 @@ def logout():
 
 @app.before_request
 def guard():
-    if request.path == "/login" or request.path.startswith("/files/"):
-        return  # /files/ prueft ein Link-Token selbst (Vorschauseiten laden Bilder ohne Cookie nach)
+    if request.path == "/login" or request.path.startswith(("/files/", "/hook/")):
+        return  # /hook/ prueft sein Projekt-Token selbst  # /files/ prueft ein Link-Token selbst (Vorschauseiten laden Bilder ohne Cookie nach)
     if TOKEN and not verify_cookie(request.cookies.get("pcl")):
         if request.path.startswith("/api/"):
             abort(401)
@@ -2818,6 +2928,7 @@ def api_project_del(pid):
     ex("DELETE FROM agents WHERE project_id=?", (pid,))
     ex("DELETE FROM schedules WHERE project_id=?", (pid,))
     ex("DELETE FROM goals WHERE project_id=?", (pid,))
+    ex("DELETE FROM connections WHERE project_id=?", (pid,))
     site_stop(pid, persist=False)
     ex("DELETE FROM settings WHERE k=?", (f"site:{pid}",))
     ex("DELETE FROM projects WHERE id=?", (pid,))
@@ -3126,6 +3237,112 @@ def api_goal_del(gid):
     return jsonify({"ok": True})
 
 
+def _conn_in(d, old=None):
+    old = old or {}
+    name = re.sub(r"\s+", "-", str(d.get("name", old.get("name", ""))).strip())[:40]
+    url = str(d.get("url", old.get("url", ""))).strip()[:1000]
+    if not name or not re.match(r"^https?://[^\s/]+", url):
+        abort(400, "Name und eine Adresse mit http:// oder https:// noetig")
+    method = str(d.get("method", old.get("method", "POST"))).upper()
+    if method not in ("GET", "POST", "PUT"):
+        abort(400, "Methode: GET, POST oder PUT")
+    headers = d.get("headers", old.get("headers", "{}"))
+    if isinstance(headers, str):
+        try:
+            headers = json.loads(headers or "{}")
+        except ValueError:
+            abort(400, 'Kopfzeilen als JSON, z. B. {"Authorization": "Bearer ${N8N_TOKEN}"}')
+    if not isinstance(headers, dict):
+        abort(400, "Kopfzeilen als JSON-Objekt")
+    return (name, url, method, json.dumps({str(k): str(v) for k, v in headers.items()}),
+            str(d.get("description", old.get("description", "")))[:1000],
+            1 if d.get("confirm", old.get("confirm", 1)) else 0, 1 if d.get("on_post", old.get("on_post", 0)) else 0,
+            1 if d.get("enabled", old.get("enabled", 1)) else 0)
+
+
+@app.get("/api/projects/<int:pid>/connections")
+def api_connections(pid):
+    if not q1("SELECT 1 FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    return jsonify({"connections": q("SELECT * FROM connections WHERE project_id=? ORDER BY id", (pid,)),
+                    "hook": {"enabled": get_setting(f"hook:{pid}", "0") == "1", "path": f"/hook/{pid}/{hook_token(pid)}"}})
+
+
+@app.post("/api/projects/<int:pid>/connections")
+def api_connection_new(pid):
+    if not q1("SELECT 1 FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    v = _conn_in(request.get_json(force=True) or {})
+    if q1("SELECT 1 FROM connections WHERE project_id=? AND lower(name)=lower(?)", (pid, v[0])):
+        abort(400, "Name schon vergeben")
+    cid = ex("INSERT INTO connections(project_id,name,url,method,headers,description,confirm,on_post,enabled,created) "
+             "VALUES(?,?,?,?,?,?,?,?,?,?)", (pid, *v, time.time()))
+    log("connection_created", f"{v[0]} ({v[2]})", pid)
+    return jsonify({"id": cid})
+
+
+@app.put("/api/connections/<int:cid>")
+def api_connection_put(cid):
+    c = q1("SELECT * FROM connections WHERE id=?", (cid,))
+    if not c:
+        abort(404)
+    v = _conn_in(request.get_json(force=True) or {}, c)
+    if q1("SELECT 1 FROM connections WHERE project_id=? AND lower(name)=lower(?) AND id!=?", (c["project_id"], v[0], cid)):
+        abort(400, "Name schon vergeben")
+    ex("UPDATE connections SET name=?,url=?,method=?,headers=?,description=?,confirm=?,on_post=?,enabled=? WHERE id=?", (*v, cid))
+    log("connection_updated", v[0], c["project_id"])
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/connections/<int:cid>")
+def api_connection_del(cid):
+    c = q1("SELECT * FROM connections WHERE id=?", (cid,))
+    if not c:
+        abort(404)
+    ex("DELETE FROM connections WHERE id=?", (cid,))
+    log("connection_deleted", c["name"], c["project_id"])
+    return jsonify({"ok": True})
+
+
+@app.post("/api/connections/<int:cid>/test")
+def api_connection_test(cid):
+    c = q1("SELECT * FROM connections WHERE id=?", (cid,))
+    if not c:
+        abort(404)
+    ok, out = conn_request(c, (request.get_json(force=True) or {}).get("data") or {"test": True, "von": "PaperclipLite"})
+    log("connection_test", f"{c['name']}: {out.splitlines()[0] if out else ''}", c["project_id"])
+    return jsonify({"ok": ok, "output": out[:3000]})
+
+
+@app.put("/api/projects/<int:pid>/hook")
+def api_hook_put(pid):
+    if not q1("SELECT 1 FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    d = request.get_json(force=True) or {}
+    if "enabled" in d:
+        set_setting(f"hook:{pid}", "1" if d["enabled"] else "0")
+    if d.get("reset"):
+        set_setting(f"hook_nonce:{pid}", secrets.token_hex(8))
+    log("hook_changed", json.dumps({k: d[k] for k in ("enabled", "reset") if k in d}), pid)
+    return jsonify({"enabled": get_setting(f"hook:{pid}", "0") == "1", "path": f"/hook/{pid}/{hook_token(pid)}"})
+
+
+@app.post("/hook/<int:pid>/<tok>")
+def hook_in(pid, tok):
+    """Auftrag von aussen (n8n, Zapier, DEXTER ...): {"text": "...", "agent": "optional Name"} -> neuer Auftrag an den Chef."""
+    if get_setting(f"hook:{pid}", "0") != "1" or not hmac.compare_digest(tok, hook_token(pid)):
+        abort(404)
+    d = request.get_json(silent=True) or request.form or {}
+    text = str(d.get("text") or d.get("message") or "").strip()
+    if not text:
+        abort(400, "Feld 'text' fehlt")
+    tid, a = inbox_new_order(pid, text[:8000], str(d.get("agent") or "") or None)
+    if not tid:
+        abort(400, "Kein passender Agent im Projekt")
+    log("hook_order", f"#{tid} an {a['name']}", pid, a["id"], tid)
+    return jsonify({"task_id": tid, "agent": a["name"]})
+
+
 @app.get("/api/projects/<int:pid>/gates")
 def api_gates_get(pid):
     return jsonify(gates_of(pid))
@@ -3193,7 +3410,17 @@ def api_approval_decide(aid):
     if decision == "deny":
         ex("UPDATE approvals SET status='denied' WHERE id=?", (aid,))
         log("approval_denied", ap["payload"], pid, ap["agent_id"], ap["task_id"])
-        add = f"\n\nAbgelehnt: $ {ap['payload']}"
+        add = f"\n\nAbgelehnt: {'$ ' if ap['kind'] == 'shell' else ''}{ap['payload'][:500]}"
+    elif decision == "approve" and ap["kind"] == "connect":
+        try:
+            d = json.loads(ap.get("data") or "{}")
+        except ValueError:
+            d = {}
+        c = q1("SELECT * FROM connections WHERE id=? AND enabled=1", (d.get("conn_id"),))
+        ok, out = conn_request(c, d.get("data")) if c else (False, "Verbindung gibt es nicht mehr oder ist aus.")
+        ex("UPDATE approvals SET status='approved', output=? WHERE id=?", (out[:4000], aid))
+        log("approval_granted", f"connect: {out.splitlines()[0] if out else ''}", pid, ap["agent_id"], ap["task_id"])
+        add = f"\n\n🔌 {(c or {}).get('name', 'Verbindung')}: {clip(out, 3000)}"
     elif decision == "approve" and ap["kind"] == "publish":
         ok, info = site_start(pid)
         out = info if ok else "Fehler: " + info
@@ -3220,7 +3447,7 @@ def api_approval_decide(aid):
     if t:
         set_task(t["id"], result=(t["result"] + add)[:20000])
         left = q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending'", (t["id"],))["c"]
-        if left == 0:
+        if left == 0 and t["status"] == "waiting_approval":  # wartet der Chef aufs Team, bleibt er dabei
             finish(t["id"], "done")  # meldet das Ergebnis weiter: weckt den Chef, falls er wartet
     return jsonify({"ok": True})
 
