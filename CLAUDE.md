@@ -40,7 +40,10 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   `:predictLongRunning` + Operation abfragen + Download. Veo-3.1-Preview-Modelle wurden am 2026-10-22 abgeschaltet. Ergebnis in `output/`.
 - Anbieter: `PROVIDERS` mit `kind` (openai/anthropic) und `models_url`; `list_models` (Cache 10 min), `/api/providers/<id>/models`, `/api/providers/test`.
 - Chat: Tabelle `chats`, `/api/agents/<id>/chat` (+`/order`). Uploads: `/api/projects/<id>/upload` → `input/` über `save_input`
-  (Name bereinigt, nie überschreiben, `renamed` in der Antwort). Chat-POST nimmt `files` (nur Pfade in `input/`) und stellt `files_note` vor die Nachricht.
+  (Name bereinigt, nie überschreiben, `renamed` in der Antwort). Chat-POST nimmt `files` (nur Pfade in `input/`, dazu automatisch Dateien aus `input/`, deren Name in der Nachricht steht), stellt `files_note` vor die Nachricht
+  und hängt den INHALT an (`chat_attachment_block`: Text/PDF/DOCX über `tools.read_file`, Bilder als Bild über `call_llm(..., images=)`:
+  API als image_url/image-Block, `claude_cli` per `--input-format stream-json`, `codex_cli` per `-i`; lehnt das Modell Bilder ab, Text-Retry mit Hinweis).
+  `chats.files` merkt die Anhänge, ältere Nachrichten bekommen den Text gekürzt. `chat_system` listet die Dateien in `input/`.
   Telegram: Datei-Nachrichten (`tg_file_of`) → `tg_save_file` → Bildunterschrift = Auftrag/Überarbeitung, ohne Text in `_tg_pending` für den nächsten Auftrag, Alben über `_tg_groups`/`tg_flush_groups`.
 - Oberfläche responsive: unter 820 px Menü ☰ (`#app.side-open`), Panel als Vollbild, Canvas per Pointer-Events (Touch, zwei Finger = Zoom).
 - Installer: `install.sh --system` (Medien/OCR per apt), `--code` (Compiler aus `CODE_PKGS`), `--all` (alles inkl. Piper + Dienst). `selftest.py code` prüft alle Sprachen.

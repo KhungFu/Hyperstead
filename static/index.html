@@ -104,6 +104,12 @@ textarea{resize:vertical;min-height:110px}
   border:2px dashed var(--accent);border-radius:10px;background:rgba(249,115,22,.12);color:var(--text);font-weight:600;pointer-events:none}
 #chatatt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 #chatatt:empty{display:none}
+#chatpick{border:1px solid var(--line);border-radius:10px;background:var(--panel2);margin-bottom:6px;max-height:220px;overflow:auto;padding:4px}
+#chatpick:empty{display:none}
+#chatpick button{display:flex;width:100%;gap:8px;background:none;border:0;padding:7px 8px;border-radius:7px;cursor:pointer;text-align:left;color:var(--text)}
+#chatpick button:hover{background:var(--panel)}
+#chatpick button span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#chatpick small{color:var(--mute)}
 .att{display:inline-flex;align-items:center;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:2px 4px 2px 9px;font-size:12px;max-width:100%}
 .att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
 .att.up{opacity:.6}
@@ -623,14 +629,15 @@ function drawSettings(a){
 const miniMd = t => esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|\s)\*(\S[^*]*?)\*(?=\s|$|[.,;:!?])/g,'$1<i>$2</i>');
 async function drawChat(a){
   $('#pbody').innerHTML=`
-    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Freies Gespräch mit ${esc(a.name)} – zum Nachdenken, Philosophieren, Ideen entwickeln. Ohne Werkzeuge; zum Umsetzen gib das Gespräch als Auftrag ans Team. Dateien (📎, hineinziehen oder einfügen) landen in <code>input/</code>, das Team liest sie dort.</div>
+    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Freies Gespräch mit ${esc(a.name)} – zum Nachdenken, Philosophieren, Ideen entwickeln. Ohne Werkzeuge; zum Umsetzen gib das Gespräch als Auftrag ans Team. Angehängte Dateien (📎, hineinziehen, einfügen oder 📂 aus <code>input/</code>) bekommt ${esc(a.name)} direkt mit der Nachricht: Texte, PDFs und Word als Text, Bilder als Bild.</div>
     <div id="chatlog"></div>
     <div id="chatbox">
+      <div id="chatpick"></div>
       <div id="chatatt"></div>
       <textarea id="chatin" style="min-height:70px" placeholder="Schreib etwas … (Enter sendet, Shift+Enter = neue Zeile)"></textarea>
     </div>
     <input type="file" id="chatfile" multiple style="display:none">
-    <div class="row"><button class="btn pri" id="chatsend">Senden</button><button class="btn" id="chatattach" title="Dateien anhängen (z. B. muster.png, PDFs, Layouts). Sie werden nach input/ gespeichert.">📎 Datei</button><button class="btn" id="chatorder">📋 Als Auftrag erteilen</button><button class="btn danger sm" id="chatclear">Verlauf leeren</button></div>`;
+    <div class="row"><button class="btn pri" id="chatsend">Senden</button><button class="btn" id="chatattach" title="Dateien anhängen (z. B. muster.png, PDFs, Layouts). Sie werden nach input/ gespeichert.">📎 Datei</button><button class="btn" id="chatinput" title="Eine Datei anhängen, die schon in input/ liegt">📂 aus input/</button><button class="btn" id="chatorder">📋 Als Auftrag erteilen</button><button class="btn danger sm" id="chatclear">Verlauf leeren</button></div>`;
   const log=$('#chatlog'), att=[];  // att: {file, el, path, busy}
   const add=(role,text,cls='')=>{ const d=document.createElement('div'); d.className='bub '+role+' '+cls; d.innerHTML=role==='assistant'?miniMd(text):esc(text); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; };
   (await api('/agents/'+a.id+'/chat')).forEach(m=>add(m.role,m.content));
@@ -647,6 +654,22 @@ async function drawChat(a){
         .finally(()=>{ it.busy=false; });
     }
   }
+  function attachExisting(path){
+    if(att.some(x=>x.path===path)) return;
+    const it={path,busy:false,up:Promise.resolve()}; att.push(it);
+    it.el=document.createElement('span'); it.el.className='att'; it.el.innerHTML='<span></span><button class="icon-btn" title="Entfernen">✕</button>';
+    it.el.firstChild.textContent='📎 '+path; it.el.title=path;
+    it.el.lastChild.onclick=()=>{ att.splice(att.indexOf(it),1); it.el.remove(); };
+    $('#chatatt').appendChild(it.el);
+  }
+  $('#chatinput').onclick=async()=>{
+    const pick=$('#chatpick'); if(pick.innerHTML){ pick.innerHTML=''; return; }
+    if(!S.pid) return;
+    const r=await api('/projects/'+S.pid+'/files'); const fs=r.files.filter(f=>f.path.startsWith('input/')).sort((x,y)=>y.mtime-x.mtime);
+    if(!fs.length){ toast('In input/ liegt noch nichts. Mit 📎 hochladen.'); return; }
+    fs.forEach(f=>{ const b=document.createElement('button'); b.innerHTML='<span></span><small></small>'; b.firstChild.textContent=f.path; b.lastChild.textContent=f.size<1048576?Math.max(1,Math.round(f.size/1024))+' KB':(f.size/1048576).toFixed(1)+' MB';
+      b.onclick=()=>{ attachExisting(f.path); b.remove(); if(!pick.querySelector('button')) pick.innerHTML=''; }; pick.appendChild(b); });
+  };
   async function send(){
     const inp=$('#chatin'); let msg=inp.value.trim();
     if(att.some(x=>x.busy)){ $('#chatsend').disabled=true; $('#chatsend').textContent='Lädt hoch …'; await Promise.all(att.map(x=>x.up)); $('#chatsend').textContent='Senden'; }
@@ -657,7 +680,8 @@ async function drawChat(a){
     try{
       const r=await api('/agents/'+a.id+'/chat','POST',{message:msg,files});
       w.className='bub assistant'; w.innerHTML=miniMd(r.reply);
-      att.splice(0).forEach(x=>x.el.remove());
+      if((r.files||[]).length>files.length) ub.textContent='📎 '+r.files.join(', ')+(msg?'\n\n':'')+msg;
+      att.splice(0).forEach(x=>x.el.remove()); $('#chatpick').innerHTML='';
     }
     catch(e){ w.remove(); ub.remove(); inp.value=msg; }
     $('#chatsend').disabled=false; log.scrollTop=log.scrollHeight; inp.focus();
