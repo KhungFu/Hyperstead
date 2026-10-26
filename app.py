@@ -964,7 +964,7 @@ def products_since(root, exts, since):
 def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=None):
     """Ruft das Modell auf; fordert es Werkzeuge an, werden sie serverseitig ausgefuehrt und das Modell macht weiter.
     images: Bilder zur ersten Runde (im Auftrag genannte Dateien), view_image liefert weitere fuer die naechste Runde.
-    want: (Endungen, seit) = Produkt, das der Auftrag verlangt; fehlt es bei der Endantwort, fordert der Server es einmal ein.
+    want: (Endungen, seit, zurueckgebbare Kind-IDs, darf delegieren) = Produkt, das der Auftrag verlangt; fehlt es bei der Endantwort, fordert der Server es einmal ein.
     Gibt (endgueltiger_text, tokens, erzeugte_dateien) zurueck."""
     pid, aid, tid = ids
     allowed = tools.available(perms)
@@ -1025,7 +1025,10 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
         # Produktpflicht: verlangt der Auftrag ein PDF/DOCX/EPUB und liegt keins in output/, wird es jetzt gebaut statt nur geplant
         if want and not pushed and "make_document" in allowed and not products_since(root, want[0], want[1]):
             d = parse_output(text)
-            if not d.get("delegate") and not any(str(r.get("verdict", "")).lower() == "revise" for r in (d.get("review") or []) if isinstance(r, dict)):
+            busy = (want[3] and d.get("delegate")) or any(  # nur, was der Server auch wirklich ausfuehrt, zaehlt als "Team arbeitet weiter"
+                isinstance(r, dict) and str(r.get("verdict", "")).lower() == "revise" and str(r.get("task_id")) in want[2]
+                for r in (d.get("review") if isinstance(d.get("review"), list) else []))
+            if not busy:
                 pushed = True
                 log("tool", "Produktpflicht: " + ", ".join(want[0]), pid, aid, tid)
                 messages += [{"role": "assistant", "content": text},
@@ -1182,7 +1185,10 @@ def execute_task(tid):
         while top["parent_task_id"]:
             top = q1("SELECT * FROM tasks WHERE id=?", (top["parent_task_id"],)) or {**dict(top), "parent_task_id": None}
         exts = wanted_products(t["title"] + "\n" + t["description"])
-        want = (exts, top["created"]) if exts and (not t["parent_task_id"] or (mode == "work" and perms["media"])) else None  # Chef oben bzw. Satz/Herstellung
+        revisable = {str(c["id"]) for c in child_tasks if c["rounds"] < MAX_REVISIONS} if mode == "review" and not final_only and perms["judge"] else set()
+        can_delegate = perms["delegate"] and bool(kids) and not final_only and mode != "recruit"
+        want = ((exts, top["created"], revisable, can_delegate)
+                if exts and (not t["parent_task_id"] or perms["media"]) else None)  # Chef oben bzw. Herstellung/Satz
         text, tokens, made_files = run_with_tools(a, perms, messages, final_only, proj_dir(pid), (pid, aid, tid),
                                                   [i for _, i in imgs], want)
     except Exception as e:
