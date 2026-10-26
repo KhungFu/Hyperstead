@@ -202,6 +202,7 @@ a.btn.pri{color:#fff}
       <button class="side-btn" id="btnModels" title="Agenten, deren KI-Modell nicht mehr existiert, auf ein anderes umstellen">⚠ Modelle <span class="badge" id="mdbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnSched" title="Öffnungszeiten der Firma und tägliche Aufgaben je Mitarbeiter">🕘 Zeitplan <span class="badge" id="schbadge" style="display:none">zu</span></button>
       <button class="side-btn" id="btnFiles">📁 Dateien dieses Projekts</button>
+      <button class="side-btn" id="btnKnow" title="Was alle Agenten dieses Projekts immer wissen sollen">🧠 Firmenwissen</button>
       <button class="side-btn" id="btnAudit">📜 Verlauf (Audit-Log)</button>
       <button class="side-btn" id="btnLogout" style="display:none" onclick="location.href='/logout'">🚪 Abmelden</button>
     </div>
@@ -394,14 +395,14 @@ $('#sideBack').onclick=()=>$('#app').classList.remove('side-open');
 $('#side').addEventListener('click',e=>{ if(e.target.closest('.side-btn')) $('#app').classList.remove('side-open'); });
 
 /* ---------- Dateien hochladen (landen in input/) ---------- */
-async function uploadFile(f){
+async function uploadFile(f,dir){
   const fd=new FormData(); fd.append('file',f,f.name||('bild-'+Date.now()+'.png'));
-  const resp=await fetch('/api/projects/'+S.pid+'/upload',{method:'POST',headers:{'X-PCL':'1'},body:fd});
+  const resp=await fetch('/api/projects/'+S.pid+'/upload'+(dir?'?dir='+dir:''),{method:'POST',headers:{'X-PCL':'1'},body:fd});
   if(resp.status===401){ location.href='/login'; throw new Error('Sitzung abgelaufen'); }
   if(resp.status===413) throw new Error('„'+f.name+'“ ist zu groß (Grenze PCL_MAX_UPLOAD_MB).');
   if(!resp.ok) throw new Error((await resp.text()).slice(0,200)||'Upload fehlgeschlagen');
   const r=await resp.json();
-  if(r.renamed) toast('„'+f.name+'“ gab es schon in input/, gespeichert als '+r.path+' (nichts überschrieben).');
+  if(r.renamed) toast('„'+f.name+'“ gab es schon, gespeichert als '+r.path+' (nichts überschrieben).');
   return r;
 }
 
@@ -566,6 +567,8 @@ function drawSettings(a){
     </div>
     <label>Arbeitsanweisung – wie soll er arbeiten, was kann er?</label>
     <textarea id="f_sys">${esc(a.system_prompt)}</textarea>
+    <label>🧠 Gedächtnis – was sich ${esc(a.name)} aus früheren Aufträgen gemerkt hat</label>
+    <textarea id="f_mem" placeholder="Noch leer. Der Agent notiert hier selbst dauerhafte Fakten (Vorlieben, Entscheidungen, Kunden). Du kannst es ändern oder leeren.">${esc(a.memory||'')}</textarea>
     <label>Rechte</label>
     <div style="color:var(--mute);font-size:12px;margin-bottom:6px">Chefs lesen immer die Berichte ihrer Mitarbeiter und arbeiten damit weiter.</div>
     <div class="chk"><input type="checkbox" id="p_delegate" ${pm.delegate?'checked':''}><div>Darf Aufgaben an direkte Mitarbeiter delegieren</div></div>
@@ -620,7 +623,7 @@ function drawSettings(a){
   };
   $('#saveAg').onclick=async()=>{
     const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,...($('#f_prov').value?{provider:$('#f_prov').value}:{}),model:$('#f_model').value.trim(),
-      system_prompt:$('#f_sys').value,paused:$('#f_pause').checked,
+      system_prompt:$('#f_sys').value,...($('#f_mem').value!==(a.memory||'')?{memory:$('#f_mem').value}:{}),paused:$('#f_pause').checked,
       perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,publish:$('#p_publish').checked,code:$('#p_code').checked,shell:$('#p_shell').checked}};
     if($('#cliwrap').style.display!=='none') body.cli_command=$('#f_cli').value;
     const np=$('#f_parent').value; body.parent_id=np?+np:null;
@@ -982,6 +985,33 @@ async function showFiles(){
   body.querySelectorAll('[data-delf]').forEach(b=>b.onclick=async()=>{ if(confirm('„'+b.dataset.delf+'“ löschen?')){ await fetch('/api/projects/'+S.pid+'/files?path='+encodeURIComponent(b.dataset.delf),{method:'DELETE',headers:{'X-PCL':'1'}}); showFiles(); } });
 }
 $('#btnFiles').onclick=showFiles;
+
+/* ---------- Firmenwissen (Ordner wissen/) ---------- */
+async function showKnowledge(){
+  if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+  openOv('🧠 Firmenwissen'); const body=$('#ovbody');
+  const r=await api('/projects/'+S.pid+'/knowledge');
+  const kb=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';
+  body.innerHTML=`
+    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">Was <b>alle Agenten dieses Projekts</b> bei jedem Auftrag und im Chat wissen sollen: Firma, Kunden, Stil, Preise, Regeln, Ansprechpartner. Steht in <code>${esc(r.path)}</code>. Texte (.md/.txt) im Ordner <code>wissen/</code> gehen direkt mit (zusammen höchstens ${r.limit.toLocaleString('de-AT')} Zeichen), andere Dateien (PDF, Word …) sehen die Agenten als Liste und lesen sie bei Bedarf.</div>
+    <textarea id="kn_text" style="min-height:260px" placeholder="z. B.\n- Wir sind eine Webagentur in Wien, Kunden sind kleine Handwerksbetriebe.\n- Sprache: Deutsch, Du-Form, keine Anglizismen.\n- Farben: Dunkelblau #1d3557, Akzent Orange.">${esc(r.text)}</textarea>
+    <div class="row" style="margin:8px 0"><button class="btn pri" id="kn_save">Speichern</button><span id="kn_len" style="color:var(--mute);font-size:12px"></span></div>
+    <div class="task" style="padding:10px;margin:10px 0">
+      <b>Unterlagen ins Firmenwissen hochladen</b>
+      <div style="color:var(--mute);font-size:12px;margin:3px 0 6px">Landen in <code>wissen/</code>, z. B. Preisliste, Styleguide, Kundenliste.</div>
+      <input type="file" id="kn_up" multiple style="width:auto"><div id="kn_st" style="font-size:12px;color:var(--mute);margin-top:4px"></div>
+    </div>
+    ${r.files.map(f=>`<div class="task" style="padding:8px;display:flex;gap:10px;align-items:center"><span style="flex:1;word-break:break-all">${f.in_prompt?'📝':'📎'} ${esc(f.path)}</span><span style="color:var(--mute);font-size:12px;white-space:nowrap">${kb(f.size)}</span><button class="icon-btn" title="Datei löschen" data-kdel="${esc(f.path)}">🗑</button></div>`).join('')}`;
+  const len=()=>{ $('#kn_len').textContent=$('#kn_text').value.length.toLocaleString('de-AT')+' Zeichen'; };
+  $('#kn_text').oninput=len; len();
+  $('#kn_save').onclick=async()=>{ await api('/projects/'+S.pid+'/knowledge','PUT',{text:$('#kn_text').value}); toast('Firmenwissen gespeichert'); };
+  $('#kn_up').onchange=async e=>{
+    for(const f of e.target.files){ $('#kn_st').textContent='Lade hoch: '+f.name+' …'; try{ await uploadFile(f,'wissen'); }catch(err){ toast(err.message); break; } }
+    showKnowledge();
+  };
+  body.querySelectorAll('[data-kdel]').forEach(b=>b.onclick=async()=>{ if(confirm('„'+b.dataset.kdel+'“ löschen?')){ await fetch('/api/projects/'+S.pid+'/files?path='+encodeURIComponent(b.dataset.kdel),{method:'DELETE',headers:{'X-PCL':'1'}}); showKnowledge(); } });
+}
+$('#btnKnow').onclick=showKnowledge;
 
 /* ---------- Firma aus Vorlage ---------- */
 function provOptions(def){ return S.providers.map(p=>`<option value="${p.id}" ${p.id===def?'selected':''}>${esc(p.label)}${p.configured?'':(p.id==='ollama'?' — nicht erreichbar':' — kein Key')}</option>`).join(''); }
