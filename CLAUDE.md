@@ -4,7 +4,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 (Hostname `dexter`). Sprache der Oberfläche und Doku: Deutsch.
 
 ## Aufbau
-- `app.py`: komplettes Backend (Flask + SQLite, ein Worker-Thread). Abschnitte: Konfiguration/.env, Datenbank,
+- `app.py`: komplettes Backend (Flask + SQLite, `PCL_WORKERS` Worker-Threads). Abschnitte: Konfiguration/.env, Datenbank,
   LLM-Anbieter (`call_llm`, alle über OpenAI-kompatibles Format), Prompt-Bau, `execute_task`, Worker, Login/Sitzung, REST-API.
 - `static/index.html`: komplette Oberfläche in einer Datei (Vanilla JS, SVG-Kanten, Pan/Zoom, Drag & Drop).
 - `agent_tools.py`: Werkzeuge der Agenten (Suche, Seiten, Bilder, Dateien), eigenständig, mit SSRF-Schutz (`check_public`, `safe_get`).
@@ -68,6 +68,14 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - Gruppen-Umstellung: Menü „🔀 KI für Gruppe“, `GET /api/agents/all`, `POST /api/models/assign` (`agent_ids`, `provider`, `model`).
 - Modell-Überwachung: `model_health` (Agenten-Modell nicht mehr in der Live-Liste oder Aufruf mit 404/„model not found“ → `_bad_models`), Worker prüft alle `PCL_MODEL_CHECK_HOURS` (6) und meldet Änderungen einmalig (Audit + Telegram, Marker `settings.model_alert_sig`). UI: Menü „⚠ Modelle“, `GET /api/model_health`, `POST /api/models/replace` (Sammel-Umstellung).
 - Nur gegen simulierte Antworten getestet, in der Entwicklungsumgebung gab es kein Internet: echte Suche/Bildanbieter zuerst auf dem Pi prüfen.
+
+## Gedaechtnis, Firmenwissen, parallele Worker
+- `agents.memory`: Agent liefert optional `remember` (max. `REMEMBER_MAX`), `save_memory` haengt datiert an, dedupliziert, kuerzt auf `PCL_MEMORY_CHARS`.
+  `memory_block` + `knowledge_block` (Ordner `wissen/`, `.md/.txt` in den Prompt bis `PCL_KNOWLEDGE_CHARS`, Rest als Liste) stehen in `build_system` und `chat_system`.
+  API `/api/projects/<id>/knowledge` (GET/PUT `wissen/firmenwissen.md`), Upload mit `?dir=wissen`. Agent-PUT nimmt `memory`.
+- Worker: `start_worker` startet `WORKERS` Threads; `claim_next` setzt unter `_claim_lock` atomar `queued`->`running` (nie zwei Aufgaben je Agent,
+  max. eine Ollama-Aufgabe). Nur Worker 0 macht `schedule_tick`/Modellpruefung. `wake_parent` weckt per bedingtem UPDATE genau einmal.
+  `run_claimed` setzt bei Ausnahme `failed` statt `running` haengen zu lassen.
 
 ## Post / Telegram
 - `tasks.inbox`: `''` / `new` / `closed`, nur für oberste Aufgaben. `finish()` → `inbox_arrived()` → Telegram-Nachricht.

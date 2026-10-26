@@ -204,9 +204,23 @@ bezahlten APIs und vielen Werkzeug-Runden können Kosten entstehen, die Tokens s
 - `.env`, Datenbank und Arbeitsordner stehen in `.gitignore`. Keys gehören nie ins Repo.
 - Bei Trading-Bots (NEXUS) Agenten nie ohne menschliche Freigabe handeln lassen.
 
+## Firmenwissen und Gedächtnis
+
+- **🧠 Firmenwissen** (Seitenleiste): Was alle Agenten eines Projekts immer wissen sollen (Firma, Kunden, Stil, Preise, Regeln). Steht in
+  `wissen/firmenwissen.md` im Projektordner. Alle `.md`/`.txt` in `wissen/` gehen bei jedem Auftrag und im Chat mit (zusammen bis
+  `PCL_KNOWLEDGE_CHARS`, Standard 8000 Zeichen); andere Unterlagen (PDF, Word …) dort sehen die Agenten als Liste und lesen sie bei Bedarf.
+- **Gedächtnis je Agent**: Ein Agent kann sich am Ende eines Auftrags bis zu 5 dauerhafte Fakten merken (Vorlieben, Entscheidungen, Kunden,
+  was funktioniert hat). Sie stehen im Agenten-Panel unter „🧠 Gedächtnis“, du kannst sie ändern oder leeren. Grenze `PCL_MEMORY_CHARS`
+  (4000), die ältesten Einträge fallen zuerst heraus. Jede neue Notiz steht im Audit-Log.
+
+## Parallele Arbeit
+
+Bis zu `PCL_WORKERS` Aufgaben laufen gleichzeitig (Standard 2, höchstens 6), z. B. mehrere Mitarbeiter eines Chefs oder Aufträge
+verschiedener Projekte. Ein Agent bearbeitet nie zwei Aufgaben auf einmal, und es läuft höchstens eine Ollama-Aufgabe gleichzeitig
+(RAM auf dem Pi). Bei Abo-CLIs (Claude, Codex) zählen parallele Aufrufe schneller gegen das Abo-Limit; dann `PCL_WORKERS=1` setzen.
+
 ## Grenzen dieser Version
 
-- Ein Worker, Aufgaben laufen nacheinander.
 - Kein automatischer Heartbeat nach Zeitplan (Aufgaben starten manuell oder per Delegation).
 - Keine Text-zu-Video-KI, keine Scan-/Bild-PDFs (OCR), keine eigene Anstellung neuer Agenten durch den CEO (Organigramm legst du an).
 - Kein echter Browser: Seiten werden als Text gelesen, JavaScript-lastige Seiten liefern oft wenig. Die DuckDuckGo-Suche ohne Key kann begrenzt oder geändert werden.

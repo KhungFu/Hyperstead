@@ -8,7 +8,7 @@ Sprache der Oberfläche, Doku und der Zusammenarbeit mit dem Besitzer: **Deutsch
 PaperclipLite ist ein selbst gehosteter Knoten-Editor für ein **Team aus KI-Agenten** (Idee: paperclip.ing). Der Besitzer baut Firmen
 als Organigramm (CEO → Abteilungsleiter → Mitarbeiter), gibt dem CEO Aufträge, das Team arbeitet, der Chef prüft und gibt ggf. zurück,
 das Ergebnis landet in der „Post“ (Web + Telegram). Läuft auf einem **Raspberry Pi 4 (4 GB RAM, Hostname `dexter`)**, Flask + SQLite,
-ein Worker-Thread, Oberfläche als eine HTML-Datei (Vanilla JS). Repo: `KhungFu/paperclip-lite` (privat, Branch `main`).
+mehrere Worker-Threads (`PCL_WORKERS`, Standard 2), Oberfläche als eine HTML-Datei (Vanilla JS). Repo: `KhungFu/paperclip-lite` (privat, Branch `main`).
 
 ## Dateien
 | Datei | Inhalt |
