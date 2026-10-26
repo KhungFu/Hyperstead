@@ -128,6 +128,11 @@ a.btn.pri{color:#fff}
 .task summary{padding:8px 10px;cursor:pointer;display:flex;gap:8px;align-items:center}
 .task summary span.t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .task .tb{padding:0 10px 10px}
+.res{position:relative}
+.res .cpy{position:absolute;top:4px;right:4px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:12px;cursor:pointer;opacity:.85;z-index:1}
+.res .cpy:hover{opacity:1;border-color:var(--accent)}
+.task pre,.res pre{user-select:text;-webkit-user-select:text}
+.res pre{padding-top:30px}
 .task pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0;max-height:300px;overflow:auto;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace}
 .chip{font-size:11px;border-radius:10px;padding:1px 8px;background:#26262b;color:var(--mute);white-space:nowrap}
 .chip.running{background:rgba(59,130,246,.2);color:#7db0ff}
@@ -702,10 +707,27 @@ async function drawChat(a){
   };
   $('#chatclear').onclick=async()=>{ if(confirm('Gesprächsverlauf löschen?')){ await api('/agents/'+a.id+'/chat','DELETE'); drawChat(a); } };
 }
+/* ---------- Ergebnisse kopieren (geht auch ohne HTTPS, dort fehlt navigator.clipboard) ---------- */
+const resHtml = t => `<div class="res"><button class="cpy" title="Ganzen Text kopieren">📋 Kopieren</button><pre>${esc(t)}</pre></div>`;
+async function copyText(t){
+  try{ if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(t); return true; } }catch(_){}
+  const ta=document.createElement('textarea'); ta.value=t; ta.setAttribute('readonly',''); ta.style.cssText='position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0,t.length);
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(_){} ta.remove(); return ok;
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('.res .cpy'); if(!b) return; e.preventDefault(); e.stopPropagation();
+  const ok=await copyText(b.nextElementSibling.textContent);
+  b.textContent=ok?'✓ Kopiert':'Markieren und kopieren'; setTimeout(()=>b.textContent='📋 Kopieren',1800);
+  if(!ok){ const r=document.createRange(); r.selectNodeContents(b.nextElementSibling); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+});
+// Liste nur neu zeichnen, wenn sich etwas geaendert hat und gerade nichts markiert ist (sonst geht die Markierung beim Aktualisieren verloren)
+function selectingIn(el){ const sel=getSelection(); return sel && !sel.isCollapsed && sel.rangeCount && el.contains(sel.getRangeAt(0).commonAncestorContainer); }
+
 function treeHtml(list){
   return list.map(c=>`<details ${S.openTasks.has('c'+c.id)?'open':''} data-cid="${c.id}">
     <summary><span class="chip ${c.status}">${STATUS[c.status]||c.status}</span><span class="t">${esc(c.title)}</span><span class="who">${esc(c.agent_name||'?')}${c.rounds?` · ${c.rounds}× überarbeitet`:''}</span></summary>
-    ${c.result?`<pre>${esc(c.result)}</pre>`:''}
+    ${c.result?resHtml(c.result):''}
     ${(c.children&&c.children.length)?`<div class="tree">${treeHtml(c.children)}</div>`:''}
   </details>`).join('');
 }
@@ -713,12 +735,12 @@ async function loadTasks(){
   const a=agentById(S.sel); if(!a) return;
   const list=$('#tlist'); if(!list) return;
   const tasks=await api('/agents/'+a.id+'/tasks');
-  list.innerHTML=tasks.length?tasks.map(t=>`
+  const html=tasks.length?tasks.map(t=>`
     <details class="task" data-id="${t.id}" ${S.openTasks.has(t.id)?'open':''}>
       <summary><span class="chip ${t.status}">${STATUS[t.status]||t.status}</span><span class="t">${esc(t.title)}</span></summary>
       <div class="tb">
         ${t.description?`<div style="color:var(--mute);font-size:12px;white-space:pre-wrap">${esc(t.description)}</div>`:''}
-        ${t.result?`<pre>${esc(t.result)}</pre>`:''}
+        ${t.result?resHtml(t.result):''}
         ${(t.children&&t.children.length)?`<div class="tlabel">Team-Arbeit</div><div class="tree">${treeHtml(t.children)}</div>`:''}
         <div class="row" style="margin-top:6px">
           ${['todo','failed','blocked','done'].includes(t.status)?`<button class="btn sm pri" data-run="${t.id}" data-kids="${(t.children&&t.children.length)?1:0}">▶ ${t.status==='done'?'Nochmal':'Starten'}</button>`:''}
@@ -726,6 +748,12 @@ async function loadTasks(){
         </div>
       </div>
     </details>`).join(''):'<div style="color:var(--mute)">Noch keine Aufgaben.</div>';
+  if(html===list._html || selectingIn(list)) return;
+  list._html=html;
+  // Scrollpositionen der Ergebnisboxen behalten
+  const sc=[...list.querySelectorAll('pre')].map(p=>p.scrollTop);
+  list.innerHTML=html;
+  list.querySelectorAll('pre').forEach((p,i)=>{ if(sc[i]) p.scrollTop=sc[i]; });
   list.querySelectorAll('details.task').forEach(d=>d.addEventListener('toggle',()=>{ d.open?S.openTasks.add(+d.dataset.id):S.openTasks.delete(+d.dataset.id); }));
   list.querySelectorAll('.tree details').forEach(d=>d.addEventListener('toggle',e=>{ e.stopPropagation(); const k='c'+d.dataset.cid; d.open?S.openTasks.add(k):S.openTasks.delete(k); }));
   list.querySelectorAll('[data-run]').forEach(b=>b.onclick=async()=>{ if(b.dataset.kids==='1' && !confirm('Die bisherigen Aufgaben des Teams werden gelöscht und alles startet neu. Fortfahren?')) return; await api('/tasks/'+b.dataset.run+'/run','POST',{}); refresh(true); });
@@ -898,7 +926,7 @@ $('#btnInbox').onclick=()=>{
       <div class="task" style="padding:10px;${r.inbox==='closed'?'opacity:.55':''}">
         <div><b>${esc(r.agent_name||'?')}</b> <span style="color:var(--mute)">(${esc(r.project_name||'')}) · #${r.id}</span></div>
         <div>${r.inbox==='closed'?'☑ erledigt':(KIND[r.status]||r.status)} – ${esc(r.title)}${r.team?` <span style="color:var(--mute);font-size:12px">· Team: ${r.team} Aufgaben, ${r.revisions} Rückgaben</span>`:''}</div>
-        <details><summary style="cursor:pointer;color:var(--mute);font-size:12px">Ergebnis anzeigen</summary><pre>${esc(r.result||'(leer)')}</pre></details>
+        <details><summary style="cursor:pointer;color:var(--mute);font-size:12px">Ergebnis anzeigen</summary>${resHtml(r.result||'(leer)')}</details>
         <div class="row">
           ${r.inbox==='new'?`<button class="btn pri sm" data-ok="${r.id}">✅ Erledigt</button>`:''}
           ${['done','failed','blocked'].includes(r.status)?`<button class="btn sm" data-rw="${r.id}">🔁 Überarbeiten…</button>`:''}

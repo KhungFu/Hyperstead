@@ -786,6 +786,8 @@ def build_system(agent, project, mode, final_only=False):
     if tool_names:
         s.append(
             "\nWERKZEUGE (du darfst sie nutzen):\n" + tools.describe(tool_names) + "\n"
+            "Diese Werkzeuge sind NICHT die eingebauten Werkzeuge deiner Umgebung (die du evtl. nicht hast): Du rufst sie auf, indem deine "
+            "ganze Antwort nur das JSON {\"tools\": [...]} ist; der Server fuehrt sie aus. Sag also nie, du haettest keine Werkzeuge. "
             "Brauchst du Informationen oder Material, antworte statt mit 'result' mit {\"tools\": [Aufruf, ...]} (hoechstens 4 je Runde). "
             f"Ich fuehre sie aus und schicke dir die Ergebnisse, danach antwortest du erneut (hoechstens {MAX_TOOL_STEPS} Runden). "
             "Hast du genug, antworte OHNE 'tools' mit dem normalen JSON unten.\n"
@@ -798,6 +800,9 @@ def build_system(agent, project, mode, final_only=False):
             "Gespeicherte Bilder liegen in assets/ und werden im HTML per relativem Pfad eingebunden. Nenne erzeugte Dateien in 'result'.\n"
             "- Der Besitzer legt eigene Dateien (Videos, PDFs, Bilder, Texte) in input/ ab: schau mit list_files nach. Fertige Medien/Dokumente liegen in output/ "
             "(Pfade immer in 'result' nennen). Videos erst mit media_info ansehen.\n"
+            + ("- Bilder, Karten, Layouts, Screenshots und gescannte PDFs ANSIEHST du mit view_image (bei PDFs mit page); read_file liefert "
+               "dafuer nur Texterkennung. Melde erst dann, dass etwas unlesbar ist, wenn auch view_image nicht hilft.\n"
+               if "view_image" in tool_names else "") +
             "- Lange Texte (Buchkapitel, Berichte) schreibst du NICHT komplett in 'result', sondern mit write_file als Markdown-Dateien (z. B. buch/kapitel1.md) "
             "und nennst nur Pfade und eine Kurzfassung. make_document baut daraus PDF, DOCX oder EPUB.\n"
             "- Du fuehrst KEINE echten Geschaefte aus (keine Kaeufe, Orders, Zahlungen, E-Mails): dafuer hast du keine Werkzeuge. "
@@ -905,12 +910,19 @@ def finish(tid, status, result=None):
             inbox_arrived(t)  # oberste Aufgabe fertig = Post fuer den Besitzer
 
 
-def run_with_tools(a, perms, messages, final_only, root, ids):
+RUN_MAX_IMAGES = int(os.environ.get("PCL_RUN_MAX_IMAGES", "8"))  # Bilder je Aufgabenlauf (Anhaenge + view_image)
+
+
+def run_with_tools(a, perms, messages, final_only, root, ids, images=None):
     """Ruft das Modell auf; fordert es Werkzeuge an, werden sie serverseitig ausgefuehrt und das Modell macht weiter.
+    images: Bilder zur ersten Runde (im Auftrag genannte Dateien), view_image liefert weitere fuer die naechste Runde.
     Gibt (endgueltiger_text, tokens, erzeugte_dateien) zurueck."""
     pid, aid, tid = ids
     allowed = [] if final_only else tools.available(perms)
-    text, total = call_llm(a, messages)
+    seen = list(images or [])[:RUN_MAX_IMAGES]  # Bilder dieses Laufs gehen in jeder Runde mit (Nr. = Position)
+    text, total, hint = call_llm_img(a, messages, seen)
+    if hint:
+        log("tool", "Bilder: " + hint, pid, aid, tid)
     made, steps, result_idx = [], 0, []
     while allowed:
         calls = parse_output(text).get("tools")
@@ -927,7 +939,21 @@ def run_with_tools(a, perms, messages, final_only, root, ids):
         for c in calls[:4]:
             if not isinstance(c, dict):
                 continue
-            out, made_file = tools.run_tool(c, root, perms)
+            if c.get("tool") == "view_image" and "view_image" in allowed:
+                try:
+                    out, got = tools.view_image(root, c.get("path"), c.get("page"))
+                    got = got[:max(0, RUN_MAX_IMAGES - len(seen))]
+                    if got:
+                        seen += got
+                        out += f" Du siehst es als Bild Nr. {len(seen) - len(got) + 1}" + (f"-{len(seen)}" if len(got) > 1 else "") + \
+                            " (Bilder hängen in jeder weiteren Runde an)."
+                    else:
+                        out = f"FEHLER: Bild-Limit ({RUN_MAX_IMAGES}) erreicht. Arbeite mit den Bildern, die du schon hast."
+                except Exception as e:
+                    out = f"FEHLER: {e}"
+                made_file = None
+            else:
+                out, made_file = tools.run_tool(c, root, perms)
             if made_file:
                 made.append(made_file)
             arg = str(c.get("query") or c.get("url") or c.get("prompt") or c.get("path") or "")[:120]
@@ -941,7 +967,9 @@ def run_with_tools(a, perms, messages, final_only, root, ids):
                                                  + "\n\n".join(outs) + "\n\nMach weiter: weitere 'tools' oder dein fertiges JSON."}]
         result_idx.append(len(messages) - 1)
         steps += 1
-        text, t2 = call_llm(a, messages)
+        text, t2, hint = call_llm_img(a, messages, seen)
+        if hint:
+            log("tool", "view_image: " + hint, pid, aid, tid)
         total += t2
     return text, total, made
 
@@ -1047,7 +1075,13 @@ def execute_task(tid):
     messages = [{"role": "system", "content": build_system(a, p, mode, final_only)},
                 {"role": "user", "content": user}]
     try:
-        text, tokens, made_files = run_with_tools(a, perms, messages, final_only, proj_dir(pid), (pid, aid, tid))
+        imgs = task_images(pid, t["description"] + "\n" + t["title"]) if perms.get("read_files") else []
+        if imgs:
+            messages[-1]["content"] += ("\n\nANGEHÄNGTE BILDER (vom Server mitgeschickt): "
+                                        + ", ".join(f"Nr. {i} = {p}" for i, (p, _) in enumerate(imgs, 1))
+                                        + ". Weitere Bilder oder Seiten gescannter PDFs: Werkzeug view_image.")
+        text, tokens, made_files = run_with_tools(a, perms, messages, final_only, proj_dir(pid), (pid, aid, tid),
+                                                  [i for _, i in imgs])
     except Exception as e:
         msg = str(e)
         if msg.startswith("MODELL_WEG: "):
@@ -2875,8 +2909,7 @@ CHAT_TURNS = 24  # so viele letzte Nachrichten gehen als Gespraechsverlauf ans M
 CHAT_FILE_CHARS = int(os.environ.get("PCL_CHAT_FILE_CHARS", "12000"))  # Text je angehaengter Datei im Chat
 CHAT_OLD_FILE_CHARS = 2500   # dieselbe Datei in aelteren Nachrichten des Verlaufs
 CHAT_MAX_IMAGES = 4
-IMG_EXT = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
-           ".bmp": None, ".tif": None, ".tiff": None}  # None = nach PNG umwandeln
+IMG_PATH = re.compile(r"input/[^\s,;:'\"()<>]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|pdf)\b", re.I)
 
 
 def input_listing(pid, limit=40):
@@ -2895,42 +2928,69 @@ def chat_file_text(pid, path, limit):
     except Exception as e:
         t = f"{path}: nicht lesbar ({str(e)[:200]})"
     t = re.sub(r"\n\[Fortsetzung: read_file[^\]]*\]$", "", t)
-    return t if len(t) <= limit else t[:limit] + f"\n[… gekürzt, die Datei ist länger. Das Team liest sie vollständig, wenn du einen Auftrag erteilst.]"
+    return t if len(t) <= limit else t[:limit] + "\n[… gekürzt, die Datei ist länger. Das Team liest sie vollständig, wenn du einen Auftrag erteilst.]"
 
 
-def chat_image(pid, path):
-    """(media_type, base64) eines Bildes, verkleinert auf max. 1568 px (spart Tokens), oder None."""
-    f = proj_dir(pid) / path
-    ext = f.suffix.lower()
-    if ext not in IMG_EXT or not f.is_file():
-        return None
+def call_llm_img(a, messages, images):
+    """call_llm mit Bildern; kann das Modell keine Bilder, nur mit Text erneut. Gibt (text, tokens, hinweis)."""
+    if not images:
+        return (*call_llm(a, messages), "")
     try:
-        from PIL import Image
-        with Image.open(f) as im:
-            if IMG_EXT[ext] and max(im.size) <= 1568 and f.stat().st_size <= 3_500_000:
-                return IMG_EXT[ext], base64.b64encode(f.read_bytes()).decode()
-            im = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") else "RGB")
-            im.thumbnail((1568, 1568))
-            buf = io.BytesIO()
-            if im.mode == "RGBA":
-                im.save(buf, "PNG", optimize=True)
-                return "image/png", base64.b64encode(buf.getvalue()).decode()
-            im.save(buf, "JPEG", quality=88)
-            return "image/jpeg", base64.b64encode(buf.getvalue()).decode()
-    except Exception:
-        if IMG_EXT[ext] and f.stat().st_size <= 3_500_000:
-            return IMG_EXT[ext], base64.b64encode(f.read_bytes()).decode()
-        return None
+        return (*call_llm(a, messages, images), "")
+    except Exception as e:
+        if str(e).startswith("MODELL_WEG: "):
+            raise
+        text, tok = call_llm(a, messages)
+        return text, tok, ("Dieses Modell konnte die Bilder nicht annehmen und hat nur den Text dazu gesehen. "
+                           "Für Bilder ein Modell mit Bildverständnis wählen, z. B. Claude, GPT-4o oder Gemini.")
+
+
+def task_images(pid, text):
+    """Bilder aus input/, die in einer Auftragsbeschreibung genannt werden (z. B. per 📎 aus dem Chat)."""
+    out = []
+    for path in dict.fromkeys(m.group(0) for m in IMG_PATH.finditer(text or "")):
+        if len(out) >= CHAT_MAX_IMAGES:
+            break
+        try:
+            f = tools._inside(proj_dir(pid), path)
+        except ValueError:
+            continue
+        if f.suffix.lower() == ".pdf":  # nur Scans (ohne Textebene): erste Seite als Bild, weitere per view_image
+            try:
+                scan = f.is_file() and not tools.pdf_text(f.read_bytes()[:200_000_000]).strip()
+            except Exception:
+                scan = False
+            for img in (tools.pdf_page_images(f, 1, 1) if scan else []):
+                out.append((f"{path} (Seite 1)", img))
+            continue
+        img = tools.image_b64(f)
+        if img:
+            out.append((path, img))
+    return out
 
 
 def chat_attachment_block(pid, files, limit, with_images):
     """Text, der an die Nutzernachricht angehaengt wird, plus Bilder fuer das Modell."""
     parts, images = [], []
     for path in files:
-        img = chat_image(pid, path) if with_images and len(images) < CHAT_MAX_IMAGES else None
+        img = tools.image_b64(proj_dir(pid) / path) if with_images and len(images) < CHAT_MAX_IMAGES else None
         if img:
             images.append(img)
+        if not with_images and (path.lower().endswith(tuple(tools.IMG_TYPES)) or path.lower().endswith(".pdf")) and (
+                tools.image_b64(proj_dir(pid) / path) or path.lower().endswith(".pdf")):
+            text = chat_file_text(pid, path, limit)
+            if path.lower().endswith(tuple(tools.IMG_TYPES)) or "keinen auslesbaren Text" in text or len(text) < 400:
+                parts.append(f"----- Datei {path} -----\n(Bild bzw. Scan: wurde dir mit dieser Nachricht als Bild gezeigt, jetzt nicht erneut angehängt. "
+                             "Verlass dich auf deine damalige Antwort; braucht ihr es nochmal, mit 📎 erneut anhängen.)")
+                continue
         text = chat_file_text(pid, path, limit)
+        if with_images and path.lower().endswith(".pdf") and len(images) < CHAT_MAX_IMAGES and (
+                "keinen auslesbaren Text" in text or len(text) < 400):  # Scan: die ersten Seiten als Bild
+            pages = tools.pdf_page_images(proj_dir(pid) / path, 1, CHAT_MAX_IMAGES - len(images))
+            if pages:
+                images += pages
+                text = (f"(Gescannte PDF: Seiten 1-{len(pages)} sind als Bild Nr. {len(images) - len(pages) + 1}-{len(images)} angehängt. "
+                        "Für weitere Seiten einen Auftrag erteilen, das Team blättert mit view_image.)\n" + text)
         if img and any(w in text for w in ("Mediendatei", "Binaerdatei", "nicht lesbar", "OCR nicht installiert", "ohne erkennbaren Text")):
             text = f"{path}: Bild, siehe angehängtes Bild Nr. {len(images)}."
         elif img:
@@ -3021,16 +3081,10 @@ def api_chat_post(aid):
                         + (f" (Anhänge: {len(files)} Datei(en), {len(images)} Bild(er))" if files else "")), 20
     else:
         try:
-            text, tokens = call_llm(a, messages, images or None)
+            text, tokens, hint = call_llm_img(a, messages, images)
         except Exception as e:
-            if not images:
-                abort(400, f"Das Modell hat nicht geantwortet: {str(e)[:300]}")
-            try:  # Modell kann keine Bilder: nur mit Text (Dateiname, OCR) erneut
-                text, tokens = call_llm(a, messages)
-                note = ("\n\n_(Hinweis: Dieses Modell konnte die Bilder nicht annehmen und hat nur den Text dazu gesehen. "
-                        "Für Bilder ein Modell mit Bildverständnis wählen, z. B. Claude, GPT-4o oder Gemini.)_")
-            except Exception as e2:
-                abort(400, f"Das Modell hat nicht geantwortet: {str(e2)[:300]}")
+            abort(400, f"Das Modell hat nicht geantwortet: {str(e)[:300]}")
+        note = f"\n\n_(Hinweis: {hint})_" if hint else ""
     now = time.time()
     ex("INSERT INTO chats(agent_id,role,content,ts,files) VALUES(?,?,?,?,?)", (aid, "user", msg, now, json.dumps(files) if files else ""))
     ex("INSERT INTO chats(agent_id,role,content,ts) VALUES(?,?,?,?)", (aid, "assistant", text.strip() + note, time.time()))
