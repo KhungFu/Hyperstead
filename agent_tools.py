@@ -69,6 +69,9 @@ TOOLS = {
                                  'assets/ = Bilder, downloads/ = geladene Dateien, output/ = fertige Medien/Dokumente)'),
     "read_file": ("read_files", '{"tool": "read_file", "path": "datei.pdf", "offset": 0}  Datei lesen: Text, Markdown, HTML, PDF, DOCX, EPUB. '
                                 'Lange Dateien in Teilen lesen (offset = Zeichenposition, steht am Ende der Ausgabe)'),
+    "view_image": ("read_files", '{"tool": "view_image", "path": "input/foto.jpg"}  Bild ANSEHEN (Karten, Layouts, Fotos, Screenshots). '
+                                 'Auch Seiten gescannter PDFs: {"tool": "view_image", "path": "input/scan.pdf", "page": 1} (bis 4 Seiten ab page). '
+                                 'Das Bild haengt nur an der naechsten Runde: schreib dir sofort auf, was du siehst'),
     "copy_files": ("write_files", '{"tool": "copy_files", "from": "site", "to": "www", "move": false}  Datei oder ganzen Ordner innerhalb des Projektordners kopieren '
                                   '(move true = verschieben). Beispiel: fertige Seite von site/ nach www/ uebernehmen. Vorhandene Dateien werden ueberschrieben'),
     "write_code": ("code", '{"tool": "write_code", "path": "src/main.py", "content": "..."}  Quellcode-Datei im Projektordner anlegen/ueberschreiben '
@@ -677,7 +680,8 @@ def read_file(root, path, offset=0):
                 else f"{path}: Bild ohne erkennbaren Text ({f.stat().st_size // 1024} KB).")
     if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".zip"):
         return f"{path}: Mediendatei ({f.stat().st_size // 1024} KB). Fuer Videos/Audio: media_info."
-    raw = f.read_bytes()[:30_000_000]
+    cap = int(_env("PCL_MAX_READ_MB", "200")) * 1_000_000 if ext == ".pdf" else 30_000_000  # Scans sind oft sehr gross
+    raw = f.read_bytes()[:cap]
     try:
         text = _doc_text(path, raw)
     except Exception as e:
@@ -770,6 +774,93 @@ def ocr_pdf(data, max_pages=None):
     return note + "\n\n".join(parts)
 
 
+IMG_MAX_PX = 1568  # groesser bringt den Modellen nichts, kostet nur Tokens
+
+
+def _pil_b64(im):
+    """PIL-Bild verkleinern und als (media_type, base64) liefern."""
+    im = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") else "RGB")
+    im.thumbnail((IMG_MAX_PX, IMG_MAX_PX))
+    buf = io.BytesIO()
+    if im.mode == "RGBA":
+        im.save(buf, "PNG", optimize=True)
+        return "image/png", base64.b64encode(buf.getvalue()).decode()
+    im.save(buf, "JPEG", quality=88)
+    return "image/jpeg", base64.b64encode(buf.getvalue()).decode()
+
+
+IMG_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+             ".bmp": None, ".tif": None, ".tiff": None}  # None = wird umgewandelt
+
+
+def image_b64(path):
+    """(media_type, base64) einer Bilddatei fuer Modelle mit Bildverstaendnis, oder None."""
+    f = Path(path)
+    ext = f.suffix.lower()
+    if ext not in IMG_TYPES or not f.is_file():
+        return None
+    try:
+        from PIL import Image
+        with Image.open(f) as im:
+            if IMG_TYPES[ext] and max(im.size) <= IMG_MAX_PX and f.stat().st_size <= 3_500_000:
+                return IMG_TYPES[ext], base64.b64encode(f.read_bytes()).decode()
+            return _pil_b64(im)
+    except Exception:
+        if IMG_TYPES[ext] and f.stat().st_size <= 3_500_000:
+            return IMG_TYPES[ext], base64.b64encode(f.read_bytes()).decode()
+        return None
+
+
+def pdf_page_images(path, first=1, count=4):
+    """Seiten einer (gescannten) PDF als Bilder: per pdftoppm, sonst die eingebetteten Scanbilder (pypdf, ohne poppler)."""
+    first, count = max(1, int(first or 1)), max(1, min(int(count or 4), 4))
+    out = []
+    if shutil.which("pdftoppm"):
+        with tempfile.TemporaryDirectory(prefix="pcl-pdfimg-") as td:
+            subprocess.run(["pdftoppm", "-r", "110", "-f", str(first), "-l", str(first + count - 1), "-jpeg", str(path),
+                            str(Path(td) / "p")], capture_output=True, timeout=300)
+            for img in sorted(Path(td).glob("p-*.jpg")):
+                b = image_b64(img)
+                if b:
+                    out.append(b)
+        if out:
+            return out
+    try:
+        from PIL import Image
+        from pypdf import PdfReader
+        rd = PdfReader(str(path))
+        for pg in list(rd.pages)[first - 1:first - 1 + count]:
+            imgs = list(pg.images)
+            if not imgs:
+                continue
+            big = max(imgs, key=lambda x: len(x.data))
+            with Image.open(io.BytesIO(big.data)) as im:
+                out.append(_pil_b64(im))
+    except Exception:
+        pass
+    return out
+
+
+def view_image(root, path, page=None):
+    """Fuer das Werkzeug view_image: (Text, [Bilder])."""
+    try:
+        f = _inside(root, path)
+    except ValueError:
+        raise ToolError("Pfad liegt ausserhalb des Projektordners")
+    if not f.is_file():
+        raise ToolError(f"Datei '{path}' gibt es nicht (list_files zeigt den Inhalt)")
+    if f.suffix.lower() == ".pdf":
+        first = max(1, int(page or 1)) if str(page or "1").isdigit() else 1
+        imgs = pdf_page_images(f, first, 4)
+        if not imgs:
+            raise ToolError("Aus dieser PDF liessen sich keine Seitenbilder holen")
+        return f"{path}: Seiten {first}-{first + len(imgs) - 1} als Bild angehaengt.", imgs
+    img = image_b64(f)
+    if not img:
+        raise ToolError("Kein unterstuetztes Bildformat (png, jpg, gif, webp, bmp, tif)")
+    return f"{path}: Bild angehaengt ({f.stat().st_size // 1024} KB).", [img]
+
+
 def docx_text(data):
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         xml = z.read("word/document.xml").decode("utf-8", "replace")
@@ -795,7 +886,8 @@ def _doc_text(path, data):
         t = pdf_text(data)
         if not t.strip():
             t = ocr_pdf(data)
-        return t or "(PDF enthaelt keinen auslesbaren Text, vermutlich ein Scan, und OCR ist nicht installiert: sudo apt install tesseract-ocr tesseract-ocr-deu poppler-utils)"
+        return t or ("(PDF enthaelt keinen auslesbaren Text, vermutlich ein Scan, und OCR ist nicht installiert: sudo apt install tesseract-ocr "
+                     "tesseract-ocr-deu tesseract-ocr-tur poppler-utils. Seiten ansehen: view_image mit path und page)")
     if ext == ".docx":
         return docx_text(data)
     if ext == ".epub":
@@ -1576,6 +1668,8 @@ def run_tool(call, root, perms):
             out = video_generate(root, call)
         elif name == "list_files":
             out = list_files(root, call.get("path"))
+        elif name == "view_image":  # die Bilder selbst haengt app.run_with_tools an
+            out = view_image(root, call.get("path"), call.get("page"))[0]
         elif name == "download_file":
             out = download_file(root, call.get("url"), call.get("name"))
         elif name == "copy_files":
