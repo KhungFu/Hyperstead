@@ -676,9 +676,12 @@ def read_file(root, path, offset=0):
             t = ocr_image(f)
         except Exception as e:
             raise ToolError(f"OCR fehlgeschlagen ({type(e).__name__})")
-        return (f"{path}: Text aus dem Bild (OCR, Fehler moeglich):\n{t[:READ_CHARS]}" if t
-                else f"{path}: Bild ohne erkennbaren Text ({f.stat().st_size // 1024} KB).")
-    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".zip"):
+        return (f"{path}: NUR der Text aus dem Bild (OCR, Fehler moeglich). Den Bildinhalt (Karte, Layout, Foto) siehst du mit "
+                f"view_image:\n{t[:READ_CHARS]}" if t
+                else f"{path}: Bild ohne erkennbaren Text ({f.stat().st_size // 1024} KB). Den Inhalt siehst du mit view_image.")
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+        return f"{path}: Bild ({f.stat().st_size // 1024} KB). Ansehen mit view_image, read_file liest keine Bilder."
+    if ext in (".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg", ".zip"):
         return f"{path}: Mediendatei ({f.stat().st_size // 1024} KB). Fuer Videos/Audio: media_info."
     cap = int(_env("PCL_MAX_READ_MB", "200")) * 1_000_000 if ext == ".pdf" else 30_000_000  # Scans sind oft sehr gross
     raw = f.read_bytes()[:cap]
@@ -750,15 +753,25 @@ def ocr_image(path):
 
 def ocr_pdf(data, max_pages=None):
     """Gescannte PDF seitenweise per pdftoppm + tesseract lesen (langsam auf dem Pi, daher Seitenlimit PCL_OCR_MAX_PAGES)."""
-    if not (shutil.which("tesseract") and shutil.which("pdftoppm")):
+    if not shutil.which("tesseract"):
         return ""
     max_pages = max_pages or int(_env("PCL_OCR_MAX_PAGES", "25"))
     parts, total = [], 0
     with tempfile.TemporaryDirectory(prefix="pcl-ocr-") as td:
         pdf = Path(td) / "in.pdf"
         pdf.write_bytes(data)
-        subprocess.run(["pdftoppm", "-r", "200", "-gray", "-l", str(max_pages), "-png", str(pdf), str(Path(td) / "p")],
-                       capture_output=True, timeout=600)
+        if shutil.which("pdftoppm"):
+            subprocess.run(["pdftoppm", "-r", "200", "-gray", "-l", str(max_pages), "-png", str(pdf), str(Path(td) / "p")],
+                           capture_output=True, timeout=600)
+        else:  # ohne poppler: die eingebetteten Scanbilder der Seiten nehmen
+            try:
+                from pypdf import PdfReader
+                for i, pg in enumerate(list(PdfReader(str(pdf)).pages)[:max_pages], 1):
+                    imgs = list(pg.images)
+                    if imgs:
+                        (Path(td) / f"p-{i:04d}.png").write_bytes(max(imgs, key=lambda x: len(x.data)).data)
+            except Exception:
+                pass
         pages = sorted(Path(td).glob("p-*.png"))
         total = len(pages)
         for i, img in enumerate(pages, 1):

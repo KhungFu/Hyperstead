@@ -49,6 +49,9 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   `PCL_RUN_MAX_IMAGES`) in jeder Runde mit; `task_images` hängt im Auftrag genannte Bilder/Scans aus `input/` gleich an. `call_llm_img` = mit Text-Rückfall.
   `read_file` liest PDFs bis `PCL_MAX_READ_MB` (200). UI: Ergebnisse mit 📋 Kopieren (`resHtml`/`copyText`, Fallback ohne HTTPS),
   `loadTasks` zeichnet nur bei Änderungen neu und nie während einer Markierung.
+- `claude_cli`: läuft mit `--strict-mcp-config` (keine Konnektoren wie Gmail/Drive aus dem Abo) und bekommt die System-Nachricht als
+  `--system-prompt` statt des Claude-Code-Prompts. Ohne beides hielt sich das Modell für werkzeuglos und ignorierte die JSON-Werkzeuge.
+  Kann ein Modell keine Bilder, sagt `call_llm_img` ihm das (Bericht nennt Agent/Modell). Angeworbene Mitarbeiter haben immer `read_files`.
   Telegram: Datei-Nachrichten (`tg_file_of`) → `tg_save_file` → Bildunterschrift = Auftrag/Überarbeitung, ohne Text in `_tg_pending` für den nächsten Auftrag, Alben über `_tg_groups`/`tg_flush_groups`.
 - Oberfläche responsive: unter 820 px Menü ☰ (`#app.side-open`), Panel als Vollbild, Canvas per Pointer-Events (Touch, zwei Finger = Zoom).
 - Installer: `install.sh --system` (Medien/OCR per apt), `--code` (Compiler aus `CODE_PKGS`), `--all` (alles inkl. Piper + Dienst). `selftest.py code` prüft alle Sprachen.

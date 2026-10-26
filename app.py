@@ -141,7 +141,7 @@ PROVIDERS = {
     "claude_cli": {
         "label": "Claude (CLI, dein Abo)",
         "kind": "cli", "url": None, "key_env": None, "model": "",
-        "bin": "claude", "cmd_env": "PCL_CLI_CLAUDE", "cmd": 'claude -p --tools "" --no-session-persistence', "model_flag": "--model",
+        "bin": "claude", "cmd_env": "PCL_CLI_CLAUDE", "cmd": 'claude -p --tools "" --strict-mcp-config --no-session-persistence', "model_flag": "--model",
         "models": ["sonnet", "opus", "haiku"],
     },
     "codex_cli": {
@@ -489,6 +489,13 @@ def call_llm(agent, messages, images=None):
             model = (agent.get("model") or "").strip()
             if model:  # Modellflag direkt hinter das Programm (vor ein abschliessendes "-")
                 argv[cfg.get("model_pos", 1):cfg.get("model_pos", 1)] = [cfg["model_flag"], model]
+        if pid == "claude_cli" and argv and Path(argv[0]).name == "claude" and "--system-prompt" not in argv:
+            # Eigener Systemprompt statt dem von Claude Code: sonst haelt sich das Modell fuer einen Programmier-Assistenten
+            # mit (fehlenden) eigenen Werkzeugen und ignoriert die JSON-Werkzeuge des Servers
+            sys_txt = "\n\n".join(str(m["content"]) for m in messages if m["role"] == "system")
+            if sys_txt.strip():
+                argv[1:1] = ["--system-prompt", sys_txt[:60000]]
+                messages = [m for m in messages if m["role"] != "system"]
         prompt = "\n\n".join(f"[{m['role']}]\n{m['content']}" for m in messages)
         if images and pid == "claude_cli":
             out = _run_claude_images(argv, prompt, images)
@@ -1015,7 +1022,7 @@ def recruit_team(boss, project, items, notes):
     ids = []
     for i, p in enumerate(people):
         perms = dict(DEFAULT_PERMS)
-        perms.update({k: (k in p["tools"]) for k in RECRUIT_PERMS})
+        perms.update({k: (k in p["tools"]) for k in RECRUIT_PERMS if k != "read_files"})  # lesen (input/, Bilder) duerfen alle
         if i in has_kids:
             perms.update({"delegate": True, "judge": True})
         row = per_row[depth[i]]
@@ -2940,9 +2947,13 @@ def call_llm_img(a, messages, images):
     except Exception as e:
         if str(e).startswith("MODELL_WEG: "):
             raise
-        text, tok = call_llm(a, messages)
-        return text, tok, ("Dieses Modell konnte die Bilder nicht annehmen und hat nur den Text dazu gesehen. "
-                           "Für Bilder ein Modell mit Bildverständnis wählen, z. B. Claude, GPT-4o oder Gemini.")
+        hint = (f"Das Modell von {a.get('name', 'diesem Agenten')} ({a.get('provider')}/{a.get('model') or 'Standard'}) konnte die Bilder "
+                "nicht annehmen und hat nur den Text dazu gesehen. Für Bilder ein Modell mit Bildverständnis wählen, z. B. Claude, GPT-4o oder Gemini.")
+        msgs = [dict(m) for m in messages]  # dem Modell ehrlich sagen, warum es nichts sieht, damit der Bericht den Grund nennt
+        msgs[-1]["content"] = str(msgs[-1]["content"]) + "\n\n[SERVER: Die Bilder konnten deinem Modell nicht gezeigt werden (" + \
+            str(e)[:160] + "). Schreib im Ergebnis: " + hint + "]"
+        text, tok = call_llm(a, msgs)
+        return text, tok, hint
 
 
 def task_images(pid, text):
