@@ -209,6 +209,12 @@ CREATE TABLE IF NOT EXISTS approvals(
   kind TEXT, payload TEXT, status TEXT DEFAULT 'pending', output TEXT DEFAULT '', created REAL);
 CREATE TABLE IF NOT EXISTS usage(
   id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER, ts REAL, tokens INTEGER);
+CREATE TABLE IF NOT EXISTS goals(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, parent_id INTEGER DEFAULT 0,
+  title TEXT NOT NULL, status TEXT DEFAULT 'open', created REAL);
+CREATE TABLE IF NOT EXISTS llm_calls(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, agent_id INTEGER, project_id INTEGER, provider TEXT, model TEXT,
+  tokens INTEGER, seconds REAL, cost REAL);
 CREATE TABLE IF NOT EXISTS audit(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, project_id INTEGER, agent_id INTEGER,
   task_id INTEGER, event TEXT, detail TEXT);
@@ -284,7 +290,7 @@ def init_db():
         for col, ddl in (("feedback", "TEXT DEFAULT ''"), ("prev_result", "TEXT DEFAULT ''"),
                          ("rounds", "INTEGER DEFAULT 0"), ("passes", "INTEGER DEFAULT 0"),
                          ("inbox", "TEXT DEFAULT ''"), ("schedule_id", "INTEGER DEFAULT 0"),
-                         ("resumed", "INTEGER DEFAULT 0")):
+                         ("resumed", "INTEGER DEFAULT 0"), ("goal_id", "INTEGER DEFAULT 0")):
             if col not in have:
                 c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {ddl}")
         if "folder" not in {r["name"] for r in c.execute("PRAGMA table_info(projects)")}:
@@ -295,6 +301,8 @@ def init_db():
             c.execute("ALTER TABLE schedules ADD COLUMN kind TEXT DEFAULT ''")
         if "files" not in {r["name"] for r in c.execute("PRAGMA table_info(chats)")}:
             c.execute("ALTER TABLE chats ADD COLUMN files TEXT DEFAULT ''")
+        if "data" not in {r["name"] for r in c.execute("PRAGMA table_info(approvals)")}:
+            c.execute("ALTER TABLE approvals ADD COLUMN data TEXT DEFAULT ''")
         if "memory" not in {r["name"] for r in c.execute("PRAGMA table_info(agents)")}:
             c.execute("ALTER TABLE agents ADD COLUMN memory TEXT DEFAULT ''")
         c.execute(
@@ -463,7 +471,61 @@ def _with_images(cfg, messages, images):
     return out
 
 
+# ------------------------------------------------ Nutzung, Kosten, Abo-Kontingent
+ABO_PROVIDERS = ("claude_cli", "codex_cli", "cli")
+ABO_WARN_5H = int(os.environ.get("PCL_ABO_WARN_5H", "150"))  # Warnung ab so vielen Abo-Aufrufen in 5 Stunden (0 = aus)
+# Grobe Mischpreise in US-$ je 1 Mio. Tokens (Ein- und Ausgabe zusammen, Agenten lesen viel mehr als sie schreiben).
+# Nur eine Schaetzung; eigene Werte per PCL_PRICES='{"sonnet": 5, "gpt-4o": 4}' (Teilstring des Modellnamens).
+PRICES = [("opus", 10), ("sonnet", 5), ("haiku", 1.5), ("gpt-4o-mini", 0.3), ("gpt-4.1-mini", 0.6), ("gpt-4o", 4),
+          ("gpt-4.1", 3), ("gpt-5-mini", 0.5), ("gpt-5", 3), ("o3", 3), ("o4-mini", 1.5), ("gemini-2.5-pro", 2.5), ("pro", 2.5),
+          ("flash-lite", 0.15), ("flash", 0.5), ("deepseek", 0.5), ("qwen", 0.6), ("llama", 0.6), ("mixtral", 0.6), ("gemma", 0.2)]
+try:
+    PRICES = [(k.lower(), float(v)) for k, v in json.loads(os.environ.get("PCL_PRICES", "") or "{}").items()] + PRICES
+except (ValueError, AttributeError):
+    print("WARNUNG: PCL_PRICES ist kein gueltiges JSON und wird ignoriert.")
+FREE_PROVIDERS = ("mock", "ollama") + ABO_PROVIDERS
+
+
+def est_cost(provider, model, tokens):
+    """Geschaetzte Kosten in US-$; 0 bei Abo/lokal, None wenn der Preis unbekannt ist."""
+    if provider in FREE_PROVIDERS:
+        return 0.0
+    m = (model or "").lower()
+    for k, price in PRICES:
+        if k in m:
+            return round(tokens * price / 1_000_000, 6)
+    return None
+
+
+def record_call(agent, tokens, seconds):
+    prov = agent.get("provider") or ""
+    model = (agent.get("model") or "").strip() or (PROVIDERS.get(prov) or {}).get("model", "")
+    ex("INSERT INTO llm_calls(ts,agent_id,project_id,provider,model,tokens,seconds,cost) VALUES(?,?,?,?,?,?,?,?)",
+       (time.time(), agent.get("id"), agent.get("project_id"), prov, model, int(tokens or 0), round(seconds, 2),
+        est_cost(prov, model, int(tokens or 0))))
+    if prov in ABO_PROVIDERS and ABO_WARN_5H > 0:
+        n = q1("SELECT COUNT(*) c FROM llm_calls WHERE provider=? AND ts>=?", (prov, time.time() - 5 * 3600))["c"]
+        if n >= ABO_WARN_5H and time.time() - float(get_setting(f"abo_warn:{prov}", "0") or 0) > 5 * 3600:
+            set_setting(f"abo_warn:{prov}", str(time.time()))
+            label = PROVIDERS.get(prov, {}).get("label", prov)
+            log("abo_warning", f"{label}: {n} Aufrufe in 5 h")
+            tg_notify(f"⚠️ Abo-Kontingent: {label} wurde in den letzten 5 Stunden {n}-mal aufgerufen (Warnschwelle {ABO_WARN_5H}). "
+                      "Bald greift vermutlich das Limit deines Abos. Weniger parallel arbeiten (PCL_WORKERS=1) oder einzelne Agenten "
+                      "auf einen anderen Anbieter stellen (Menü 🔀 KI für Gruppe).")
+
+
 def call_llm(agent, messages, images=None):
+    """Wie _call_llm, protokolliert aber jeden erfolgreichen Aufruf (Tokens, Dauer, geschaetzte Kosten) fuer 📊 Nutzung."""
+    t0 = time.time()
+    out = _call_llm(agent, messages, images)
+    try:
+        record_call(agent, out[1], time.time() - t0)
+    except Exception as e:  # Statistik darf nie eine Aufgabe scheitern lassen
+        print("Nutzung nicht gespeichert:", e)
+    return out
+
+
+def _call_llm(agent, messages, images=None):
     """Gibt (text, tokens) zurueck. Rotiert Keys bei 429/5xx.
     images: optionale Bilder [(media_type, base64)] zur letzten Nutzernachricht (Chat-Anhaenge)."""
     pid = agent["provider"]
@@ -735,6 +797,54 @@ def descendants(aid, depth=0):
     return out
 
 
+# ----------------------------------------------------------------------- Ziele
+def goal_path(gid):
+    path, seen = [], set()
+    while gid and gid not in seen and len(path) < 20:
+        seen.add(gid)
+        g = q1("SELECT id, parent_id, title FROM goals WHERE id=?", (gid,))
+        if not g:
+            break
+        path.insert(0, g["title"])
+        gid = g["parent_id"]
+    return path
+
+
+def goal_tree(pid):
+    """Ziele des Projekts als Liste in Baumreihenfolge, je mit Tiefe und Fortschritt (Aufgaben inkl. Unterziele)."""
+    goals = q("SELECT * FROM goals WHERE project_id=? ORDER BY id", (pid,))
+    by_parent = {}
+    for g in goals:
+        by_parent.setdefault(g["parent_id"] or 0, []).append(g)
+    own = {r["goal_id"]: r for r in q("SELECT goal_id, COUNT(*) total, SUM(status='done') done FROM tasks "
+                                         "WHERE project_id=? AND goal_id>0 GROUP BY goal_id", (pid,))}
+    out = []
+
+    def walk(parent, depth):
+        tot = dn = 0
+        for g in by_parent.get(parent, []):
+            row = dict(g, depth=depth)
+            out.append(row)
+            st, sd = walk(g["id"], depth + 1)
+            row["tasks"] = (own.get(g["id"], {}).get("total") or 0) + st
+            row["tasks_done"] = (own.get(g["id"], {}).get("done") or 0) + sd
+            tot, dn = tot + row["tasks"], dn + row["tasks_done"]
+        return tot, dn
+    walk(0, 0)
+    ids = {g["id"] for g in out}
+    out += [dict(g, depth=0, tasks=0, tasks_done=0) for g in goals if g["id"] not in ids]  # verwaiste Ziele nicht verlieren
+    return out
+
+
+def goals_block(pid, limit=25):
+    tree = goal_tree(pid)
+    if not tree:
+        return ""
+    lines = [f"{'  ' * g['depth']}- [{'x' if g['status'] == 'done' else ' '}] {g['title']}"
+             + (f" ({g['tasks_done']}/{g['tasks']} Aufgaben fertig)" if g["tasks"] else "") for g in tree[:limit]]
+    return "\nZIELE DES PROJEKTS (vom Besitzer gesetzt, [x] = erreicht):\n" + "\n".join(lines)
+
+
 # ------------------------------------------- Gedaechtnis der Agenten + Firmenwissen
 MEMORY_CHARS = int(os.environ.get("PCL_MEMORY_CHARS", "4000"))        # Gedaechtnis je Agent, aelteste Eintraege fallen heraus
 KNOWLEDGE_CHARS = int(os.environ.get("PCL_KNOWLEDGE_CHARS", "8000"))  # Firmenwissen im Prompt je Aufgabe
@@ -840,7 +950,7 @@ def build_system(agent, project, mode, final_only=False):
                  "(der Besitzer hakt es im Agenten-Panel an), und liefere bis dahin den Inhalt selbst im result.")
     if agent["system_prompt"].strip():
         s.append("\nArbeitsanweisung:\n" + agent["system_prompt"].strip())
-    for b in (knowledge_block(project["id"]), memory_block(agent)):
+    for b in (knowledge_block(project["id"]), memory_block(agent), goals_block(project["id"]) if kids or not parent else ""):
         if b:
             s.append(b)
 
@@ -962,8 +1072,15 @@ def clip(text, n):
     return text if len(text) <= n else text[:n] + f"\n[... gekuerzt, {len(text) - n} Zeichen weggelassen]"
 
 
+def goal_line(t):
+    path = goal_path(t.get("goal_id") or 0)
+    return ("Diese Aufgabe dient dem Ziel: " + " > ".join(path)) if path else ""
+
+
 def work_prompt(t):
     parts = [f"Aufgabe: {t['title']}\n\n{t['description']}".strip()]
+    if goal_line(t):
+        parts.append(goal_line(t))
     if t.get("parent_task_id"):
         pt = q1("SELECT t.title, a.name, a.role FROM tasks t LEFT JOIN agents a ON a.id=t.agent_id WHERE t.id=?",
                 (t["parent_task_id"],))
@@ -978,6 +1095,8 @@ def work_prompt(t):
 def review_prompt(t, child_tasks):
     parts = [f"{REVIEW_MARKER} (du hast alle Berichte gelesen, sie stehen unten).",
              f"Urspruengliche Aufgabe: {t['title']}\n{t['description']}".strip()]
+    if goal_line(t):
+        parts.append(goal_line(t))
     if t.get("feedback"):
         parts.append("ÜBERARBEITUNGSAUFTRAG deines Vorgesetzten an dich:\n" + t["feedback"]
                      + "\n\nDein bisheriges Gesamtergebnis (verbessere es gezielt, Mitarbeiter darfst du bei Bedarf erneut einbeziehen):\n"
@@ -989,6 +1108,96 @@ def review_prompt(t, child_tasks):
                      f"Status: {STATUS_DE.get(c['status'], c['status'])} | Rueckgaben: {c['rounds']}/{MAX_REVISIONS}\n"
                      + clip(c["result"], per))
     return "\n\n".join(parts)
+
+
+# --------------------------------------------- Freigabe-Schranken (wie Paperclip-"Board")
+GATES_DEFAULT = {"plan": False, "recruit": False}
+
+
+def gates_of(pid):
+    try:
+        g = json.loads(get_setting(f"gates:{pid}", "") or "{}")
+    except ValueError:
+        g = {}
+    return {k: bool(g.get(k, v)) for k, v in GATES_DEFAULT.items()}
+
+
+def resolve_delegations(items, kids, notes):
+    """Delegationsliste des Modells -> [(Mitarbeiter, Titel, Beschreibung)], nur exakt benannte direkte Mitarbeiter."""
+    by_name = {k["name"].lower(): k for k in kids}
+    out = []
+    for item in (items if isinstance(items, list) else [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        kid = by_name.get(str(item.get("to", "")).lower())
+        if not kid:
+            notes.append(f"Unbekannter Mitarbeiter '{item.get('to')}' - ignoriert.")
+            continue
+        out.append((kid, str(item.get("title", "Aufgabe"))[:200], str(item.get("description", ""))[:6000]))
+    return out
+
+
+def create_subtasks(t, resolved, auto_run, notes):
+    st = "queued" if auto_run else "todo"
+    for kid, title, desc in resolved:
+        nid = ex("INSERT INTO tasks(project_id,agent_id,parent_task_id,title,description,status,created,updated,goal_id)"
+                 " VALUES(?,?,?,?,?,?,?,?,?)",
+                 (t["project_id"], kid["id"], t["id"], title, desc, st, time.time(), time.time(), t.get("goal_id") or 0))
+        log("delegated", f"an {kid['name']}: {title}", t["project_id"], t["agent_id"], nid)
+        notes.append(f"Delegiert an {kid['name']}: {title}" + ("" if st == "queued" else " (wartet auf manuellen Start)"))
+    return len(resolved)
+
+
+def request_gate(kind, t, a, p, summary, data):
+    apid = ex("INSERT INTO approvals(project_id,task_id,agent_id,kind,payload,created,data) VALUES(?,?,?,?,?,?,?)",
+              (p["id"], t["id"], a["id"], kind, summary[:4000], time.time(), json.dumps(data, ensure_ascii=False)))
+    log("approval_requested", f"{kind}: {summary[:200]}", p["id"], a["id"], t["id"])
+    what = "Plan (Aufgabenverteilung)" if kind == "plan" else "neues Team"
+    tg_notify(f"🖐 Freigabe nötig · {a['name']} ({p['name']})\n{what} für Auftrag #{t['id']}: {t['title']}\n\n{clip(summary, 2500)}",
+              buttons=[[{"text": "✅ Freigeben", "callback_data": f"ga:{apid}"}, {"text": "❌ Ablehnen", "callback_data": f"gd:{apid}"}]])
+    return apid
+
+
+def decide_gate(ap, approve):
+    """Plan- oder Team-Freigabe entscheiden (Web und Telegram). Gibt eine kurze Meldung zurueck."""
+    t = q1("SELECT * FROM tasks WHERE id=?", (ap["task_id"],))
+    with closing(conn()) as c:  # atomar: Doppelklick / Web + Telegram gleichzeitig entscheiden nur einmal
+        n = c.execute("UPDATE approvals SET status=? WHERE id=? AND status='pending'",
+                      ("approved" if approve else "denied", ap["id"])).rowcount
+        c.commit()
+    if not n:
+        return "Schon entschieden."
+    if not t or t["status"] != "waiting_approval":
+        return "Auftrag existiert nicht mehr oder wartet nicht mehr."
+    a = q1("SELECT * FROM agents WHERE id=?", (t["agent_id"],))
+    p = q1("SELECT * FROM projects WHERE id=?", (t["project_id"],))
+    try:
+        data = json.loads(ap.get("data") or "[]")
+    except ValueError:
+        data = []
+    what = "Plan" if ap["kind"] == "plan" else "Team"
+    if not approve or not a or not p:
+        log("approval_denied", ap["kind"], ap["project_id"], ap["agent_id"], ap["task_id"])
+        finish(t["id"], "failed", t["result"] + f"\n\n❌ {what} vom Besitzer abgelehnt. Antworte in der Post mit deinen Änderungswünschen, "
+               "dann plant der Chef neu.")
+        return f"{what} abgelehnt."
+    log("approval_granted", ap["kind"], ap["project_id"], ap["agent_id"], ap["task_id"])
+    notes = []
+    if ap["kind"] == "plan":
+        kids = {k["id"]: k for k in team_of(a)}
+        resolved = [(kids[d["to_id"]], d["title"], d["description"]) for d in data if d.get("to_id") in kids]
+        made = create_subtasks(t, resolved, perms_of(a)["auto_run"], notes)
+        if made:
+            set_task(t["id"], "waiting_subtasks", t["result"] + "\n\n✅ Plan freigegeben.\n" + "\n".join(notes))
+        else:
+            finish(t["id"], "done", t["result"] + "\n\n✅ Plan freigegeben, aber kein Mitarbeiter mehr vorhanden.")
+        return f"Plan freigegeben: {made} Aufgabe(n) verteilt."
+    hired = recruit_team(a, p, data, notes)
+    lines = [f"- {h['name']} ({h['role']})" for h in hired]
+    finish(t["id"], "done", t["result"] + f"\n\n✅ Team freigegeben ({len(hired)} Mitarbeiter):\n" + "\n".join(lines + notes)
+           + "\n\nNaechster Schritt: Den neuen Mitarbeitern KI und Modell zuweisen (Menue ⚠ Modelle) und dann in der Post auf diesen "
+           "Auftrag antworten (z. B. „Weiter“).")
+    return f"Team freigegeben: {len(hired)} Mitarbeiter angelegt."
 
 
 # -------------------------------------------------------------- Task ausfuehren
@@ -1338,6 +1547,13 @@ def execute_task(tid):
         if mode != "recruit":
             notes.append("Einstellen nur beim Aufbau eines neuen Teams moeglich - ignoriert.")
             log("denied", "recruit", pid, aid, tid)
+        elif gates_of(pid)["recruit"]:
+            items = [i for i in (data["recruit"] if isinstance(data["recruit"], list) else []) if isinstance(i, dict)][:RECRUIT_MAX]
+            summary = "\n".join(f"- {i.get('name')} ({i.get('role', '')})" + (f" -> {i['reports_to']}" if i.get("reports_to") else "")
+                                for i in items)
+            request_gate("recruit", t, a, p, f"{a['name']} möchte {len(items)} Mitarbeiter einstellen:\n{summary}", items)
+            set_task(tid, "waiting_approval", result + "\n\n🖐 Wartet auf deine Freigabe des Teams:\n" + summary)
+            return
         else:
             hired = recruit_team(a, p, data["recruit"], notes)
             if hired:
@@ -1359,22 +1575,15 @@ def execute_task(tid):
         elif not can_delegate:
             notes.append(f"Keine Mitarbeiter bzw. max. Delegationstiefe ({MAX_DEPTH}) erreicht - ignoriert.")
         else:
-            by_name = {k["name"].lower(): k for k in kids}
-            for item in (dele if isinstance(dele, list) else [])[:8]:
-                kid = by_name.get(str(item.get("to", "")).lower())
-                if not kid:
-                    notes.append(f"Unbekannter Mitarbeiter '{item.get('to')}' - ignoriert.")
-                    continue
-                st = "queued" if perms["auto_run"] else "todo"
-                nid = ex(
-                    "INSERT INTO tasks(project_id,agent_id,parent_task_id,title,description,status,created,updated)"
-                    " VALUES(?,?,?,?,?,?,?,?)",
-                    (pid, kid["id"], tid, str(item.get("title", "Aufgabe"))[:200],
-                     str(item.get("description", ""))[:6000], st, time.time(), time.time()))
-                log("delegated", f"an {kid['name']}: {item.get('title')}", pid, aid, nid)
-                notes.append(f"Delegiert an {kid['name']}: {item.get('title')}"
-                             + ("" if st == "queued" else " (wartet auf manuellen Start)"))
-                created += 1
+            resolved = resolve_delegations(dele, kids, notes)
+            if resolved and mode == "plan" and not t["parent_task_id"] and not t["schedule_id"] and gates_of(pid)["plan"] and not revised:
+                plan = "\n".join(f"- an {k['name']}: {ti}" + (f"\n  {clip(de, 300)}" if de else "") for k, ti, de in resolved)
+                request_gate("plan", t, a, p, f"Plan von {a['name']}:\n{result[:1500]}\n\nAufgaben:\n{plan}",
+                             [{"to_id": k["id"], "title": ti, "description": de} for k, ti, de in resolved])
+                set_task(tid, "waiting_approval", result + "\n\n🖐 Wartet auf deine Freigabe des Plans:\n" + plan
+                         + ("\n" + "\n".join(notes) if notes else ""))
+                return
+            created += create_subtasks(t, resolved, perms["auto_run"], notes)
 
     # --- Team arbeitet (wieder): Chef wartet, bis alle fertig sind
     if revised or created:
@@ -1714,6 +1923,12 @@ def tg_callback(cb):
     try:
         tid = int(arg)
     except ValueError:
+        return
+    if action in ("ga", "gd"):  # Plan-/Team-Freigabe; Shell-Freigaben bewusst nie ueber Telegram
+        ap = q1("SELECT * FROM approvals WHERE id=?", (tid,))
+        msg = decide_gate(ap, action == "ga") if ap and ap["kind"] in ("plan", "recruit") else "Unbekannte Freigabe."
+        tg("answerCallbackQuery", callback_query_id=cb["id"], text=msg[:190])
+        tg_unbutton(cb)
         return
     if action == "ok":
         ok, msg = inbox_close(tid)
@@ -2174,6 +2389,9 @@ def inspection_report(pid):
     if bad:
         L.append("GESCHEITERTE OBERSTE AUFTRAEGE (letzte 24 h):")
         L += [f"- #{t['id']} {t['title'][:80]} ({t['name']})" for t in bad]
+    gb = goals_block(pid)
+    if gb:
+        L.append(gb.replace("ZIELE DES PROJEKTS", "\nZIELE UND FORTSCHRITT"))
     sc = q("SELECT * FROM schedules WHERE project_id=? AND enabled=1 AND kind!='inspect' ORDER BY id", (pid,))
     if sc:
         L.append("\nTAEGLICHE AUFGABEN HEUTE:")
@@ -2599,6 +2817,7 @@ def api_project_del(pid):
     ex("DELETE FROM approvals WHERE project_id=?", (pid,))
     ex("DELETE FROM agents WHERE project_id=?", (pid,))
     ex("DELETE FROM schedules WHERE project_id=?", (pid,))
+    ex("DELETE FROM goals WHERE project_id=?", (pid,))
     site_stop(pid, persist=False)
     ex("DELETE FROM settings WHERE k=?", (f"site:{pid}",))
     ex("DELETE FROM projects WHERE id=?", (pid,))
@@ -2728,8 +2947,11 @@ def api_task_new(aid):
     if not title:
         abort(400, "Titel fehlt")
     st = "queued" if d.get("run") else "todo"
-    tid = ex("INSERT INTO tasks(project_id,agent_id,title,description,status,created,updated) VALUES(?,?,?,?,?,?,?)",
-             (a["project_id"], aid, title[:200], str(d.get("description", ""))[:8000], st, time.time(), time.time()))
+    gid = int(d.get("goal_id") or 0)
+    if gid and not q1("SELECT 1 FROM goals WHERE id=? AND project_id=?", (gid, a["project_id"])):
+        abort(400, "Unbekanntes Ziel")
+    tid = ex("INSERT INTO tasks(project_id,agent_id,title,description,status,created,updated,goal_id) VALUES(?,?,?,?,?,?,?,?)",
+             (a["project_id"], aid, title[:200], str(d.get("description", ""))[:8000], st, time.time(), time.time(), gid))
     log("task_created", title, a["project_id"], aid, tid)
     return jsonify({"id": tid})
 
@@ -2856,6 +3078,97 @@ def api_task_del(tid):
     return jsonify({"ok": True})
 
 
+@app.get("/api/projects/<int:pid>/goals")
+def api_goals(pid):
+    return jsonify(goal_tree(pid))
+
+
+@app.post("/api/projects/<int:pid>/goals")
+def api_goal_new(pid):
+    if not q1("SELECT 1 FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    d = request.get_json(force=True)
+    title = str(d.get("title") or "").strip()[:300]
+    if not title:
+        abort(400, "Titel fehlt")
+    par = int(d.get("parent_id") or 0)
+    if par and not q1("SELECT 1 FROM goals WHERE id=? AND project_id=?", (par, pid)):
+        abort(400, "Unbekanntes Oberziel")
+    gid = ex("INSERT INTO goals(project_id,parent_id,title,created) VALUES(?,?,?,?)", (pid, par, title, time.time()))
+    log("goal_created", title, pid)
+    return jsonify({"id": gid})
+
+
+@app.put("/api/goals/<int:gid>")
+def api_goal_put(gid):
+    g = q1("SELECT * FROM goals WHERE id=?", (gid,))
+    if not g:
+        abort(404)
+    d = request.get_json(force=True)
+    if "title" in d and str(d["title"]).strip():
+        ex("UPDATE goals SET title=? WHERE id=?", (str(d["title"]).strip()[:300], gid))
+    if "status" in d:
+        st = "done" if d["status"] == "done" else "open"
+        ex("UPDATE goals SET status=? WHERE id=?", (st, gid))
+        log("goal_" + ("done" if st == "done" else "reopened"), g["title"], g["project_id"])
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/goals/<int:gid>")
+def api_goal_del(gid):
+    g = q1("SELECT * FROM goals WHERE id=?", (gid,))
+    if not g:
+        abort(404)
+    ex("UPDATE goals SET parent_id=? WHERE parent_id=?", (g["parent_id"], gid))  # Unterziele rutschen eine Ebene hoch
+    ex("UPDATE tasks SET goal_id=? WHERE goal_id=?", (g["parent_id"], gid))
+    ex("DELETE FROM goals WHERE id=?", (gid,))
+    log("goal_deleted", g["title"], g["project_id"])
+    return jsonify({"ok": True})
+
+
+@app.get("/api/projects/<int:pid>/gates")
+def api_gates_get(pid):
+    return jsonify(gates_of(pid))
+
+
+@app.put("/api/projects/<int:pid>/gates")
+def api_gates_put(pid):
+    if not q1("SELECT 1 FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    d = request.get_json(force=True) or {}
+    g = gates_of(pid)
+    g.update({k: bool(d[k]) for k in GATES_DEFAULT if k in d})
+    set_setting(f"gates:{pid}", json.dumps(g))
+    log("gates_changed", json.dumps(g), pid)
+    return jsonify(g)
+
+
+@app.get("/api/usage")
+def api_usage():
+    days = max(1, min(366, int(request.args.get("days", 7) or 7)))
+    since = time.time() - days * 86400
+    where, args = "WHERE c.ts>=?", [since]
+    if request.args.get("project_id"):
+        where += " AND c.project_id=?"
+        args.append(int(request.args["project_id"]))
+    sel = "COUNT(*) calls, COALESCE(SUM(c.tokens),0) tokens, SUM(c.cost) cost, SUM(c.cost IS NULL AND c.provider NOT IN (%s)) unpriced" % \
+          ",".join("'%s'" % x for x in FREE_PROVIDERS)
+    def grp(cols, join="", n=1):
+        return q(f"SELECT {cols}, {sel} FROM llm_calls c {join} {where} GROUP BY {', '.join(str(i + 1) for i in range(n))} "
+                 "ORDER BY tokens DESC LIMIT 100", args)
+    total = q1(f"SELECT {sel} FROM llm_calls c {where}", args)
+    by_day = q(f"SELECT date(c.ts, 'unixepoch', 'localtime') day, {sel} FROM llm_calls c {where} GROUP BY 1 ORDER BY 1", args)
+    abo = {p_: q1("SELECT COUNT(*) c FROM llm_calls WHERE provider=? AND ts>=?", (p_, time.time() - 5 * 3600))["c"]
+           for p_ in ABO_PROVIDERS}
+    return jsonify({"days": days, "total": total, "by_day": by_day,
+                    "by_project": grp("COALESCE(p.name, '(geloescht)') name", "LEFT JOIN projects p ON p.id=c.project_id"),
+                    "by_agent": grp("COALESCE(a.name, '(geloescht)') name, COALESCE(p.name, '') project",
+                                    "LEFT JOIN agents a ON a.id=c.agent_id LEFT JOIN projects p ON p.id=c.project_id", 2),
+                    "by_model": grp("c.provider name, c.model model", n=2),
+                    "abo_5h": {k: v for k, v in abo.items() if v}, "abo_warn": ABO_WARN_5H,
+                    "labels": {k: v.get("label", k) for k, v in PROVIDERS.items()}})
+
+
 @app.get("/api/approvals")
 def api_approvals():
     rows = q("""SELECT ap.*, a.name AS agent_name, t.title AS task_title
@@ -2871,6 +3184,10 @@ def api_approval_decide(aid):
     if not ap or ap["status"] != "pending":
         abort(404)
     decision = request.get_json(force=True).get("decision")
+    if ap["kind"] in ("plan", "recruit"):
+        if decision not in ("approve", "deny"):
+            abort(400)
+        return jsonify({"ok": True, "message": decide_gate(ap, decision == "approve")})
     t = q1("SELECT * FROM tasks WHERE id=?", (ap["task_id"],))
     pid = ap["project_id"]
     if decision == "deny":

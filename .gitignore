@@ -13,3 +13,4 @@ __pycache__/
 
 # Stray Download-Archive
 *.tar.gz
+.pytest_cache/

@@ -77,6 +77,16 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   max. eine Ollama-Aufgabe). Nur Worker 0 macht `schedule_tick`/Modellpruefung. `wake_parent` weckt per bedingtem UPDATE genau einmal.
   `run_claimed` setzt bei Ausnahme `failed` statt `running` haengen zu lassen.
 
+## Ziele, Freigabe-Schranken, Nutzung
+- `goals` (parent_id 0 = oberstes), `tasks.goal_id` (vererbt in `create_subtasks`). `goal_tree` (Tiefe + Fortschritt inkl. Unterziele),
+  `goals_block` in `build_system` (nur Chefs/oberste) und `inspection_report`, `goal_line` in work/review_prompt. API `/api/projects/<id>/goals`, `/api/goals/<id>`.
+- Schranken `settings gates:<pid>` (`plan`, `recruit`, Standard aus): `request_gate` legt `approvals.kind='plan'|'recruit'` mit `data` (JSON) an,
+  Aufgabe `waiting_approval`; `decide_gate` (Web + Telegram `ga:`/`gd:` mit Approval-ID, atomar) erzeugt dann die Teilaufgaben bzw. ruft `recruit_team`.
+  Ablehnen = `failed` -> Post -> Antwort = neu planen. Nur oberste, nicht geplante Aufgaben im Modus `plan`. Shell nie ueber Telegram.
+- `call_llm` = Huelle um `_call_llm`, schreibt jeden Aufruf in `llm_calls` (`record_call`, `est_cost` mit `PRICES`/`PCL_PRICES`, Abo/lokal = 0).
+  Abo-Warnung `PCL_ABO_WARN_5H` einmal je 5 h (`settings abo_warn:<anbieter>`). API `/api/usage?days=`.
+- Tests: `tests/` (pytest, `conftest.drain()` arbeitet die Queue synchron ab). Neue Funktionen dort mit abdecken.
+
 ## Post / Telegram
 - `tasks.inbox`: `''` / `new` / `closed`, nur für oberste Aufgaben. `finish()` → `inbox_arrived()` → Telegram-Nachricht.
 - `inbox_close`, `inbox_rework` (setzt feedback/prev_result, passes=0), `inbox_new_order` werden von Web-API und Telegram geteilt.
@@ -87,8 +97,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 ```bash
 ./install.sh && ./venv/bin/python app.py      # http://127.0.0.1:8787
 ```
-Backend-Tests liefen bisher als Skripte mit Flask-`test_client` und Playwright (nicht im Repo).
-Gute nächste Schritte: `tests/` mit pytest anlegen (Zyklussperre, Workflow plan/review/work, Überarbeitungslimit, Pfadschutz, Login-Sperre).
+Tests: `python -m pytest -q tests` (mock-Anbieter, ohne Internet). UI-Prüfung weiter per Playwright (nicht im Repo).
 
 ## Roadmap (Reihenfolge nach Wunsch des Besitzers)
 1. Betrieb stabilisieren: echte Provider-Keys testen, Tunnel (Tailscale) einrichten.
