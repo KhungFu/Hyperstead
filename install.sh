@@ -23,8 +23,9 @@ echo "Abhaengigkeiten installiert."
 MISSING=""
 command -v ffmpeg >/dev/null || MISSING="$MISSING ffmpeg"
 command -v espeak-ng >/dev/null || MISSING="$MISSING espeak-ng"
-command -v tesseract >/dev/null || MISSING="$MISSING tesseract-ocr tesseract-ocr-deu poppler-utils"
+command -v tesseract >/dev/null || MISSING="$MISSING tesseract-ocr tesseract-ocr-deu tesseract-ocr-tur poppler-utils"
 command -v tesseract >/dev/null && ! tesseract --list-langs 2>/dev/null | grep -qx deu && MISSING="$MISSING tesseract-ocr-deu"
+command -v tesseract >/dev/null && ! tesseract --list-langs 2>/dev/null | grep -qx tur && MISSING="$MISSING tesseract-ocr-tur"
 command -v pdftoppm >/dev/null || case "$MISSING" in *poppler-utils*) ;; *) MISSING="$MISSING poppler-utils";; esac
 fc-list 2>/dev/null | grep -qi dejavu || MISSING="$MISSING fonts-dejavu-core"
 if [ -n "$MISSING" ]; then
