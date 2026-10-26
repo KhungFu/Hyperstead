@@ -109,8 +109,10 @@ Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem P
 | `download_file` | PDFs, EPUB, Office, Audio, Video, ZIP aus dem Netz in `downloads/` laden |
 | `read_file` | liest Text, Markdown, HTML, **PDF, DOCX, EPUB**, auch lange Dateien in Abschnitten |
 
-**Eigene Dateien** (Videos zum Bearbeiten, PDFs, Bilder, Texte) lädst du in „📁 Dateien dieses Projekts“ hoch, sie landen in
-`input/`; fertige Ergebnisse liegen in `output/`, Bilder in `assets/`. Ehrliche Grenzen: Ohne `video_generate` gibt es **keine KI-Videogenerierung**
+**Eigene Dateien** (Videos zum Bearbeiten, PDFs, Bilder, Layouts, Texte) lädst du in „📁 Dateien dieses Projekts“ hoch oder schickst sie
+direkt im **💬 Chat** mit einem Agenten mit (📎-Knopf, hineinziehen oder Bild einfügen, mehrere auf einmal). Sie landen in
+`input/` (Name bereinigt, vorhandene Dateien werden nie überschrieben, sondern `name-1.png` …, Grenze `PCL_MAX_UPLOAD_MB`); der Agent
+bekommt in der Nachricht den Hinweis, welche Dateien unter `input/` liegen, und „Als Auftrag erteilen“ gibt ihn ans Team weiter; fertige Ergebnisse liegen in `output/`, Bilder in `assets/`. Ehrliche Grenzen: Ohne `video_generate` gibt es **keine KI-Videogenerierung**
 (Text-zu-Video), „Animation“ heißt dann: Szenenbilder per Bild-KI + Zoom/Schwenk + Sprecher + Schnitt. Mit `video_generate` entstehen
 kurze Clips, längere Filme setzt `video_edit op=concat` zusammen. MagicLight hat keine API: dort erzeugte Videos lädst du nach `input/` hoch. Auf dem Raspberry Pi
 rechnet ffmpeg langsam (eine Minute 720p-Video kann mehrere Minuten dauern), Zeitlimit `PCL_FFMPEG_TIMEOUT` (Standard 1 Stunde je Schritt).
@@ -145,6 +147,7 @@ Art, Auftrag, Team-Kennzahlen und dem Ergebnis. Die Rechte-/Berichtskette darunt
 | Einfach Text schreiben | neuer Auftrag an den Chef des gewählten Projekts (`@Name Text` = bestimmter Agent) |
 | Auf eine Post-Nachricht **antworten** | Auftrag wird mit deinem Text als Anweisung neu bearbeitet |
 | Button ✅ oder Antwort „ok“ | Auftrag als erledigt markiert |
+| Datei, Foto, Album, Video oder Sprachnachricht senden | landet in `input/` des gewählten Projekts; die Bildunterschrift wird zum Auftrag (als Antwort auf Post: zur Überarbeitung), ohne Text geht die Datei an deinen nächsten Auftrag. Telegram-Bots dürfen nur Dateien bis 20 MB laden, größere im Web hochladen |
 | `/post`, `/status`, `/ok <Nr>`, `/neu <Text>`, `/projekt [Nr]` | Übersicht bzw. Kurzbefehle |
 
 Die App fragt Telegram nur nach außen ab, es wird kein Port geöffnet (geht auch hinter CGNAT). Nur die Chat-ID aus
