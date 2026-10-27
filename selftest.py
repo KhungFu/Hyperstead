@@ -57,6 +57,21 @@ def group_web():
     with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
         root = Path(td)
         prov = T._env("IMAGE_PROVIDER", "pollinations").lower()  # noqa: SLF001
+        if prov in ("gemini", "openai"):
+            def imodel():
+                if prov == "gemini":
+                    model = T._model_env("IMAGE_MODEL", T.GEMINI_IMAGE_MODEL)  # noqa: SLF001
+                    r = requests.get(f"{T.GEMINI_BASE}/models/{model}", timeout=20,
+                                     headers={"x-goog-api-key": T._env("GEMINI_API_KEY").split(",")[0].strip()})  # noqa: SLF001
+                else:
+                    model = T._model_env("IMAGE_MODEL", "gpt-image-1")  # noqa: SLF001
+                    base = T._env("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")  # noqa: SLF001
+                    r = requests.get(f"{base}/models/{model}", timeout=20,
+                                     headers={"Authorization": "Bearer " + T._env("OPENAI_API_KEY").split(",")[0].strip()})  # noqa: SLF001
+                if r.status_code >= 400:
+                    raise RuntimeError(f"Modell '{model}' nicht verfuegbar (HTTP {r.status_code}): {r.text[:150]}")
+                return f"{model} verfuegbar"
+            check(f"Bild-Modell ({prov})", imodel, hint="IMAGE_MODEL in .env leer lassen (Standard) oder einen Namen aus der Modellliste eintragen, ohne models/ und Anfuehrungszeichen")
         check(f"Bild erzeugen ({prov})", lambda: T.image_generate(root, {"prompt": "a red apple, simple illustration", "name": "test",
                                                                           "quality": "low" if prov == "openai" else ""})[:80],
               hint="IMAGE_PROVIDER=gemini oder openai mit Key waehlen, wenn Pollinations nicht erreichbar ist")
@@ -65,10 +80,10 @@ def group_web():
             check("Bild mit Referenzbild", lambda: T.image_generate(root, {
                 "prompt": "the same apple, now cut in half, same drawing style", "refs": [f"assets/{ref.name}"],
                 "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],
-                  hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1 bzw. gemini-nano-banana-2.1)")
+                  hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1 bzw. gemini-2.5-flash-image)")
     if T.video_enabled():
         def vmodel():
-            key, model = T._gemini_key(), T._env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001
+            key, model = T._gemini_key(), T._model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001
             r = requests.get(f"{T.GEMINI_BASE}/models/{model}", headers={"x-goog-api-key": key}, timeout=20)
             if r.status_code >= 400:
                 raise RuntimeError(f"Modell '{model}' nicht verfuegbar (HTTP {r.status_code})")
