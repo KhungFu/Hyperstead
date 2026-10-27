@@ -64,7 +64,11 @@ TOOLS = {
                              'in downloads/ speichern. Urheberrecht/Lizenz beachten, nur fuer erlaubte Nutzung'),
     "image_search": ("images", '{"tool": "image_search", "query": "mountain lake sunrise"}  frei nutzbare Fotos suchen (Lizenz/Urheber werden mitgeliefert)'),
     "image_save": ("images", '{"tool": "image_save", "url": "https://...jpg", "name": "hero"}  Bild in assets/ des Projekts speichern'),
-    "image_generate": ("images", '{"tool": "image_generate", "prompt": "detaillierte Bildbeschreibung", "name": "logo"}  Bild per KI erzeugen und in assets/ speichern'),
+    "image_generate": ("images", """{"tool": "image_generate", "prompt": "detaillierte Bildbeschreibung inkl. Stil", "name": "logo"}  Bild per KI erzeugen (PNG), Standard: neu in assets/.
+     Optional: "refs": ["input/vorlage.png", "karten/figuren.png"] = bis zu 4 Referenzbilder aus dem Projektordner, damit Figuren und Stil
+     ueber viele Bilder gleich bleiben (bei Serien IMMER dieselben Referenzbilder mitgeben); "format": "quadrat" | "hoch" | "quer";
+     "path": "karten/bilder/k01.png" = fester Zielpfad in assets/, output/ oder karten/ (vorhandene Datei wird ersetzt);
+     "quality": "low" | "medium" | "high" (nur OpenAI, high kostet mehr). Danach mit view_image pruefen."""),
     "video_generate": ("media", """{"tool": "video_generate", "prompt": "Szene: Ort, Figuren, Handlung, Kamera, Licht, Ton", "name": "szene1"}  Kurzen Videoclip per KI erzeugen (Google Veo/Omni, ca. 4-10 s, kostet pro Sekunde), Ergebnis in output/.
      optional: aspect 16:9|9:16, resolution 720p|1080p, image (Startbild im Projekt, z.B. assets/figur.png), continue_id (ID aus einem frueheren Ergebnis: Clip fortsetzen, nur Omni).
      Laengere Filme: mehrere Clips erzeugen und mit video_edit op=concat zusammensetzen. Gleiche Figuren in jedem Prompt gleich beschreiben"""),
@@ -117,7 +121,8 @@ def available(perms):
     if not enabled():
         return []
     return [n for n, (right, _) in TOOLS.items()
-            if (perms.get(right) or (n == "make_document" and perms.get("write_files")))  # Dokumente bauen gehoert zum Dateien schreiben
+            if (perms.get(right) or (n == "make_document" and perms.get("write_files"))  # Dokumente bauen gehoert zum Dateien schreiben
+                or (n == "image_generate" and perms.get("media")))  # Bilder erzeugen gehoert auch zu den Medien
             and (n != "video_generate" or video_enabled())
             and (n != "browse_page" or browser_enabled())
             and (n != "run_code" or run_enabled())]
@@ -603,49 +608,154 @@ def image_save(root, url, name=""):
     return f"Gespeichert: {rel} ({size // 1024} KB). Im HTML so einbinden: <img src=\"{rel}\" alt=\"...\">"
 
 
-def image_generate(root, prompt, name=""):
-    prompt = str(prompt or "").strip()[:800]
+IMAGE_DIRS = ("assets", "output", "karten")  # erlaubte Zielordner fuer image_generate
+MAX_REF_IMAGES = 4
+# Format -> (OpenAI-Groesse, Gemini-Seitenverhaeltnis, Pollinations-Breite/Hoehe)
+_IMG_FORMATS = {"quadrat": ("1024x1024", "1:1", (1024, 1024)), "hoch": ("1024x1536", "2:3", (1024, 1536)),
+                "quer": ("1536x1024", "3:2", (1536, 1024))}
+_IMG_ALIASES = {"1:1": "quadrat", "square": "quadrat", "1024x1024": "quadrat", "2:3": "hoch", "portrait": "hoch",
+                "hochformat": "hoch", "1024x1536": "hoch", "3:2": "quer", "landscape": "quer", "querformat": "quer",
+                "1536x1024": "quer"}
+
+
+def _img_format(call):
+    f = str(call.get("format") or call.get("size") or "").strip().lower()
+    if not f:
+        return _IMG_FORMATS["quer" if _env("IMAGE_PROVIDER", "pollinations").lower() == "pollinations" else "quadrat"]
+    f = _IMG_ALIASES.get(f, f)
+    if f not in _IMG_FORMATS:
+        raise ToolError("format muss quadrat, hoch oder quer sein")
+    return _IMG_FORMATS[f]
+
+
+def _ref_images(root, refs):
+    """Referenzbilder aus dem Projektordner: [(dateiname, bytes, mime)]."""
+    if isinstance(refs, str):
+        refs = [refs]
+    refs = [str(r).strip() for r in (refs or []) if str(r or "").strip()]
+    if len(refs) > MAX_REF_IMAGES:
+        raise ToolError(f"Hoechstens {MAX_REF_IMAGES} Referenzbilder")
+    out = []
+    for rel in refs:
+        f = _img_path(root, rel)
+        if not f:
+            raise ToolError(f"Referenzbild nicht gefunden: {rel}")
+        data = f.read_bytes()
+        if len(data) > MAX_IMAGE_BYTES:
+            raise ToolError(f"Referenzbild zu gross (max. {MAX_IMAGE_BYTES // 1_000_000} MB): {rel}")
+        ext = _sniff(data)
+        if ext not in ("png", "jpg", "webp"):
+            raise ToolError(f"Referenzbild muss PNG, JPG oder WEBP sein: {rel}")
+        out.append((f"ref{len(out) + 1}.{ext}", data, {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[ext]))
+    return out
+
+
+def _img_target(root, call, ext):
+    """Zielpfad: "path" (assets/, output/ oder karten/, wird ueberschrieben) oder assets/<name>.<ext> (neu)."""
+    path = str(call.get("path") or "").strip()
+    if not path:
+        return None
+    try:
+        t = _inside(root, path)
+    except ValueError:
+        raise ToolError("Pfad liegt ausserhalb des Projektordners")
+    parts = t.relative_to(Path(root).resolve()).parts
+    if len(parts) < 2 or parts[0] not in IMAGE_DIRS or any(p.startswith(".") for p in parts):
+        raise ToolError("path muss in " + ", ".join(d + "/" for d in IMAGE_DIRS) + " liegen, z. B. karten/bilder/k01.png")
+    t = t.with_name(_safe_name(t.stem, "bild") + "." + ext)
+    t.parent.mkdir(parents=True, exist_ok=True)
+    return t
+
+
+def _gen_gemini(prompt, refs, fmt, call):
+    key = _env("GEMINI_API_KEY").split(",")[0].strip()
+    if not key:
+        raise ToolError("IMAGE_PROVIDER=gemini, aber GEMINI_API_KEY fehlt")
+    model = _env("IMAGE_MODEL", "gemini-2.5-flash-image")
+    parts = [{"inline_data": {"mime_type": mime, "data": base64.b64encode(d).decode()}} for _, d, mime in refs] + [{"text": prompt}]
+    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                      headers={"x-goog-api-key": key}, timeout=180,
+                      json={"contents": [{"parts": parts}],
+                            "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": fmt[1]}}})
+    try:
+        cands = r.json().get("candidates") or [{}]
+    except ValueError:
+        cands = [{}]
+    for part in (cands[0].get("content") or {}).get("parts", []):
+        blob = part.get("inlineData") or part.get("inline_data")
+        if blob:
+            return base64.b64decode(blob["data"])
+    raise ToolError(f"Gemini hat kein Bild geliefert (HTTP {r.status_code}): " + _clip(r.text, 300))
+
+
+def _gen_openai(prompt, refs, fmt, call):
+    key = _env("OPENAI_API_KEY").split(",")[0].strip()
+    if not key:
+        raise ToolError("IMAGE_PROVIDER=openai, aber OPENAI_API_KEY fehlt")
+    base = _env("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    fields = {"model": _env("IMAGE_MODEL", "gpt-image-1"), "prompt": prompt, "size": fmt[0]}
+    quality = str(call.get("quality") or _env("IMAGE_QUALITY")).strip().lower()
+    if quality:
+        if quality not in ("low", "medium", "high", "auto"):
+            raise ToolError("quality muss low, medium, high oder auto sein")
+        fields["quality"] = quality
+    head = {"Authorization": "Bearer " + key}
+    if refs:  # Bearbeiten-Endpunkt: Referenzbilder halten Figuren und Stil gleich
+        r = requests.post(base + "/images/edits", headers=head, timeout=300, data=fields,
+                          files=[("image[]", (n, d, mime)) for n, d, mime in refs])
+    else:
+        r = requests.post(base + "/images/generations", headers=head, timeout=300, json=fields)
+    try:
+        body = r.json()
+    except ValueError:
+        body = {}
+    if r.status_code >= 400 or body.get("error"):
+        msg = (body.get("error") or {}).get("message") if isinstance(body.get("error"), dict) else None
+        raise ToolError(f"OpenAI-Bild-API: HTTP {r.status_code} " + _clip(msg or r.text, 300))
+    d = (body.get("data") or [{}])[0]
+    if d.get("b64_json"):
+        return base64.b64decode(d["b64_json"])
+    if d.get("url"):
+        return safe_get(d["url"], MAX_IMAGE_BYTES)[1]
+    raise ToolError("Bildanbieter hat kein Bild geliefert: " + _clip(r.text, 300))
+
+
+def _gen_pollinations(prompt, refs, fmt, call):
+    if refs:
+        raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai oder gemini (in .env setzen)")
+    w, h = fmt[2]
+    r = requests.get("https://image.pollinations.ai/prompt/" + quote(prompt[:800]),
+                     params={"width": w, "height": h, "nologo": "true", "seed": int(time.time()) % 100000},
+                     headers={"User-Agent": UA}, timeout=120)
+    if r.status_code >= 400:
+        raise ToolError(f"Bildgenerator antwortet mit HTTP {r.status_code}")
+    return r.content
+
+
+def image_generate(root, call):
+    prompt = str(call.get("prompt") or "").strip()[:4000]
     if not prompt:
         raise ToolError("prompt fehlt")
+    root = Path(root)
+    fmt = _img_format(call)
+    refs = _ref_images(root, call.get("refs") or call.get("reference_images"))
+    _img_target(root, call, "png")  # Pfad vor dem (kostenpflichtigen) Aufruf pruefen
     prov = _env("IMAGE_PROVIDER", "pollinations").lower()
-    data = None
-    if prov == "gemini":
-        key = _env("GEMINI_API_KEY").split(",")[0].strip()
-        if not key:
-            raise ToolError("IMAGE_PROVIDER=gemini, aber GEMINI_API_KEY fehlt")
-        model = _env("IMAGE_MODEL", "gemini-2.5-flash-image")
-        r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                          headers={"x-goog-api-key": key}, timeout=120,
-                          json={"contents": [{"parts": [{"text": prompt}]}]})
-        for part in (r.json().get("candidates") or [{}])[0].get("content", {}).get("parts", []):
-            blob = part.get("inlineData") or part.get("inline_data")
-            if blob:
-                data = base64.b64decode(blob["data"])
-        if not data:
-            raise ToolError("Gemini hat kein Bild geliefert: " + _clip(r.text, 300))
-    elif prov == "openai":
-        key = _env("OPENAI_API_KEY").split(",")[0].strip()
-        if not key:
-            raise ToolError("IMAGE_PROVIDER=openai, aber OPENAI_API_KEY fehlt")
-        base = _env("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-        r = requests.post(base + "/images/generations", headers={"Authorization": "Bearer " + key}, timeout=180,
-                          json={"model": _env("IMAGE_MODEL", "gpt-image-1"), "prompt": prompt, "size": "1024x1024"})
-        d = (r.json().get("data") or [{}])[0]
-        if d.get("b64_json"):
-            data = base64.b64decode(d["b64_json"])
-        elif d.get("url"):
-            data = safe_get(d["url"], MAX_IMAGE_BYTES)[1]
-        else:
-            raise ToolError("Bildanbieter hat kein Bild geliefert: " + _clip(r.text, 300))
-    else:  # pollinations: kostenlos, ohne Key
-        r = requests.get("https://image.pollinations.ai/prompt/" + quote(prompt),
-                         params={"width": 1024, "height": 768, "nologo": "true", "seed": int(time.time()) % 100000},
-                         headers={"User-Agent": UA}, timeout=120)
-        if r.status_code >= 400:
-            raise ToolError(f"Bildgenerator antwortet mit HTTP {r.status_code}")
-        data = r.content
-    rel, size = _store_image(root, data, name, "generiert")
-    return f"Bild erzeugt und gespeichert: {rel} ({size // 1024} KB). Im HTML so einbinden: <img src=\"{rel}\" alt=\"...\">"
+    gen = {"gemini": _gen_gemini, "openai": _gen_openai}.get(prov, _gen_pollinations)
+    data = gen(prompt, refs, fmt, call)
+    if len(data) > MAX_IMAGE_BYTES * 3:
+        raise ToolError("Erzeugtes Bild ist zu gross")
+    ext = _sniff(data)
+    if ext not in ("png", "jpg", "webp"):
+        raise ToolError("Bildanbieter hat keine gueltige Bilddatei geliefert")
+    target = _img_target(root, call, ext)
+    if target:
+        target.write_bytes(data)
+        rel, size = _rel(root, target), len(data)
+    else:
+        rel, size = _store_image(root, data, call.get("name"), "generiert")
+    via = f" mit {len(refs)} Referenzbild(ern)" if refs else ""
+    return f"Bild erzeugt{via} und gespeichert: {rel} ({size // 1024} KB). Ansehen mit view_image. Im HTML so einbinden: <img src=\"{rel}\" alt=\"...\">"
 
 
 def _inside(root, rel):
@@ -2022,7 +2132,7 @@ def run_tool(call, root, perms):
         elif name == "image_save":
             out = image_save(root, call.get("url"), call.get("name"))
         elif name == "image_generate":
-            out = image_generate(root, call.get("prompt"), call.get("name"))
+            out = image_generate(root, call)
         elif name == "video_generate":
             out = video_generate(root, call)
         elif name == "list_files":
@@ -2054,7 +2164,7 @@ def run_tool(call, root, perms):
         else:
             out = read_file(root, call.get("path"), call.get("offset"))
         made = None
-        m = re.search(r"((?:assets|downloads|output)/[\w./-]+?)(?:\s|\(|$|\.\s)", out) if name in (
+        m = re.search(r"((?:assets|downloads|output|karten)/[\w./-]+?)(?:\s|\(|$|\.\s)", out) if name in (
             "image_save", "image_generate", "video_generate", "download_file", "video_edit", "speak", "make_document", "run_code", "browse_page") else None
         if m:
             made = m.group(1)

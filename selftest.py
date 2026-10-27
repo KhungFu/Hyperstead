@@ -56,8 +56,16 @@ def group_web():
         T.image_search("mountain lake", 3)))
     with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
         root = Path(td)
-        check(f"Bild erzeugen ({T._env('IMAGE_PROVIDER', 'pollinations')})", lambda: T.image_generate(root, "a red apple, simple illustration", "test")[:80],
+        prov = T._env("IMAGE_PROVIDER", "pollinations").lower()  # noqa: SLF001
+        check(f"Bild erzeugen ({prov})", lambda: T.image_generate(root, {"prompt": "a red apple, simple illustration", "name": "test",
+                                                                          "quality": "low" if prov == "openai" else ""})[:80],
               hint="IMAGE_PROVIDER=gemini oder openai mit Key waehlen, wenn Pollinations nicht erreichbar ist")
+        ref = next(iter(sorted((root / "assets").glob("test.*"))), None) if (root / "assets").exists() else None
+        if prov in ("openai", "gemini") and ref:
+            check("Bild mit Referenzbild", lambda: T.image_generate(root, {
+                "prompt": "the same apple, now cut in half, same drawing style", "refs": [f"assets/{ref.name}"],
+                "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],
+                  hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1 bzw. gemini-2.5-flash-image)")
     if T.video_enabled():
         def vmodel():
             key, model = T._gemini_key(), T._env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001
