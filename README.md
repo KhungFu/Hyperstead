@@ -79,7 +79,7 @@ fertig sind (max. `PCL_MAX_TOOL_STEPS`). Rechte pro Agent: **Internet recherchie
 | `fetch_url` | Webseite als Text lesen | ja |
 | `browse_page` | Seite in einem echten Browser öffnen (JavaScript läuft), optional mit Screenshot, den der Agent als Bild sieht | ja, braucht `./install.sh --browser` |
 | `image_search` / `image_save` | frei lizenzierte Fotos suchen und in `assets/` speichern, mit Urheber und Lizenz | Openverse; optional `PEXELS_API_KEY` |
-| `image_generate` | KI-Bild erzeugen | Pollinations; besser `IMAGE_PROVIDER=gemini` oder `openai` |
+| `image_generate` | KI-Bild als PNG erzeugen, optional mit bis zu 4 Referenzbildern aus dem Projekt (gleiche Figuren und gleicher Stil über eine Serie), Format quadrat/hoch/quer und Zielpfad in `assets/`, `output/` oder `karten/`. Recht **Bilder** oder **Medien** | Pollinations (ohne Referenzbilder); besser `IMAGE_PROVIDER=openai` mit `OPENAI_API_KEY` oder `gemini` |
 | `list_files` / `read_file` | Dateien im Projektordner lesen (z. B. Texte der Kollegen) | ja |
 
 Alles Erzeugte liegt unter `workspace/<projekt-id>/`. In der Sidebar zeigt **📁 Dateien** die Dateien, öffnet `index.html`

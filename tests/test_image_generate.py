@@ -1,0 +1,130 @@
+"""image_generate gegen simulierte Bild-APIs (kein echter Key, kein Internet)."""
+import base64
+import json
+
+import pytest
+
+import agent_tools as T
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+JPG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+
+
+class Resp:
+    def __init__(self, body, status=200):
+        self.status_code, self._body = status, body
+        self.text = json.dumps(body)
+
+    def json(self):
+        return self._body
+
+
+@pytest.fixture
+def openai(monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.delenv("IMAGE_QUALITY", raising=False)
+    calls = []
+
+    def post(url, **kw):
+        calls.append((url, kw))
+        return Resp({"data": [{"b64_json": base64.b64encode(PNG).decode()}]})
+    monkeypatch.setattr(T.requests, "post", post)
+    return calls
+
+
+def test_openai_ohne_referenz(openai, tmp_path):
+    out = T.image_generate(tmp_path, {"prompt": "Kind malt mit Buntstift", "name": "Karte 1", "format": "hoch"})
+    assert "assets/karte-1.png" in out and (tmp_path / "assets/karte-1.png").read_bytes() == PNG
+    url, kw = openai[0]
+    assert url.endswith("/images/generations")
+    assert kw["json"]["size"] == "1024x1536" and kw["headers"]["Authorization"] == "Bearer sk-test"
+
+
+def test_openai_mit_referenzbildern_und_zielpfad(openai, tmp_path):
+    (tmp_path / "input").mkdir()
+    (tmp_path / "input/figuren.png").write_bytes(PNG)
+    (tmp_path / "input/stil.jpg").write_bytes(JPG)
+    out = T.image_generate(tmp_path, {"prompt": "K1 und K6 spielen", "refs": ["input/figuren.png", "input/stil.jpg"],
+                                      "path": "karten/bilder/k01.png", "quality": "high"})
+    assert "mit 2 Referenzbild" in out and (tmp_path / "karten/bilder/k01.png").exists()
+    url, kw = openai[0]
+    assert url.endswith("/images/edits")
+    assert [f[0] for f in kw["files"]] == ["image[]", "image[]"]
+    assert kw["files"][1][1][2] == "image/jpeg"
+    assert kw["data"]["quality"] == "high" and kw["data"]["size"] == "1024x1024"
+    # gleicher Pfad nochmal: wird ersetzt statt k01-1.png
+    T.image_generate(tmp_path, {"prompt": "neu", "path": "karten/bilder/k01.png"})
+    assert sorted(p.name for p in (tmp_path / "karten/bilder").iterdir()) == ["k01.png"]
+
+
+@pytest.mark.parametrize("call, msg", [
+    ({"prompt": "x", "path": "../weg.png"}, "ausserhalb"),
+    ({"prompt": "x", "path": "input/x.png"}, "path muss in"),
+    ({"prompt": "x", "path": "karten.png"}, "path muss in"),
+    ({"prompt": "x", "refs": ["input/fehlt.png"]}, "nicht gefunden"),
+    ({"prompt": "x", "refs": ["../../etc/passwd"]}, "nicht gefunden"),
+    ({"prompt": "x", "refs": ["a.png"] * 5}, "Hoechstens"),
+    ({"prompt": "x", "format": "rund"}, "format"),
+    ({"prompt": "x", "quality": "ultra"}, "quality"),
+    ({"prompt": ""}, "prompt fehlt"),
+])
+def test_ungueltige_eingaben_kosten_nichts(openai, tmp_path, call, msg):
+    with pytest.raises(T.ToolError, match=msg):
+        T.image_generate(tmp_path, call)
+    assert not openai  # Fehler fallen VOR dem kostenpflichtigen Aufruf auf
+
+
+def test_referenz_muss_bild_sein(openai, tmp_path):
+    (tmp_path / "notiz.txt").write_text("kein Bild")
+    with pytest.raises(T.ToolError, match="PNG, JPG oder WEBP"):
+        T.image_generate(tmp_path, {"prompt": "x", "refs": "notiz.txt"})
+
+
+def test_openai_fehler_wird_gemeldet(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(T.requests, "post", lambda url, **kw: Resp({"error": {"message": "Incorrect API key"}}, 401))
+    with pytest.raises(T.ToolError, match="HTTP 401 Incorrect API key"):
+        T.image_generate(tmp_path, {"prompt": "x"})
+
+
+def test_openai_ohne_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    with pytest.raises(T.ToolError, match="OPENAI_API_KEY fehlt"):
+        T.image_generate(tmp_path, {"prompt": "x"})
+
+
+def test_gemini_mit_referenz(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "g-test")
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return Resp({"candidates": [{"content": {"parts": [{"inlineData": {"data": base64.b64encode(PNG).decode()}}]}}]})
+    monkeypatch.setattr(T.requests, "post", post)
+    (tmp_path / "ref.png").write_bytes(PNG)
+    out = T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"], "format": "quer", "path": "output/a.png"})
+    assert "output/a.png" in out
+    parts = seen["json"]["contents"][0]["parts"]
+    assert parts[0]["inline_data"]["mime_type"] == "image/png" and parts[-1] == {"text": "x"}
+    assert seen["json"]["generationConfig"]["imageConfig"]["aspectRatio"] == "3:2"
+
+
+def test_pollinations_lehnt_referenzen_ab(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "pollinations")
+    (tmp_path / "ref.png").write_bytes(PNG)
+    with pytest.raises(T.ToolError, match="nur mit IMAGE_PROVIDER=openai oder gemini"):
+        T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"]})
+
+
+def test_recht_bilder_oder_medien(openai, tmp_path):
+    assert "image_generate" in T.available({"images": 1})
+    assert "image_generate" in T.available({"media": 1})
+    assert "image_generate" not in T.available({"web": 1})
+    text, made = T.run_tool({"tool": "image_generate", "prompt": "x", "path": "karten/k02.png"}, tmp_path, {"media": 1})
+    assert made == "karten/k02.png", text
+    text, _ = T.run_tool({"tool": "image_generate", "prompt": "x"}, tmp_path, {"web": 1})
+    assert "nicht erlaubt" in text
