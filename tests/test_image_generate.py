@@ -109,8 +109,24 @@ def test_gemini_mit_referenz(monkeypatch, tmp_path):
     out = T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"], "format": "quer", "path": "output/a.png"})
     assert "output/a.png" in out
     parts = seen["json"]["contents"][0]["parts"]
-    assert parts[0]["inline_data"]["mime_type"] == "image/png" and parts[-1] == {"text": "x"}
-    assert seen["json"]["generationConfig"]["imageConfig"]["aspectRatio"] == "3:2"
+    assert parts[0] == {"text": "x"} and parts[1]["inline_data"]["mime_type"] == "image/png"
+    assert "gemini-nano-banana-2.1:generateContent" in seen["url"]
+    assert seen["json"]["generationConfig"]["imageConfig"] == {"aspectRatio": "3:2"}
+
+
+def test_gemini_bildgroesse_und_abrechnungshinweis(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "g-test")
+    monkeypatch.setenv("IMAGE_SIZE", "2k")
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(kw)
+        return Resp({"error": {"code": 429, "message": "quota exceeded, limit: 0"}}, 429)
+    monkeypatch.setattr(T.requests, "post", post)
+    with pytest.raises(T.ToolError, match="HTTP 429.*Abrechnung"):
+        T.image_generate(tmp_path, {"prompt": "x"})
+    assert seen["json"]["generationConfig"]["imageConfig"]["imageSize"] == "2K"
 
 
 def test_pollinations_lehnt_referenzen_ab(monkeypatch, tmp_path):

@@ -65,7 +65,7 @@ def group_web():
             check("Bild mit Referenzbild", lambda: T.image_generate(root, {
                 "prompt": "the same apple, now cut in half, same drawing style", "refs": [f"assets/{ref.name}"],
                 "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],
-                  hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1 bzw. gemini-2.5-flash-image)")
+                  hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1 bzw. gemini-nano-banana-2.1)")
     if T.video_enabled():
         def vmodel():
             key, model = T._gemini_key(), T._env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001

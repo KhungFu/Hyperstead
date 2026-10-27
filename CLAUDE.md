@@ -44,6 +44,9 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - `video_generate` (Recht `media`, nur sichtbar mit `VIDEO_PROVIDER=gemini`): Standardmodell `gemini-omni-1.1-flash` über die Interactions-API
   (`/v1beta/interactions`, Video base64 in `steps[].content`, `continue_id` = `previous_interaction_id`); `VIDEO_MODEL=veo-*` nutzt
   `:predictLongRunning` + Operation abfragen + Download. Veo-3.1-Preview-Modelle wurden am 2026-10-22 abgeschaltet. Ergebnis in `output/`.
+- `image_generate` (Recht `images` ODER `media`): `IMAGE_PROVIDER` pollinations (Std., ohne Referenzen) | openai (`/images/edits` mit `image[]` bei `refs`) |
+  gemini (`generateContent`, Text + `inline_data`, `imageConfig.aspectRatio`/`IMAGE_SIZE`, Std.-Modell `gemini-nano-banana-2.1`). `refs` max. 4,
+  `format` quadrat/hoch/quer, `path` nur in assets/output/karten (ueberschreibt). Eingabefehler vor dem API-Aufruf. Nur mit Mocks getestet.
 - Anbieter: `PROVIDERS` mit `kind` (openai/anthropic) und `models_url`; `list_models` (Cache 10 min), `/api/providers/<id>/models`, `/api/providers/test`.
 - Chat: Tabelle `chats`, `/api/agents/<id>/chat` (+`/order`). Uploads: `/api/projects/<id>/upload` → `input/` über `save_input`
   (Name bereinigt, nie überschreiben, `renamed` in der Antwort). Chat-POST nimmt `files` (nur Pfade in `input/`, dazu automatisch Dateien aus `input/`, deren Name in der Nachricht steht), stellt `files_note` vor die Nachricht
