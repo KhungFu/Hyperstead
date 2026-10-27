@@ -671,12 +671,16 @@ def _gen_gemini(prompt, refs, fmt, call):
     key = _env("GEMINI_API_KEY").split(",")[0].strip()
     if not key:
         raise ToolError("IMAGE_PROVIDER=gemini, aber GEMINI_API_KEY fehlt")
-    model = _env("IMAGE_MODEL", "gemini-2.5-flash-image")
-    parts = [{"inline_data": {"mime_type": mime, "data": base64.b64encode(d).decode()}} for _, d, mime in refs] + [{"text": prompt}]
+    model = _env("IMAGE_MODEL", "gemini-nano-banana-2.1")  # gemini-2.5-flash-image wird fruehestens 2027-03-15 abgeschaltet
+    parts = [{"text": prompt}] + [{"inline_data": {"mime_type": mime, "data": base64.b64encode(d).decode()}} for _, d, mime in refs]
+    img_cfg = {"aspectRatio": fmt[1]}
+    size = _env("IMAGE_SIZE").upper()  # 1K | 2K | 4K, leer = Standard des Modells
+    if size:
+        img_cfg["imageSize"] = size
     r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                       headers={"x-goog-api-key": key}, timeout=180,
                       json={"contents": [{"parts": parts}],
-                            "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": fmt[1]}}})
+                            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"], "imageConfig": img_cfg}})
     try:
         cands = r.json().get("candidates") or [{}]
     except ValueError:
@@ -685,7 +689,8 @@ def _gen_gemini(prompt, refs, fmt, call):
         blob = part.get("inlineData") or part.get("inline_data")
         if blob:
             return base64.b64decode(blob["data"])
-    raise ToolError(f"Gemini hat kein Bild geliefert (HTTP {r.status_code}): " + _clip(r.text, 300))
+    hint = " (Bildmodelle brauchen meist ein Google-Konto mit Abrechnung)" if r.status_code == 429 else ""
+    raise ToolError(f"Gemini hat kein Bild geliefert (HTTP {r.status_code}){hint}: " + _clip(r.text, 300))
 
 
 def _gen_openai(prompt, refs, fmt, call):
