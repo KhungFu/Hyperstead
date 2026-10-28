@@ -47,6 +47,13 @@ def _env(k, d=""):
     return os.environ.get(k, d).strip()
 
 
+def _model_env(k, default):
+    """Modellname aus .env: leer = Standard; Anfuehrungszeichen, Leerzeichen und fuehrendes models/ weg."""
+    m = _env(k).strip("\"' \r")
+    m = m[len("models/"):] if m.startswith("models/") else m
+    return m or default
+
+
 def enabled():
     """Globaler Schalter (PCL_ALLOW_WEB=0 sperrt alle Internet-Werkzeuge)."""
     return _env("PCL_ALLOW_WEB", "1") != "0"
@@ -559,7 +566,7 @@ def video_generate(root, call):
     if not str(call.get("prompt") or "").strip():
         raise ToolError("prompt fehlt")
     key = _gemini_key()
-    model = _env("VIDEO_MODEL", "gemini-omni-1.1-flash")
+    model = _model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")
     deadline = time.time() + int(_env("PCL_VIDEO_TIMEOUT", "900") or 900)
     gen = _veo_video if model.startswith("veo") else _omni_video
     data, uri, iid = gen(key, model, call, root, deadline)
@@ -667,11 +674,14 @@ def _img_target(root, call, ext):
     return t
 
 
+GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"  # breit verfuegbar, Abschaltung fruehestens 2027-03-15; neuer: gemini-nano-banana-2.1
+
+
 def _gen_gemini(prompt, refs, fmt, call):
     key = _env("GEMINI_API_KEY").split(",")[0].strip()
     if not key:
         raise ToolError("IMAGE_PROVIDER=gemini, aber GEMINI_API_KEY fehlt")
-    model = _env("IMAGE_MODEL", "gemini-nano-banana-2.1")  # gemini-2.5-flash-image wird fruehestens 2027-03-15 abgeschaltet
+    model = _model_env("IMAGE_MODEL", GEMINI_IMAGE_MODEL)
     parts = [{"text": prompt}] + [{"inline_data": {"mime_type": mime, "data": base64.b64encode(d).decode()}} for _, d, mime in refs]
     img_cfg = {"aspectRatio": fmt[1]}
     size = _env("IMAGE_SIZE").upper()  # 1K | 2K | 4K, leer = Standard des Modells
@@ -690,7 +700,7 @@ def _gen_gemini(prompt, refs, fmt, call):
         if blob:
             return base64.b64decode(blob["data"])
     hint = " (Bildmodelle brauchen meist ein Google-Konto mit Abrechnung)" if r.status_code == 429 else ""
-    raise ToolError(f"Gemini hat kein Bild geliefert (HTTP {r.status_code}){hint}: " + _clip(r.text, 300))
+    raise ToolError(f"Gemini ({model}) hat kein Bild geliefert (HTTP {r.status_code}){hint}: " + _clip(r.text, 300))
 
 
 def _gen_openai(prompt, refs, fmt, call):
@@ -698,7 +708,7 @@ def _gen_openai(prompt, refs, fmt, call):
     if not key:
         raise ToolError("IMAGE_PROVIDER=openai, aber OPENAI_API_KEY fehlt")
     base = _env("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    fields = {"model": _env("IMAGE_MODEL", "gpt-image-1"), "prompt": prompt, "size": fmt[0]}
+    fields = {"model": _model_env("IMAGE_MODEL", "gpt-image-1"), "prompt": prompt, "size": fmt[0]}
     quality = str(call.get("quality") or _env("IMAGE_QUALITY")).strip().lower()
     if quality:
         if quality not in ("low", "medium", "high", "auto"):
@@ -716,7 +726,7 @@ def _gen_openai(prompt, refs, fmt, call):
         body = {}
     if r.status_code >= 400 or body.get("error"):
         msg = (body.get("error") or {}).get("message") if isinstance(body.get("error"), dict) else None
-        raise ToolError(f"OpenAI-Bild-API: HTTP {r.status_code} " + _clip(msg or r.text, 300))
+        raise ToolError(f"OpenAI-Bild-API ({fields['model']}): HTTP {r.status_code} " + _clip(msg or r.text, 300))
     d = (body.get("data") or [{}])[0]
     if d.get("b64_json"):
         return base64.b64decode(d["b64_json"])

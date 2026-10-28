@@ -110,7 +110,7 @@ def test_gemini_mit_referenz(monkeypatch, tmp_path):
     assert "output/a.png" in out
     parts = seen["json"]["contents"][0]["parts"]
     assert parts[0] == {"text": "x"} and parts[1]["inline_data"]["mime_type"] == "image/png"
-    assert "gemini-nano-banana-2.1:generateContent" in seen["url"]
+    assert "/models/gemini-2.5-flash-image:generateContent" in seen["url"]
     assert seen["json"]["generationConfig"]["imageConfig"] == {"aspectRatio": "3:2"}
 
 
@@ -144,3 +144,22 @@ def test_recht_bilder_oder_medien(openai, tmp_path):
     assert made == "karten/k02.png", text
     text, _ = T.run_tool({"tool": "image_generate", "prompt": "x"}, tmp_path, {"web": 1})
     assert "nicht erlaubt" in text
+
+
+@pytest.mark.parametrize("value, expected", [
+    ("", "gemini-2.5-flash-image"), ("  ", "gemini-2.5-flash-image"), ('"gemini-nano-banana-2.1"', "gemini-nano-banana-2.1"),
+    ("models/gemini-3-pro-image", "gemini-3-pro-image"), ("gemini-2.5-flash-image\r", "gemini-2.5-flash-image"),
+])
+def test_gemini_modellname_gehaertet(monkeypatch, tmp_path, value, expected):
+    monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "g-test")
+    monkeypatch.setenv("IMAGE_MODEL", value)
+    seen = {}
+
+    def post(url, **kw):
+        seen["url"] = url
+        return Resp({"error": {"code": 400, "message": "bad"}}, 400)
+    monkeypatch.setattr(T.requests, "post", post)
+    with pytest.raises(T.ToolError, match=f"Gemini \\({expected}\\).*HTTP 400"):
+        T.image_generate(tmp_path, {"prompt": "x"})
+    assert seen["url"].endswith(f"/models/{expected}:generateContent")
