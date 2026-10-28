@@ -735,9 +735,43 @@ def _gen_openai(prompt, refs, fmt, call):
     raise ToolError("Bildanbieter hat kein Bild geliefert: " + _clip(r.text, 300))
 
 
+OPENROUTER_IMAGE_MODEL = "google/gemini-2.5-flash-image"
+
+
+def _gen_openrouter(prompt, refs, fmt, call):
+    """OpenRouter Image API (/api/v1/images): ein Key, viele Bildmodelle, Referenzbilder als data-URL."""
+    key = _env("OPENROUTER_API_KEY").split(",")[0].strip()
+    if not key:
+        raise ToolError("IMAGE_PROVIDER=openrouter, aber OPENROUTER_API_KEY fehlt")
+    model = _model_env("IMAGE_MODEL", OPENROUTER_IMAGE_MODEL)
+    body = {"model": model, "prompt": prompt, "aspect_ratio": fmt[1], "output_format": "png"}
+    size = _env("IMAGE_SIZE").upper()
+    if size:
+        body["resolution"] = size
+    if refs:
+        body["input_references"] = [{"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(d).decode()}"}}
+                                    for _, d, mime in refs]
+    r = requests.post("https://openrouter.ai/api/v1/images", headers={"Authorization": "Bearer " + key}, timeout=300, json=body)
+    try:
+        data = r.json()
+    except ValueError:
+        data = {}
+    if r.status_code >= 400 or data.get("error"):
+        err = data.get("error")
+        msg = err.get("message") if isinstance(err, dict) else None
+        hint = " (Guthaben bei OpenRouter pruefen)" if r.status_code == 402 else ""
+        raise ToolError(f"OpenRouter ({model}): HTTP {r.status_code}{hint} " + _clip(msg or r.text, 300))
+    d = (data.get("data") or [{}])[0]
+    if d.get("b64_json"):
+        return base64.b64decode(d["b64_json"])
+    if d.get("url"):
+        return safe_get(d["url"], MAX_IMAGE_BYTES)[1]
+    raise ToolError(f"OpenRouter ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
+
+
 def _gen_pollinations(prompt, refs, fmt, call):
     if refs:
-        raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai oder gemini (in .env setzen)")
+        raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai, gemini oder openrouter (in .env setzen)")
     w, h = fmt[2]
     r = requests.get("https://image.pollinations.ai/prompt/" + quote(prompt[:800]),
                      params={"width": w, "height": h, "nologo": "true", "seed": int(time.time()) % 100000},
@@ -756,7 +790,7 @@ def image_generate(root, call):
     refs = _ref_images(root, call.get("refs") or call.get("reference_images"))
     _img_target(root, call, "png")  # Pfad vor dem (kostenpflichtigen) Aufruf pruefen
     prov = _env("IMAGE_PROVIDER", "pollinations").lower()
-    gen = {"gemini": _gen_gemini, "openai": _gen_openai}.get(prov, _gen_pollinations)
+    gen = {"gemini": _gen_gemini, "openai": _gen_openai, "openrouter": _gen_openrouter}.get(prov, _gen_pollinations)
     data = gen(prompt, refs, fmt, call)
     if len(data) > MAX_IMAGE_BYTES * 3:
         raise ToolError("Erzeugtes Bild ist zu gross")

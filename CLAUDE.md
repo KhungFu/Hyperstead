@@ -45,7 +45,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   (`/v1beta/interactions`, Video base64 in `steps[].content`, `continue_id` = `previous_interaction_id`); `VIDEO_MODEL=veo-*` nutzt
   `:predictLongRunning` + Operation abfragen + Download. Veo-3.1-Preview-Modelle wurden am 2026-10-22 abgeschaltet. Ergebnis in `output/`.
 - `image_generate` (Recht `images` ODER `media`): `IMAGE_PROVIDER` pollinations (Std., ohne Referenzen) | openai (`/images/edits` mit `image[]` bei `refs`) |
-  gemini (`generateContent`, Text + `inline_data`, `imageConfig.aspectRatio`/`IMAGE_SIZE`, Std.-Modell `GEMINI_IMAGE_MODEL` = `gemini-2.5-flash-image`; Modellnamen per `_model_env` bereinigt, leer = Standard). `refs` max. 4,
+  gemini (`generateContent`, Text + `inline_data`, `imageConfig.aspectRatio`/`IMAGE_SIZE`, Std.-Modell `GEMINI_IMAGE_MODEL` = `gemini-2.5-flash-image`; Modellnamen per `_model_env` bereinigt, leer = Standard) | openrouter (`/api/v1/images`, `input_references` als data-URL, Std. `google/gemini-2.5-flash-image`). `refs` max. 4,
   `format` quadrat/hoch/quer, `path` nur in assets/output/karten (ueberschreibt). Eingabefehler vor dem API-Aufruf. Nur mit Mocks getestet.
 - Anbieter: `PROVIDERS` mit `kind` (openai/anthropic) und `models_url`; `list_models` (Cache 10 min), `/api/providers/<id>/models`, `/api/providers/test`.
 - Chat: Tabelle `chats`, `/api/agents/<id>/chat` (+`/order`). Uploads: `/api/projects/<id>/upload` → `input/` über `save_input`
