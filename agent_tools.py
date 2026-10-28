@@ -799,8 +799,10 @@ def image_generate(root, call):
         if gen is _gen_pollinations or _env("IMAGE_FALLBACK").lower() != "pollinations":
             raise
         data = _gen_pollinations(prompt, [], fmt, call)
-        fallback = (f" ACHTUNG: {prov} ist fehlgeschlagen ({_clip(str(e), 160)}), Ersatzbild kostenlos ueber Pollinations"
-                    + (" OHNE Referenzbilder, Figuren und Stil koennen abweichen." if refs else "."))
+        code = re.search(r"HTTP \d{3}", str(e))
+        fallback = (f"HINWEIS: Auf Pollinations umgestiegen, Gratis-Erzeugung bei {prov} nicht moeglich "
+                    f"({code.group(0) if code else type(e).__name__}). Kostenlos und OHNE Referenzbilder erzeugt"
+                    + (", Figuren und Stil koennen abweichen" if refs else "") + f". Fehler: {_clip(str(e), 160)} ")
         refs = []
     if len(data) > MAX_IMAGE_BYTES * 3:
         raise ToolError("Erzeugtes Bild ist zu gross")
@@ -814,7 +816,7 @@ def image_generate(root, call):
     else:
         rel, size = _store_image(root, data, call.get("name"), "generiert")
     via = f" mit {len(refs)} Referenzbild(ern)" if refs else ""
-    return f"Bild erzeugt{via} und gespeichert: {rel} ({size // 1024} KB).{fallback} Ansehen mit view_image. Im HTML so einbinden: <img src=\"{rel}\" alt=\"...\">"
+    return f"{fallback}Bild erzeugt{via} und gespeichert: {rel} ({size // 1024} KB). Ansehen mit view_image. Im HTML so einbinden: <img src=\"{rel}\" alt=\"...\">"
 
 
 def _inside(root, rel):

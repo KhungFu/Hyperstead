@@ -216,4 +216,7 @@ def test_rueckfall_auf_pollinations(monkeypatch, tmp_path):
     monkeypatch.setenv("IMAGE_FALLBACK", "pollinations")
     out = T.image_generate(tmp_path, call)
     assert "pollinations" in got[0] and (tmp_path / "karten/k1.png").exists()
-    assert "ACHTUNG" in out and "OHNE Referenzbilder" in out and "mit 1 Referenzbild" not in out
+    assert out.startswith("HINWEIS: Auf Pollinations umgestiegen") and "bei openrouter" in out and "HTTP 402" in out[:150]
+    assert "OHNE Referenzbilder" in out and "mit 1 Referenzbild" not in out
+    text, made = T.run_tool({"tool": "image_generate", **call}, tmp_path, {"media": 1})
+    assert made == "karten/k1.png", text
