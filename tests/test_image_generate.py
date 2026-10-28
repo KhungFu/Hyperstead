@@ -195,3 +195,25 @@ def test_openrouter_fehler_und_key(monkeypatch, tmp_path):
     monkeypatch.setattr(T.requests, "post", lambda url, **kw: Resp({"error": {"message": "Insufficient credits"}}, 402))
     with pytest.raises(T.ToolError, match="HTTP 402 .*Guthaben.*Insufficient credits"):
         T.image_generate(tmp_path, {"prompt": "x"})
+
+
+class Raw:
+    status_code, content = 200, PNG
+
+
+def test_rueckfall_auf_pollinations(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.setattr(T.requests, "post", lambda url, **kw: Resp({"error": {"message": "Insufficient credits"}}, 402))
+    got = []
+    monkeypatch.setattr(T.requests, "get", lambda url, **kw: got.append(url) or Raw())
+    (tmp_path / "ref.png").write_bytes(PNG)
+    call = {"prompt": "x", "refs": ["ref.png"], "path": "karten/k1.png"}
+    monkeypatch.delenv("IMAGE_FALLBACK", raising=False)
+    with pytest.raises(T.ToolError, match="402"):  # Standard: kein Rueckfall
+        T.image_generate(tmp_path, call)
+    assert not got
+    monkeypatch.setenv("IMAGE_FALLBACK", "pollinations")
+    out = T.image_generate(tmp_path, call)
+    assert "pollinations" in got[0] and (tmp_path / "karten/k1.png").exists()
+    assert "ACHTUNG" in out and "OHNE Referenzbilder" in out and "mit 1 Referenzbild" not in out
