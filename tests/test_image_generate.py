@@ -132,7 +132,7 @@ def test_gemini_bildgroesse_und_abrechnungshinweis(monkeypatch, tmp_path):
 def test_pollinations_lehnt_referenzen_ab(monkeypatch, tmp_path):
     monkeypatch.setenv("IMAGE_PROVIDER", "pollinations")
     (tmp_path / "ref.png").write_bytes(PNG)
-    with pytest.raises(T.ToolError, match="nur mit IMAGE_PROVIDER=openai oder gemini"):
+    with pytest.raises(T.ToolError, match="nur mit IMAGE_PROVIDER=openai, gemini oder openrouter"):
         T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"]})
 
 
@@ -163,3 +163,35 @@ def test_gemini_modellname_gehaertet(monkeypatch, tmp_path, value, expected):
     with pytest.raises(T.ToolError, match=f"Gemini \\({expected}\\).*HTTP 400"):
         T.image_generate(tmp_path, {"prompt": "x"})
     assert seen["url"].endswith(f"/models/{expected}:generateContent")
+
+
+def test_openrouter_mit_referenz(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.delenv("IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("IMAGE_SIZE", raising=False)
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return Resp({"data": [{"b64_json": base64.b64encode(PNG).decode(), "media_type": "image/png"}]})
+    monkeypatch.setattr(T.requests, "post", post)
+    (tmp_path / "ref.jpg").write_bytes(JPG)
+    out = T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.jpg"], "format": "hoch", "path": "karten/k1.png"})
+    assert "karten/k1.png" in out and (tmp_path / "karten/k1.png").read_bytes() == PNG
+    assert seen["url"] == "https://openrouter.ai/api/v1/images"
+    assert seen["headers"]["Authorization"] == "Bearer or-test"
+    body = seen["json"]
+    assert body["model"] == "google/gemini-2.5-flash-image" and body["aspect_ratio"] == "2:3"
+    assert body["input_references"][0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_openrouter_fehler_und_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    with pytest.raises(T.ToolError, match="OPENROUTER_API_KEY fehlt"):
+        T.image_generate(tmp_path, {"prompt": "x"})
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.setattr(T.requests, "post", lambda url, **kw: Resp({"error": {"message": "Insufficient credits"}}, 402))
+    with pytest.raises(T.ToolError, match="HTTP 402 .*Guthaben.*Insufficient credits"):
+        T.image_generate(tmp_path, {"prompt": "x"})
