@@ -791,7 +791,19 @@ def image_generate(root, call):
     _img_target(root, call, "png")  # Pfad vor dem (kostenpflichtigen) Aufruf pruefen
     prov = _env("IMAGE_PROVIDER", "pollinations").lower()
     gen = {"gemini": _gen_gemini, "openai": _gen_openai, "openrouter": _gen_openrouter}.get(prov, _gen_pollinations)
-    data = gen(prompt, refs, fmt, call)
+    fallback = ""
+    try:
+        data = gen(prompt, refs, fmt, call)
+    except (ToolError, requests.RequestException) as e:
+        # IMAGE_FALLBACK=pollinations: kostenloser Ersatz, aber OHNE Referenzbilder (Figuren/Stil koennen abweichen)
+        if gen is _gen_pollinations or _env("IMAGE_FALLBACK").lower() != "pollinations":
+            raise
+        data = _gen_pollinations(prompt, [], fmt, call)
+        code = re.search(r"HTTP \d{3}", str(e))
+        fallback = (f"HINWEIS: Auf Pollinations umgestiegen, Gratis-Erzeugung bei {prov} nicht moeglich "
+                    f"({code.group(0) if code else type(e).__name__}). Kostenlos und OHNE Referenzbilder erzeugt"
+                    + (", Figuren und Stil koennen abweichen" if refs else "") + f". Fehler: {_clip(str(e), 160)} ")
+        refs = []
     if len(data) > MAX_IMAGE_BYTES * 3:
         raise ToolError("Erzeugtes Bild ist zu gross")
     ext = _sniff(data)
@@ -804,7 +816,7 @@ def image_generate(root, call):
     else:
         rel, size = _store_image(root, data, call.get("name"), "generiert")
     via = f" mit {len(refs)} Referenzbild(ern)" if refs else ""
-    return f"Bild erzeugt{via} und gespeichert: {rel} ({size // 1024} KB). Ansehen mit view_image. Im HTML so einbinden: <img src=\"{rel}\" alt=\"...\">"
+    return f"{fallback}Bild erzeugt{via} und gespeichert: {rel} ({size // 1024} KB). Ansehen mit view_image. Im HTML so einbinden: <img src=\"{rel}\" alt=\"...\">"
 
 
 def _inside(root, rel):
