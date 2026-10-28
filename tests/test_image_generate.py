@@ -220,3 +220,63 @@ def test_rueckfall_auf_pollinations(monkeypatch, tmp_path):
     assert "OHNE Referenzbilder" in out and "mit 1 Referenzbild" not in out
     text, made = T.run_tool({"tool": "image_generate", **call}, tmp_path, {"media": 1})
     assert made == "karten/k1.png", text
+
+
+def test_pollinations_mit_key_modell_und_referenzen(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "pollinations")
+    monkeypatch.setenv("POLLINATIONS_API_KEY", "sk_test")
+    monkeypatch.setenv("IMAGE_STYLE", "Buntstift auf Pastell")
+    monkeypatch.delenv("POLLINATIONS_MODEL", raising=False)
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return Resp({"data": [{"b64_json": base64.b64encode(PNG).decode()}]})
+    monkeypatch.setattr(T.requests, "post", post)
+    (tmp_path / "ref.png").write_bytes(PNG)
+    out = T.image_generate(tmp_path, {"prompt": "K1 winkt", "refs": ["ref.png"], "format": "hoch", "path": "karten/k1.png"})
+    assert "mit 1 Referenzbild" in out and (tmp_path / "karten/k1.png").read_bytes() == PNG
+    body = seen["json"]
+    assert seen["url"] == "https://gen.pollinations.ai/v1/images/generations"
+    assert seen["headers"]["Authorization"] == "Bearer sk_test"
+    assert body["model"] == T.POLLINATIONS_MODEL and body["size"] == "1024x1536"
+    assert isinstance(body["image"], list) and body["image"][0].startswith("data:image/png;base64,")
+    assert body["prompt"].startswith("Stil: Buntstift auf Pastell") and "K1 winkt" in body["prompt"]
+
+
+def test_pollinations_guthaben_leer(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "pollinations")
+    monkeypatch.setenv("POLLINATIONS_API_KEY", "sk_test")
+    monkeypatch.setenv("POLLINATIONS_MODEL", "google/gemini-2.5-flash-image")
+    monkeypatch.setattr(T.requests, "post", lambda url, **kw: Resp({"error": {"message": "budget exhausted"}}, 402))
+    with pytest.raises(T.ToolError, match="gemini-2.5-flash-image.*HTTP 402.*Pollen-Guthaben"):
+        T.image_generate(tmp_path, {"prompt": "x"})
+
+
+def test_pollinations_ohne_key_mit_modell(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "pollinations")
+    monkeypatch.delenv("POLLINATIONS_API_KEY", raising=False)
+    monkeypatch.setenv("POLLINATIONS_MODEL", "flux")
+    seen = {}
+    monkeypatch.setattr(T.requests, "get", lambda url, **kw: seen.update(url=url, **kw) or Raw())
+    T.image_generate(tmp_path, {"prompt": "x"})
+    assert seen["url"].startswith("https://image.pollinations.ai/prompt/") and seen["params"]["model"] == "flux"
+
+
+def test_rueckfall_mit_pollinations_key_behaelt_referenzen(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.setenv("IMAGE_FALLBACK", "pollinations")
+    monkeypatch.setenv("POLLINATIONS_API_KEY", "sk_test")
+    urls = []
+
+    def post(url, **kw):
+        urls.append(url)
+        if "openrouter" in url:
+            return Resp({"error": {"message": "Insufficient credits"}}, 402)
+        assert len(kw["json"]["image"]) == 1
+        return Resp({"data": [{"b64_json": base64.b64encode(PNG).decode()}]})
+    monkeypatch.setattr(T.requests, "post", post)
+    (tmp_path / "ref.png").write_bytes(PNG)
+    out = T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"]})
+    assert "gen.pollinations.ai" in urls[-1] and "mit 1 Referenzbild" in out and "Referenzbildern erzeugt" in out

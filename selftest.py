@@ -85,11 +85,13 @@ def group_web():
                                                                           "quality": "low" if prov == "openai" else ""})[:80],
               hint="IMAGE_PROVIDER=gemini oder openai mit Key waehlen, wenn Pollinations nicht erreichbar ist")
         ref = next(iter(sorted((root / "assets").glob("test.*"))), None) if (root / "assets").exists() else None
-        if prov in ("openai", "gemini", "openrouter") and ref:
+        pkey = prov == "pollinations" and T._env("POLLINATIONS_API_KEY").strip()  # noqa: SLF001
+        if (prov in ("openai", "gemini", "openrouter") or pkey) and ref:
             check("Bild mit Referenzbild", lambda: T.image_generate(root, {
                 "prompt": "the same apple, now cut in half, same drawing style", "refs": [f"assets/{ref.name}"],
                 "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],
-                  hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1 bzw. gemini-2.5-flash-image)")
+                  hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1, gemini-2.5-flash-image, "
+                       "bei Pollinations z. B. black-forest-labs/flux.2-klein-4b)")
     if T.video_enabled():
         def vmodel():
             key, model = T._gemini_key(), T._model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001

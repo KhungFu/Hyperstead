@@ -769,22 +769,58 @@ def _gen_openrouter(prompt, refs, fmt, call):
     raise ToolError(f"OpenRouter ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
 
 
+POLLINATIONS_MODEL = "black-forest-labs/flux.2-klein-4b"  # mit Key: guenstig, nimmt bis zu 4 Referenzbilder
+
+
 def _gen_pollinations(prompt, refs, fmt, call):
-    if refs:
-        raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai, gemini oder openrouter (in .env setzen)")
+    """Ohne POLLINATIONS_API_KEY: alter Gratis-Endpunkt (nicht mehr dokumentiert, ohne Referenzbilder).
+    Mit Key (enter.pollinations.ai, Pollen-Guthaben): gen.pollinations.ai, Modell waehlbar, Referenzbilder als data-URL."""
+    key = _env("POLLINATIONS_API_KEY").split(",")[0].strip()
     w, h = fmt[2]
-    r = requests.get("https://image.pollinations.ai/prompt/" + quote(prompt[:800]),
-                     params={"width": w, "height": h, "nologo": "true", "seed": int(time.time()) % 100000},
-                     headers={"User-Agent": UA}, timeout=120)
-    if r.status_code >= 400:
-        raise ToolError(f"Bildgenerator antwortet mit HTTP {r.status_code}")
-    return r.content
+    if not key:
+        if refs:
+            raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai, gemini oder openrouter "
+                            "oder mit POLLINATIONS_API_KEY (in .env setzen)")
+        params = {"width": w, "height": h, "nologo": "true", "seed": int(time.time()) % 100000}
+        model = _model_env("POLLINATIONS_MODEL", "")
+        if model:
+            params["model"] = model
+        r = requests.get("https://image.pollinations.ai/prompt/" + quote(prompt[:800]),
+                         params=params, headers={"User-Agent": UA}, timeout=120)
+        if r.status_code >= 400:
+            raise ToolError(f"Bildgenerator antwortet mit HTTP {r.status_code}"
+                            + (" (Modell braucht POLLINATIONS_API_KEY)" if model and r.status_code in (401, 402, 403) else ""))
+        return r.content
+    model = _model_env("POLLINATIONS_MODEL", POLLINATIONS_MODEL)
+    body = {"model": model, "prompt": prompt, "size": f"{w}x{h}", "response_format": "b64_json"}
+    if refs:  # als Liste, ein einzelner data-URL-String wird am Komma zerlegt
+        body["image"] = [f"data:{mime};base64,{base64.b64encode(d).decode()}" for _, d, mime in refs]
+    r = requests.post("https://gen.pollinations.ai/v1/images/generations", timeout=300, json=body,
+                      headers={"Authorization": "Bearer " + key, "User-Agent": UA})
+    try:
+        data = r.json()
+    except ValueError:
+        data = {}
+    if r.status_code >= 400 or data.get("error"):
+        err = data.get("error")
+        msg = err.get("message") if isinstance(err, dict) else err
+        hint = {401: " (POLLINATIONS_API_KEY pruefen)", 402: " (Pollen-Guthaben aufgebraucht, enter.pollinations.ai)"}.get(r.status_code, "")
+        raise ToolError(f"Pollinations ({model}): HTTP {r.status_code}{hint} " + _clip(str(msg or r.text), 300))
+    d = (data.get("data") or [{}])[0]
+    if d.get("b64_json"):
+        return base64.b64decode(d["b64_json"])
+    if d.get("url"):
+        return safe_get(d["url"], MAX_IMAGE_BYTES)[1]
+    raise ToolError(f"Pollinations ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
 
 
 def image_generate(root, call):
     prompt = str(call.get("prompt") or "").strip()[:4000]
     if not prompt:
         raise ToolError("prompt fehlt")
+    style = _env("IMAGE_STYLE").strip()  # fester Zeichenstil fuer jedes Bild, z. B. Buntstift auf Pastell
+    if style:
+        prompt = f"Stil: {style}\n\n{prompt}"  # vorne, der Gratis-Endpunkt kuerzt lange Prompts
     root = Path(root)
     fmt = _img_format(call)
     refs = _ref_images(root, call.get("refs") or call.get("reference_images"))
@@ -798,12 +834,14 @@ def image_generate(root, call):
         # IMAGE_FALLBACK=pollinations: kostenloser Ersatz, aber OHNE Referenzbilder (Figuren/Stil koennen abweichen)
         if gen is _gen_pollinations or _env("IMAGE_FALLBACK").lower() != "pollinations":
             raise
-        data = _gen_pollinations(prompt, [], fmt, call)
+        keep = refs if _env("POLLINATIONS_API_KEY").strip() else []  # mit Key gehen Referenzbilder auch dort
+        data = _gen_pollinations(prompt, keep, fmt, call)
         code = re.search(r"HTTP \d{3}", str(e))
+        how = ("mit Pollen-Guthaben und Referenzbildern erzeugt" if keep else
+               "Kostenlos und OHNE Referenzbilder erzeugt" + (", Figuren und Stil koennen abweichen" if refs else ""))
         fallback = (f"HINWEIS: Auf Pollinations umgestiegen, Gratis-Erzeugung bei {prov} nicht moeglich "
-                    f"({code.group(0) if code else type(e).__name__}). Kostenlos und OHNE Referenzbilder erzeugt"
-                    + (", Figuren und Stil koennen abweichen" if refs else "") + f". Fehler: {_clip(str(e), 160)} ")
-        refs = []
+                    f"({code.group(0) if code else type(e).__name__}). {how}. Fehler: {_clip(str(e), 160)} ")
+        refs = keep
     if len(data) > MAX_IMAGE_BYTES * 3:
         raise ToolError("Erzeugtes Bild ist zu gross")
     ext = _sniff(data)
