@@ -81,12 +81,15 @@ def group_web():
                     raise RuntimeError(f"Modell '{model}' nicht verfuegbar (HTTP {r.status_code}): {r.text[:150]}")
                 return f"{model} verfuegbar"
             check(f"Bild-Modell ({prov})", imodel, hint="IMAGE_MODEL in .env leer lassen (Standard) oder einen Namen aus der Modellliste eintragen, ohne models/ und Anfuehrungszeichen")
+        if prov == "sdcpp":
+            check("Bildrechner erreichbar", lambda: f"HTTP {requests.get(T._env('SDCPP_URL').rstrip('/') + '/', timeout=10).status_code}",  # noqa: SLF001
+                  hint="Laptop an? sd-server gestartet? SDCPP_URL in .env = http://<IP des Laptops>:1234, Windows-Firewall fuer privates Netz erlauben")
         check(f"Bild erzeugen ({prov})", lambda: T.image_generate(root, {"prompt": "a red apple, simple illustration", "name": "test",
                                                                           "quality": "low" if prov == "openai" else ""})[:80],
               hint="IMAGE_PROVIDER=gemini oder openai mit Key waehlen, wenn Pollinations nicht erreichbar ist")
         ref = next(iter(sorted((root / "assets").glob("test.*"))), None) if (root / "assets").exists() else None
         pkey = prov == "pollinations" and T._env("POLLINATIONS_API_KEY").strip()  # noqa: SLF001
-        if (prov in ("openai", "gemini", "openrouter") or pkey) and ref:
+        if (prov in ("openai", "gemini", "openrouter", "sdcpp") or pkey) and ref:
             check("Bild mit Referenzbild", lambda: T.image_generate(root, {
                 "prompt": "the same apple, now cut in half, same drawing style", "refs": [f"assets/{ref.name}"],
                 "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],
