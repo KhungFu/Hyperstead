@@ -132,7 +132,7 @@ def test_gemini_bildgroesse_und_abrechnungshinweis(monkeypatch, tmp_path):
 def test_pollinations_lehnt_referenzen_ab(monkeypatch, tmp_path):
     monkeypatch.setenv("IMAGE_PROVIDER", "pollinations")
     (tmp_path / "ref.png").write_bytes(PNG)
-    with pytest.raises(T.ToolError, match="nur mit IMAGE_PROVIDER=openai, gemini oder openrouter"):
+    with pytest.raises(T.ToolError, match="nur mit IMAGE_PROVIDER=openai, gemini, openrouter, sdcpp"):
         T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"]})
 
 
@@ -280,3 +280,51 @@ def test_rueckfall_mit_pollinations_key_behaelt_referenzen(monkeypatch, tmp_path
     (tmp_path / "ref.png").write_bytes(PNG)
     out = T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"]})
     assert "gen.pollinations.ai" in urls[-1] and "mit 1 Referenzbild" in out and "Referenzbildern erzeugt" in out
+
+
+def test_sdcpp_laptop_mit_referenz(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "sdcpp")
+    monkeypatch.setenv("SDCPP_URL", "http://192.168.1.50:1234/")
+    monkeypatch.delenv("SDCPP_SIZE", raising=False)
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return Resp({"images": [base64.b64encode(PNG).decode()]})
+    monkeypatch.setattr(T.requests, "post", post)
+    (tmp_path / "ref.png").write_bytes(PNG)
+    out = T.image_generate(tmp_path, {"prompt": "K1 winkt", "refs": ["ref.png"], "format": "quer", "path": "karten/k1.png"})
+    assert "mit 1 Referenzbild" in out and (tmp_path / "karten/k1.png").read_bytes() == PNG
+    body = seen["json"]
+    assert seen["url"] == "http://192.168.1.50:1234/sdapi/v1/txt2img"
+    assert (body["width"], body["height"]) == (1024, 672) and body["steps"] == 4 and body["cfg_scale"] == 1.0
+    assert body["extra_images"][0].startswith("data:image/png;base64,")
+    assert seen["timeout"] == (10, 1800)
+
+
+def test_sdcpp_groesse_fehler_und_url(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "sdcpp")
+    monkeypatch.delenv("SDCPP_URL", raising=False)
+    with pytest.raises(T.ToolError, match="SDCPP_URL fehlt"):
+        T.image_generate(tmp_path, {"prompt": "x"})
+    monkeypatch.setenv("SDCPP_URL", "http://laptop:1234")
+    monkeypatch.setenv("SDCPP_SIZE", "768")
+    seen = {}
+    monkeypatch.setattr(T.requests, "post", lambda url, **kw: seen.update(kw) or Resp({"error": "out of memory"}, 500))
+    with pytest.raises(T.ToolError, match="HTTP 500 out of memory"):
+        T.image_generate(tmp_path, {"prompt": "x", "format": "hoch"})
+    assert (seen["json"]["width"], seen["json"]["height"]) == (512, 768)
+
+
+def test_sdcpp_laptop_aus_rueckfall(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "sdcpp")
+    monkeypatch.setenv("SDCPP_URL", "http://laptop:1234")
+    monkeypatch.setenv("IMAGE_FALLBACK", "pollinations")
+    monkeypatch.delenv("POLLINATIONS_API_KEY", raising=False)
+
+    def post(url, **kw):
+        raise T.requests.ConnectionError("connection refused")
+    monkeypatch.setattr(T.requests, "post", post)
+    monkeypatch.setattr(T.requests, "get", lambda url, **kw: Raw())
+    out = T.image_generate(tmp_path, {"prompt": "x"})
+    assert out.startswith("HINWEIS: Auf Pollinations umgestiegen") and "bei sdcpp" in out

@@ -779,7 +779,7 @@ def _gen_pollinations(prompt, refs, fmt, call):
     w, h = fmt[2]
     if not key:
         if refs:
-            raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai, gemini oder openrouter "
+            raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai, gemini, openrouter, sdcpp "
                             "oder mit POLLINATIONS_API_KEY (in .env setzen)")
         params = {"width": w, "height": h, "nologo": "true", "seed": int(time.time()) % 100000}
         model = _model_env("POLLINATIONS_MODEL", "")
@@ -814,6 +814,51 @@ def _gen_pollinations(prompt, refs, fmt, call):
     raise ToolError(f"Pollinations ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
 
 
+_sdcpp_lock = __import__("threading").Lock()  # der Bildrechner schafft nur ein Bild gleichzeitig (RAM)
+
+
+def _sdcpp_size(fmt):
+    """Laengste Seite = SDCPP_SIZE (Std. 1024), beide Seiten auf Vielfache von 16 (CPU-Rechner: kleiner = schneller)."""
+    w, h = fmt[2]
+    try:
+        side = max(256, min(2048, int(_env("SDCPP_SIZE", "1024"))))
+    except ValueError:
+        side = 1024
+    k = side / max(w, h)
+    return max(16, int(w * k) // 16 * 16), max(16, int(h * k) // 16 * 16)
+
+
+def _gen_sdcpp(prompt, refs, fmt, call):
+    """Eigener Bildrechner mit stable-diffusion.cpp (sd-server, z. B. FLUX.2 klein 4B auf einem Laptop im Heimnetz).
+    Referenzbilder gehen als extra_images mit. Langsam (Minuten je Bild), deshalb langes Zeitlimit und immer nur ein Bild."""
+    url = _env("SDCPP_URL").strip().rstrip("/")
+    if not url:
+        raise ToolError("IMAGE_PROVIDER=sdcpp, aber SDCPP_URL fehlt (z. B. http://192.168.1.50:1234)")
+    w, h = _sdcpp_size(fmt)
+    try:
+        steps, cfg = int(_env("SDCPP_STEPS", "4")), float(_env("SDCPP_CFG", "1.0"))
+        timeout = int(_env("SDCPP_TIMEOUT", "1800"))
+    except ValueError:
+        raise ToolError("SDCPP_STEPS, SDCPP_CFG und SDCPP_TIMEOUT muessen Zahlen sein")
+    body = {"prompt": prompt, "width": w, "height": h, "steps": steps, "cfg_scale": cfg,
+            "seed": int(time.time() * 1000) % 2_000_000_000}  # fester Wert: seed -1 liefert bei manchen Builds nichts
+    if refs:
+        body["extra_images"] = [f"data:{mime};base64,{base64.b64encode(d).decode()}" for _, d, mime in refs]
+    with _sdcpp_lock:
+        r = requests.post(url + "/sdapi/v1/txt2img", json=body, timeout=(10, timeout))
+    try:
+        data = r.json()
+    except ValueError:
+        data = {}
+    if r.status_code >= 400:
+        raise ToolError(f"Bildrechner ({url}): HTTP {r.status_code} " + _clip(str(data.get("error") or r.text), 300))
+    imgs = data.get("images") or []
+    if not imgs:
+        raise ToolError("Bildrechner hat kein Bild geliefert: " + _clip(r.text, 300))
+    b64 = str(imgs[0])
+    return base64.b64decode(b64.split(",", 1)[1] if b64.startswith("data:") else b64)
+
+
 def image_generate(root, call):
     prompt = str(call.get("prompt") or "").strip()[:4000]
     if not prompt:
@@ -826,7 +871,8 @@ def image_generate(root, call):
     refs = _ref_images(root, call.get("refs") or call.get("reference_images"))
     _img_target(root, call, "png")  # Pfad vor dem (kostenpflichtigen) Aufruf pruefen
     prov = _env("IMAGE_PROVIDER", "pollinations").lower()
-    gen = {"gemini": _gen_gemini, "openai": _gen_openai, "openrouter": _gen_openrouter}.get(prov, _gen_pollinations)
+    gen = {"gemini": _gen_gemini, "openai": _gen_openai, "openrouter": _gen_openrouter,
+           "sdcpp": _gen_sdcpp}.get(prov, _gen_pollinations)
     fallback = ""
     try:
         data = gen(prompt, refs, fmt, call)
