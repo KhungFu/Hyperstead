@@ -111,7 +111,12 @@ def group_web():
                 "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],
                   hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1, gemini-2.5-flash-image, "
                        "bei Pollinations z. B. black-forest-labs/flux.2-klein-4b)")
-    if T.video_enabled():
+    if T.video_enabled() and T._env("VIDEO_PROVIDER").lower() == "fal":  # noqa: SLF001
+        def vkey():
+            T._fal_key()  # noqa: SLF001
+            return "FAL_KEY gesetzt (kein Clip erzeugt, das kostet Geld)"
+        check("Video-Anbieter (fal.ai)", vkey, optional=True, hint="FAL_KEY in .env eintragen, VIDEO_PROVIDER=fal")
+    elif T.video_enabled():
         def vmodel():
             key, model = T._gemini_key(), T._model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001
             r = requests.get(f"{T.GEMINI_BASE}/models/{model}", headers={"x-goog-api-key": key}, timeout=20)
@@ -120,7 +125,7 @@ def group_web():
             return f"{model} verfuegbar (kein Clip erzeugt, das kostet Geld)"
         check("Video-Modell (Gemini)", vmodel, optional=True, hint="GEMINI_API_KEY mit Abrechnung? VIDEO_MODEL pruefen")
     else:
-        line("warn", "Videoerzeugung", "aus (optional: VIDEO_PROVIDER=gemini in .env)")
+        line("warn", "Videoerzeugung", "aus (optional: VIDEO_PROVIDER=gemini oder fal in .env)")
     check("SSRF-Schutz blockt lokale Adressen", lambda: "ok" if _blocked() else (_ for _ in ()).throw(RuntimeError("nicht blockiert!")))
 
 
