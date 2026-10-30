@@ -5,14 +5,48 @@ PDF/Word, Zeitpläne und Verbindungen funktionieren wie auf dem Pi. Ein paar Lin
 (Liste unten). Getestet ist die Windows-Variante bisher nur in der Entwicklungsumgebung (Linux), noch nicht auf
 einem echten Windows-Rechner.
 
-## Pi und Laptop: beides oder umziehen?
+## Ablauf: erst parallel, dann Umzug auf den Laptop
 
-- **Beides parallel:** zwei getrennte Installationen mit eigenen Firmen, Aufträgen und Daten. Den
-  `TELEGRAM_BOT_TOKEN` nur auf **einer** Maschine eintragen, sonst stören sich die beiden Bots (Telegram erlaubt
-  nur einen Abholer je Bot).
-- **Umziehen:** auf dem Pi `sudo systemctl stop paperclip-lite`, dann `data.db`, den Ordner `workspace/` und
-  `.env` auf den Laptop in den PaperclipLite-Ordner kopieren (z. B. per `scp` oder USB-Stick). Danach den Dienst
-  auf dem Pi abschalten: `sudo systemctl disable paperclip-lite`.
+**Phase 1 – beide laufen (Laptop zum Ausprobieren):**
+
+- Der Pi bleibt das Hauptsystem mit Telegram und den echten Firmen.
+- Auf dem Laptop PaperclipLite neu installieren (Schritte 1–4) und mit einer Testfirma ausprobieren.
+- In der `.env` des Laptops `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` **leer** lassen. Telegram erlaubt nur
+  einen Abholer je Bot, sonst gehen Nachrichten verloren.
+- Die API-Keys aus der `.env` des Pi dürfen auf beiden stehen.
+- Der Bildrechner läuft auf dem Laptop. Der Pi nutzt ihn mit `SDCPP_URL=http://<IP des Laptops>:1234`, der Laptop
+  selbst mit `SDCPP_URL=http://127.0.0.1:1234` (dann muss `bildrechner-start.bat` auf `0.0.0.0` lauschen, wie
+  ausgeliefert).
+
+**Phase 2 – Umzug, der Laptop ersetzt den Pi:**
+
+1. Auf dem Laptop PaperclipLite beenden (Fenster schließen). Die Testdaten werden gleich überschrieben:
+   bei Bedarf `data.db` und `workspace` vorher umbenennen.
+2. Auf dem Pi: `sudo systemctl stop paperclip-lite`
+3. Vom Pi in den PaperclipLite-Ordner des Laptops kopieren: `data.db`, den ganzen Ordner `workspace/` und `.env`.
+   Am einfachsten in PowerShell auf dem Laptop (Benutzer und Pfad auf dem Pi anpassen):
+
+   ```powershell
+   cd $HOME\paperclip-lite
+   scp pi@dexter:~/paperclip-lite/data.db .
+   scp pi@dexter:~/paperclip-lite/.env .
+   scp -r pi@dexter:~/paperclip-lite/workspace .
+   ```
+
+4. In der kopierten `.env` prüfen:
+   - `HOST=0.0.0.0` und `APP_TOKEN` bleiben, wenn du vom Handy zugreifst.
+   - `OLLAMA_URL` zeigt auf den Pi. Ohne Ollama auf dem Laptop die Ollama-Agenten auf einen anderen Anbieter
+     stellen (Menü „⚠ Modelle“).
+   - `SDCPP_URL=http://127.0.0.1:1234`.
+   - `PCL_ALLOW_SHELL`: Freigegebene Befehle laufen jetzt in `cmd.exe`, Linux-Befehle gehen dort nicht.
+5. Laptop starten (`deploy\windows\paperclip-start.bat`) und prüfen: Firmen, Aufträge, Post und Telegram da?
+6. Erst dann auf dem Pi abschalten: `sudo systemctl disable paperclip-lite`. Die Daten auf dem Pi bleiben als
+   Sicherung liegen.
+7. Wer von außen über die alte Adresse (DDNS/Router-Weiterleitung) kam: im Router die Weiterleitung von Port 8787
+   auf die IP des Laptops umstellen.
+
+Agenten mit Claude/Codex über CLI brauchen auf dem Laptop eigene Installationen von `claude` bzw. `codex`
+mit Anmeldung, sonst die Agenten auf einen API-Anbieter umstellen.
 
 ## 1. Herunterladen
 
@@ -55,7 +89,9 @@ powercfg /change standby-timeout-ac 0
 
 Aufruf dann über `http://<IP des Laptops>:8787` (IP mit `ipconfig`). Von unterwegs am sichersten über Tailscale.
 
-Autostart: Win+R, `shell:startup`, Verknüpfung zu `deploy\windows\paperclip-start.bat` hineinlegen.
+Autostart: Win+R, `shell:startup`, Verknüpfungen zu `deploy\windows\paperclip-start.bat` und (falls genutzt)
+`C:\bildrechner\bildrechner-start.bat` hineinlegen. Der Laptop muss dafür angemeldet starten: Windows-Anmeldung
+ohne Passwort (netplwiz) oder automatische Anmeldung einrichten, sonst startet nach einem Stromausfall nichts.
 
 ## 5. Bildrechner auf demselben Laptop
 
@@ -66,7 +102,8 @@ IMAGE_PROVIDER=sdcpp
 SDCPP_URL=http://127.0.0.1:1234
 ```
 
-Dann reicht in `bildrechner-start.bat` `--listen-ip 127.0.0.1` und die Firewall-Regel für Port 1234 entfällt.
+Solange auch der Pi den Bildrechner nutzt, bleibt `--listen-ip 0.0.0.0` samt Firewall-Regel. Nach dem Umzug reicht
+`--listen-ip 127.0.0.1`, dann entfällt die Firewall-Regel für Port 1234.
 Achtung: Der Bildrechner braucht rund 5,5 GB RAM, Windows 2–3 GB, PaperclipLite etwa 0,2 GB. Mit 8 GB wird
 das knapp. Andere Programme (Browser mit vielen Tabs) beim Bildermachen schließen. Ollama zusätzlich auf
 dem Laptop passt nicht mehr.
