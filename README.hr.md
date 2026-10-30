@@ -1,0 +1,489 @@
+# PaperclipLite
+
+🌐 Jezici: [Deutsch](README.md) · [English](README.en.md) · [Türkçe](README.tr.md) · [Srpski](README.sr.md) · [Bosanski](README.bs.md) · **Hrvatski**
+
+Tim agenata umjetne inteligencije kao uređivač čvorova, samostalno hostan, dovoljno lagan za Raspberry Pi.
+Napravite projekt, povucite agente na površinu, povežite ih (nadređeni → suradnik), postavite AI pružatelja, radne upute i prava po čvoru te dodijelite zadatke.
+
+> Detaljne upute u `docs/` trenutno su napisane samo na njemačkom. Nazivi gumba i izbornika u aplikaciji ostaju na njemačkom.
+
+## Instalacija
+
+PaperclipLite je Python program (Flask + SQLite) i radi na više sustava. Više instalacija
+može raditi paralelno; svaka ima svoje tvrtke i podatke.
+
+| Sustav | Stanje | Upute |
+| --- | --- | --- |
+| Raspberry Pi / Linux (Debian, Ubuntu) | glavni sustav, puni opseg funkcija | dolje |
+| Windows 10/11 | radi, bez `run_code`, neke funkcije traže dodatne programe | [docs/windows.md](docs/windows.md) |
+| macOS | nije testirano, osnovne funkcije bi trebale raditi | dolje (ručno) |
+| Vlastito računalo za slike (npr. stari laptop bez grafičke kartice) | besplatne slike s referentnim slikama za PaperclipLite | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
+
+Selidba s jednog računala na drugo: zaustavite PaperclipLite i kopirajte `data.db`, mapu `workspace/` i `.env`
+([primjer Pi → Windows](docs/windows.md)).
+
+### Raspberry Pi / Linux
+
+```bash
+git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+./install.sh --service     # venv, ovisnosti, .env s nasumičnom lozinkom, systemd servis
+nano .env                  # unesite API ključeve, zatim: sudo systemctl restart paperclip-lite
+```
+
+Bez servisa: `./install.sh`, pa `./venv/bin/python app.py` → http://127.0.0.1:8787.
+Lozinka za prijavu nalazi se u `.env` (`APP_TOKEN`). Ažuriranje, ponovno pokretanje, sigurnosna kopija: [Rad](#rad-tko-što-gdje-kada-i-kako).
+Više funkcija (video, OCR, prevoditelji, preglednik): `./install.sh --all`.
+
+### Windows
+
+PowerShell u mapi PaperclipLite:
+
+```powershell
+git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
+powershell -ExecutionPolicy Bypass -File install.ps1
+notepad .env
+deploy\windows\paperclip-start.bat
+```
+
+Što nedostaje na Windowsu, automatsko pokretanje i paralelni rad s Pi-jem: [docs/windows.md](docs/windows.md).
+Kasnije ažuriranje: `git pull`, pa ponovno pokrenite.
+
+### macOS (nije testirano)
+
+```bash
+git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
+cp .env.example .env       # upišite APP_TOKEN=<duga lozinka>, dodajte API ključeve
+./venv/bin/python app.py   # http://127.0.0.1:8787
+```
+
+`install.sh` je napravljen za Debian/Ubuntu (apt), pa na macOS-u radite ručno kao gore. Dodatni programi preko Homebrewa
+(`brew install ffmpeg tesseract poppler`). `run_code` postoji samo na Linuxu.
+
+### Slike na vlastitom računalu
+
+Računalo u kućnoj mreži (i bez grafičke kartice, barem 8 GB RAM-a) može za PaperclipLite besplatno raditi slike s
+referentnim slikama. U `.env` ostavite aktivne točno ova dva retka (samo jedan redak `IMAGE_PROVIDER=` bez `#`):
+
+```
+IMAGE_PROVIDER=sdcpp
+SDCPP_URL=http://<IP računala za slike>:1234    # na samom računalu za slike: http://127.0.0.1:1234
+```
+
+Postavljanje: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
+
+## Rad: tko što, gdje, kada i kako
+
+**Tko:** sve ovo radi vlasnik računala (vi), a ne agenti. Naredbe se izvršavaju u
+mapi PaperclipLite: na Pi-ju u terminalu (`cd ~/paperclip-lite`), na Windowsu u PowerShellu
+(`cd $HOME\paperclip-lite`, ili gdje god ste stavili mapu).
+
+### Kratki pregled
+
+| Što | Kada | Raspberry Pi / Linux (sa servisom) | Windows |
+| --- | --- | --- | --- |
+| Pokretanje | nakon instalacije, nakon ponovnog pokretanja bez automatskog starta | `sudo systemctl start paperclip-lite` | dvostruki klik na `deploy\windows\paperclip-start.bat` (prozor ostavite otvoren) |
+| Zaustavljanje | prije selidbe, sigurnosne kopije, ažuriranja | `sudo systemctl stop paperclip-lite` | zatvorite prozor za pokretanje (ili u njemu Ctrl+C) |
+| Ponovno pokretanje | nakon svake promjene u `.env`, nakon ažuriranja | `sudo systemctl restart paperclip-lite` | zatvorite prozor za pokretanje, ponovno pokrenite `paperclip-start.bat` |
+| Radi li? | kada ima problema | `systemctl status paperclip-lite` | je li prozor za pokretanje otvoren? Preglednik: <http://127.0.0.1:8787> |
+| Pregled dnevnika | kod pogrešaka | `journalctl -u paperclip-lite -f` (Ctrl+C prekida) | prikazuje se u prozoru za pokretanje |
+| Ažuriranje | kada postoji nova verzija (npr. nakon spojenog pull requesta) | vidi dolje | vidi dolje |
+| Provjera | nakon instalacije, ažuriranja, novih ključeva | `./venv/bin/python selftest.py` | `venv\Scripts\python.exe selftest.py` |
+| Ključevi / postavke | novi ključ, drugi pružatelj slika | `nano .env`, pa ponovno pokrenite | `notepad .env`, pa ponovno pokrenite |
+| Sigurnosna kopija | redovito, prije selidbe i većih ažuriranja | kopirajte `data.db`, `workspace/`, `.env` (prvo zaustavite) | isto u mapi PaperclipLite |
+
+### Ažuriranje (preuzimanje nove verzije)
+
+**Raspberry Pi / Linux**, u terminalu:
+
+```bash
+cd ~/paperclip-lite
+git pull
+./install.sh               # potrebno samo ako se requirements.txt promijenio; .env ostaje nepromijenjen
+sudo systemctl restart paperclip-lite
+./venv/bin/python selftest.py llm     # kratka provjera odgovaraju li AI pružatelji
+```
+
+**Windows**, u PowerShellu:
+
+1. `cd $HOME\paperclip-lite`
+2. `git pull`
+3. Samo ako su se paketi promijenili (ili kada niste sigurni): `powershell -ExecutionPolicy Bypass -File install.ps1`
+   (postojeći `.env` ostaje nepromijenjen).
+4. Zatvorite crni prozor za pokretanje PaperclipLitea.
+5. Ponovno pokrenite `deploy\windows\paperclip-start.bat` (dvostruki klik ili upišite u PowerShell).
+6. Provjera: `venv\Scripts\python.exe selftest.py llm`
+
+Ako `git pull` javi „local changes would be overwritten“, sami ste promijenili neku datoteku programa.
+`git stash` odlaže promjenu na stranu, zatim ponovite `git pull`. Vaši podaci (`data.db`, `workspace/`, `.env`)
+nikada nisu ugroženi, jer ih Git ne poznaje.
+
+### Automatsko pokretanje
+
+- **Pi:** `./install.sh --service` postavlja servis; on se tada sam pokreće pri svakom podizanju sustava.
+- **Windows:** Win+R, upišite `shell:startup` i tamo stavite prečac do `deploy\windows\paperclip-start.bat`
+  (i do `bildrechner-start.bat`, ako ga koristite). Windows se za to mora sam prijaviti
+  ([docs/windows.md](docs/windows.md), odjeljak 4).
+
+### Mijenjanje postavki u `.env`
+
+- Svaka postavka stoji točno jednom, bez `#` na početku. Reci s `#` su isključeni. Kod dupliciranih redaka
+  vrijedi prvi.
+- Nakon svake promjene ponovno pokrenite PaperclipLite, inače vrijedi staro stanje.
+- Ključeve nikada ne kopirajte u chatove, snimke zaslona ili repozitorij. Ako je ključ ipak negdje završio: opozovite ga kod pružatelja i unesite novi.
+- Zatim provjerite sa `selftest.py`. Pojedina područja: `selftest.py llm`, `web`, `telegram`, `media`, `ocr`, `code`.
+
+### Čitanje samoprovjere
+
+- **OK:** radi.
+- **FEHLT (nedostaje):** neobavezno; redak navodi naredbu za dodavanje (na Windowsu naredbu za Windows).
+  Potrebno samo ako to vaši agenti koriste (npr. video, glasovni izlaz, skenirani PDF-ovi).
+- **FEHLER (pogreška):** nešto što ste unijeli ne radi, najčešće nevažeći ili istekao ključ ili servis koji
+  ne radi (npr. računalo za slike). Redak navodi razlog.
+- Pojedinačni timeout kod web servisa često je samo privremen: pokušajte kasnije.
+
+### Računalo za slike (ako se koristi)
+
+- **Gdje:** na računalu koje pravi slike (npr. laptop), u mapi `C:\bildrechner`.
+- **Kada:** mora raditi dok agenti trebaju praviti slike.
+- **Kako se postavlja (jednom):** u PowerShellu u mapi PaperclipLite
+  `powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1` (preuzima program i modele).
+- **Kako se pokreće:** pokrenite `C:\bildrechner\bildrechner-start.bat`, prozor ostavite otvoren. U `.env` datoteci PaperclipLitea
+  `IMAGE_PROVIDER=sdcpp` i `SDCPP_URL=...` ([upute](docs/laptop-bildrechner.md)), zatim ponovno pokrenite PaperclipLite.
+
+### Selidba (npr. Pi → laptop)
+
+Korak po korak u [docs/windows.md](docs/windows.md), „Phase 2 – Umzug“ (na njemačkom). Ukratko: zaustavite oba, kopirajte `data.db`,
+`workspace/` i `.env`, pokrenite na novom računalu i provjerite, pa tek onda isključite stari.
+Telegram unosite samo na jednom računalu.
+
+### Što se događa kada nešto nedostaje
+
+Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sustav radi i što vi trebate učiniti.
+
+| Nedostaje | Što sustav radi | Što vi radite |
+| --- | --- | --- |
+| `.env` | PaperclipLite se pokreće bez ključeva i bez lozinke, dostupan samo s ovog računala. S `HOST=0.0.0.0` pokretanje se prekida dok je `APP_TOKEN` prazan. | `./install.sh` (Pi) odnosno `install.ps1` (Windows) ga stvara s nasumičnom lozinkom. |
+| `data.db` | Stvara se nova i prazna. Tvrtke, zadaci i pošta su nestali. | Prvo napravite sigurnosnu kopiju (vidi Rad). Vraćajte samo iz kopije. |
+| API ključ u `.env` | Pružatelj se u samoprovjeri prijavljuje kao FEHLT i agenti ga ne koriste. Ako je unesen, ali nevažeći: FEHLER s HTTP 401. | Unesite ključ ili isključite redak s `#`. |
+| `SDCPP_URL` (uz `IMAGE_PROVIDER=sdcpp`) | Zahtjevi za slike ne uspijevaju uz poruku „SDCPP_URL fehlt“ (nedostaje). Uz `IMAGE_FALLBACK=pollinations` izrađuje se besplatna nadomjesna slika bez referenci, uz napomenu u rezultatu. | Dodajte redak u `.env`, ponovno pokrenite PaperclipLite. |
+| Računalo za slike nije dostupno (laptop isključen, vatrozid, kriva IP) | Kao gore: pogreška „Bildrechner … nicht erreichbar“ (nije dostupno), uz nadomjesnu sliku. | Uključite laptop, pokrenite `bildrechner-start.bat`, provjerite IP i vatrozid. |
+| `sd-server.exe` (Windows, računalo za slike) | `bildrechner-start.bat` prikazuje „sd-server.exe fehlt“ (nedostaje) i ništa ne pokreće. | Pokrenite `deploy\windows\bildrechner-einrichten.ps1`. |
+| Datoteka modela (Windows, računalo za slike) | Startna datoteka navodi nedostajuću datoteku i ne pokreće se. Ako nedostaje samo veliki jezični model (`Qwen3-4B-Q4_K_M.gguf`), koristi se manji, ako postoji. | Ponovno pokrenite skriptu za postavljanje; preuzima samo nedostajuću datoteku. |
+| Windows runtime `VCOMP140.DLL` | `sd-server.exe` javlja „VCOMP140.DLL nicht gefunden“ (nije pronađen) i prekida rad. | Ponovno pokrenite skriptu za postavljanje (korak 3 instalira runtime), pa otvorite startnu datoteku. |
+| Pravilo vatrozida za port 1234 (Windows) | Samo Pi ne može doći do računala za slike. Sam laptop radi dalje. | Pokrenite naredbu iz [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md), odjeljak 4, kao administrator. |
+| `ffmpeg`, `tesseract`, `pdftoppm`, glasovni izlaz | Funkcija nedostaje. Agenti koji je traže javljaju pogrešku u rezultatu. Samoprovjera prikazuje FEHLER (Pi) odnosno FEHLT (Windows). | Instalirajte program (naredbe u samoprovjeri i u [docs/windows.md](docs/windows.md)). |
+| Telegram token ili ID chata | Telegram ostaje isključen, sve ostalo radi. Samoprovjera prikazuje FEHLT. | Potrebno samo ako želite poruke na telefonu. |
+| Mapa ili datoteka u projektu (`wissen/`, `input/`) | Mape koje ne postoje smatraju se praznima. Agenti rade dalje bez znanja o tvrtki. | Stvorite ili otpremite datoteku ili mapu u projektu. |
+
+## Pristup s interneta
+
+Aplikacija namjerno sluša samo na `127.0.0.1`. Umjesto otvaranja porta koristite tunel.
+Ovo je potrebno i ako vaš mobilni usmjerivač ne dopušta dolazne veze (CGNAT).
+
+### Opcija A (preporučeno): Tailscale, privatno, samo za vaše uređaje
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up                    # otvorite poveznicu za prijavu u pregledniku
+sudo tailscale serve --bg 8787       # HTTPS adresa samo u vašem tailnetu
+```
+
+Instalirajte Tailscale i na telefon/laptop, pa otvorite prikazanu adresu `https://dexter….ts.net`.
+U `.env` dodajte: `TRUST_PROXY=1`, zatim ponovno pokrenite servis.
+**Ne** koristite `tailscale funnel`, to bi aplikaciju stavilo na javni internet.
+
+### Opcija B: Cloudflare Tunnel, javna adresa s vlastitom domenom
+
+```bash
+# instalirajte cloudflared (vidi developers.cloudflare.com/cloudflare-one/connections/connect-networks)
+cloudflared tunnel login
+cloudflared tunnel create paperclip
+cloudflared tunnel route dns paperclip agents.vas-domen.de
+# ~/.cloudflared/config.yml:  ingress: - hostname: agents.vas-domen.de  service: http://127.0.0.1:8787
+cloudflared tunnel run paperclip
+```
+
+Dodatno se snažno preporučuje: stavite ispred **Cloudflare Access** (prijava e-poštom).
+U `.env`: `TRUST_PROXY=1`. Naredbe se mogu mijenjati; u sumnji vrijedi službena uputa.
+
+S `TRUST_PROXY=1` aplikacija se pokreće samo ako `APP_TOKEN` ima najmanje 12 znakova.
+
+## Rukovanje
+
+| Radnja | Kako se radi |
+|---|---|
+| Napravite agenta | povucite stavku iz palete na površinu (ili kliknite na nju) |
+| Povežite | povucite donju točku čvora na drugi čvor (= nadređeni → suradnik) |
+| Prekinite vezu | kliknite na liniju veze |
+| Pomicanje | povucite čvor; povlačenje pozadine = pomicanje prikaza; kotačić miša = zumiranje |
+| Postavke | kliknite čvor → panel desno |
+| Dodijelite zadatak | panel → kartica „Aufgaben“ (zadaci) |
+| Odobravanje | bočna traka „Freigaben“ (odobrenja) |
+
+## Kako tvrtka radi
+
+Nadređeni dobiva zadatak i **planira** (raspoređuje podzadatke) ili ga sam obavlja. Čim su svi
+suradnici gotovi, on se ponovno budi, **čita njihova izvješća**, vraća nedostatke uz povratnu informaciju ili
+sažima sve i izvještava svog nadređenog. Tako se rezultat penje kroz koliko god razina.
+Status „Wartet auf Team“ (čeka tim) znači: nadređeni čeka svoje ljude. U kartici zadataka vidite cijelo stablo.
+
+## Mogućnosti agenata (internet, slike, datoteke)
+
+Agenti rade u krugovima: traže alate, poslužitelj ih izvršava i vraća rezultate, sve dok nisu
+gotovi (najviše `PCL_MAX_TOOL_STEPS`). Prava po agentu: **pretraga interneta**, **slike**, **čitanje datoteka projekta**
+(i, kao ranije, pisanje datoteka).
+
+| Alat | Što radi | Bez ključa |
+|---|---|---|
+| `web_search` | pretraga weba (zakoni, cijene, konkurencija …) | DuckDuckGo; bolje: `SEARXNG_URL`, `BRAVE_API_KEY` ili `TAVILY_API_KEY` |
+| `fetch_url` | čita web stranicu kao tekst | da |
+| `browse_page` | otvara stranicu u pravom pregledniku (JavaScript radi), neobavezno sa snimkom zaslona koju agent vidi kao sliku | da, treba `./install.sh --browser` |
+| `image_search` / `image_save` | traži slobodno licencirane fotografije i sprema ih u `assets/`, s autorom i licencom | Openverse; neobavezno `PEXELS_API_KEY` |
+| `image_generate` | izrađuje AI sliku kao PNG, neobavezno s do 4 referentne slike iz projekta (isti likovi i stil kroz seriju), format kvadrat/okomito/vodoravno i ciljna putanja u `assets/`, `output/` ili `karten/`. Pravo **Slike** ili **Mediji** | Pollinations (bez ključa: bez referentnih slika; s `POLLINATIONS_API_KEY` i Pollen kreditom: model preko `POLLINATIONS_MODEL`, s referentnim slikama); `IMAGE_STYLE` postavlja fiksni stil crtanja; ostali: `nvidia` (FLUX preko build.nvidia.com), `cloudflare` (Workers AI, FLUX.2 klein s referentnim slikama), `hf` (Hugging Face), model svakoga preko `IMAGE_MODEL`; besplatno s referentnim slikama na vlastitom računalu: `IMAGE_PROVIDER=sdcpp` ([upute](docs/laptop-bildrechner.md)); bolje `IMAGE_PROVIDER=openai` s `OPENAI_API_KEY`, `gemini`, ili `openrouter` s `OPENROUTER_API_KEY` |
+| `list_files` / `read_file` | čita datoteke u mapi projekta (npr. tekstove kolega) | da |
+
+Sve što se napravi nalazi se pod `workspace/<id-projekta>/`. U bočnoj traci **📁 Dateien** prikazuju se datoteke, otvara se `index.html`
+kao web stranica (izolirani sandbox) i preuzima sve kao ZIP. Poveznica sadrži tajni ključ.
+
+**Predlošci tvrtki** (🏢 pored „Projekte“): *Web agencija*, *Računovodstvo/porezni ured*, *Uvoz/izvoz trgovina* stvaraju projekt,
+organigram, radne upute i prava u potpunosti. Vlastite tvrtke: napišite cilj projekta („vi ste …“, zemlja,
+djelatnost), postavite agente i prava. Agenti dobivaju datum i cilj projekta i trebaju prvo istražiti stvari koje se mijenjaju (zakoni,
+cijene) i navesti izvore.
+
+**Sigurnost alata:** preuzimanje stranica ograničeno je na javne adrese (bez localhosta, LAN-a, Tailscalea,
+metapodataka iz clouda; preusmjeravanja se provjeravaju pojedinačno). Za agente sadržaj weba vrijedi kao nepouzdan podatak,
+ali pripremljena stranica ipak može utjecati na model: ne dajte agentima s pristupom internetu shell i provjeravajte rezultate.
+Agenti namjerno **nemaju** alate za kupnje, narudžbe, plaćanja ili slanje e-pošte; daju nacrte i preporuke.
+Licence za slike (CC) često traže navođenje autora; urednik slika to upisuje u `bildnachweis.md`.
+
+## Mediji, dokumenti i vlastite datoteke
+
+Uz pravo **izrade medija i dokumenata** (i `ffmpeg`/fontovi na Pi-ju, vidi `install.sh`):
+
+| Alat | Što može |
+|---|---|
+| `video_edit` | reže video (`trim`), spaja (`concat`), **animaciju slideshowa sa zumom** iz slika (`slideshow`, neobavezno sa zvukom), dodaje tekst/titlove/logo, mijenja ili miješa zvuk, mijenja brzinu, pretvara u GIF/WebM/MP3, izvlači nepomičan kadar |
+| `speak` | pretvara tekst u glas govornika (espeak-ng offline; bolje: Piper; neobavezno Edge glasovi) |
+| `write_file` | uz pravo **pisanje datoteka**: odmah izrađuje poglavlja, HTML, CSV itd., tako da se u istom zadatku od njih može napraviti PDF/DOCX/EPUB |
+| `make_document` | iz Markdown poglavlja **PDF, DOCX, EPUB ili HTML** (A4/A5, naslovna stranica, slike, dijakritici i turski znakovi); s `html` PDF slobodnog rasporeda iz **HTML+CSS** (izrada predložaka, preko WeasyPrinta, učitava samo datoteke iz projekta) |
+| `video_generate` | **AI video isječak** iz teksta (neobavezno s početnom slikom), oko 4–10 s, preko Google Gemini API-ja (model iza Google Flowa). Zadano isključeno, uključuje se s `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Naplaćuje se po sekundi videa**; Flow/Google One pretplata se ovdje ne računa |
+| `media_info` | trajanje, rezolucija, kodeci |
+| `download_file` | preuzima PDF, EPUB, Office, audio, video, ZIP s interneta u `downloads/` |
+| `read_file` | čita tekst, Markdown, HTML, **PDF, DOCX, EPUB**, i duge datoteke po dijelovima |
+| `view_image` | **vidi** slike, snimke zaslona, karte, rasporede i stranice skeniranih PDF-ova (treba model s razumijevanjem slika, npr. Claude, GPT-4o, Gemini) |
+
+**Samokontrola:** kada agent napravi PDF, poslužitelj ga nakon toga prikaže kao sliku (pregled svih stranica + 1. stranica uvećano) i pošalje
+mu uz obvezu da provjeri svaki zahtjev zadatka i ispravi pogreške prije nego što javi (`PCL_SELF_CHECKS`, zadano 1, 0 = isključeno).
+
+**Vlastite datoteke** (video za obradu, PDF-ovi, slike, rasporedi, tekstovi) otpremate u „📁 Dateien dieses Projekts“ ili ih šaljete
+izravno u **💬 Chat** s agentom (gumb 📎, povucite ih ili zalijepite sliku, više odjednom). Završe u
+`input/` (ime se čisti, postojeće datoteke se nikada ne prepisuju nego postaju `name-1.png` …, granica `PCL_MAX_UPLOAD_MB`);
+u chatu agent dobiva **sadržaj** izravno uz poruku (tekstovi, PDF-ovi, Word kao tekst, slike kao slike, ako model razumije slike;
+inače prepoznavanje teksta). S **📂 aus input/** dodajete datoteke koje već stoje tamo, ili jednostavno upišete ime datoteke u poruku, a „Als Auftrag erteilen“ (pošalji kao zadatak) to prosljeđuje timu; gotovi rezultati su u `output/`, slike u `assets/`. Iskrena ograničenja: bez `video_generate` **nema AI generiranja videa** (tekst u video);
+„animacija“ tada znači: scene kao slike uz AI slike + zum/pomicanje + govornik + montaža. Uz `video_generate` nastaju
+kratki isječci; duži filmovi se sastavljaju s `video_edit op=concat`. MagicLight nema API: videe napravljene tamo otpremite u `input/`. Na Raspberry Pi-ju
+ffmpeg radi sporo (jedna minuta 720p videa može trajati nekoliko minuta), vremensko ograničenje `PCL_FFMPEG_TIMEOUT` (zadano 1 sat po koraku).
+
+**Skenirani PDF-ovi i slike (OCR):** `read_file` automatski čita skenove preko `tesseracta` (`sudo apt install tesseract-ocr tesseract-ocr-deu poppler-utils`). To je sporo (oko 5–15 s po stranici na Pi-ju, granica `PCL_OCR_MAX_PAGES`) i može sadržavati pogreške.
+
+**Dobar glas govornika:** `./install.sh --piper` postavlja Piper s njemačkim glasom; nakon toga se automatski koristi za njemačke tekstove (ostali jezici: espeak-ng).
+
+## Chat i predlošci
+
+- **💬 Chat kartica** (u panelu agenta): slobodan razgovor sa svakim agentom, npr. s voditeljem *Gedankenwerkstatt*-a, za filozofiranje,
+  razvijanje ideja i preispitivanje. „📋 Als Auftrag erteilen“ prosljeđuje razgovor agentu i njegovom timu; rezultat se vraća kao objava.
+  Chat radi bez alata.
+- **Predlošci tvrtki** (🏢): Web agencija, Računovodstvo/porezni ured, Uvoz/izvoz trgovina, **Animacijska agencija**, **Nakladnička kuća/agencija sadržaja**,
+  **Radionica ideja**, **Istraživački ured** (pronalazi i čita PDF-ove). Pri osnivanju birate model za voditelja i suradnike.
+
+## Pošta i Telegram
+
+Čim je **zadatak na vrhu** (onaj koji ste dali agentu, obično CEO-u) gotov, neuspješan ili
+blokiran, pošta je spremna za vas: u bočnoj traci „📬 Post“ i, ako je postavljeno, poruka na Telegramu s
+vrstom, zadatkom, brojevima tima i rezultatom. Lanac prava i izvješća ispod radi kao i prije.
+
+**Postavljanje Telegrama (oko 2 minute):**
+1. U Telegramu `@BotFather` → `/newbot` → kopirajte token → `.env`: `TELEGRAM_BOT_TOKEN=…`
+2. `sudo systemctl restart paperclip-lite`, novom botu pošaljite `/start` → on vam kaže vaš ID chata.
+3. `.env`: upišite `TELEGRAM_CHAT_ID=…`, ponovno pokrenite servis. Na webu pod „Post“ postoji probna poruka.
+
+**Rad u Telegramu:**
+
+| Vi radite | Rezultat |
+|---|---|
+| Samo napišete tekst | novi zadatak nadređenom odabranog projekta (`@Ime Tekst` = određeni agent) |
+| **Odgovorite** na poruku pošte | zadatak se ponovno obrađuje s vašim tekstom kao uputom |
+| Gumb ✅ ili odgovor „ok“ | zadatak se označava kao završen |
+| Pošaljete datoteku, fotografiju, album, video ili glasovnu poruku | završi u `input/` odabranog projekta; natpis postaje zadatak (kao odgovor na objavu: za doradu), bez teksta datoteka ide vašem sljedećem zadatku. Telegram botovi smiju preuzeti datoteke do 20 MB, veće otpremite preko weba |
+| `/post`, `/status`, `/ok <Br.>`, `/neu <Tekst>`, `/projekt [Br.]` | pregled odnosno kratke naredbe |
+
+Aplikacija Telegram samo pita izvana, ne otvara se nijedan port (radi i iza CGNAT-a). Samo ID chata iz
+`.env` smije davati naredbe; koristite privatni chat, ne grupu. Odobrenja za shell naredbe namjerno
+**ne** idu preko Telegrama; tamo stiže samo napomena.
+
+## Prava po agentu
+
+- **Delegiranje**: smije dodjeljivati zadatke *neposrednim* suradnicima (do `PCL_MAX_DEPTH` razina, zadano 8).
+  Neobavezno se sami pokreću, inače ih pokrećete sami.
+- **Ocjenjivanje rezultata**: nadređeni smije vratiti posao s povratnom informacijom na doradu (najviše 2 kruga po suradniku).
+- **Čitanje**: nadređeni uvijek vide izvješća svojih suradnika; za to nije potrebno posebno pravo.
+- **Pisanje datoteka**: samo u `workspace/<id-projekta>/`; putanje izvan toga se odbijaju.
+- **Pokretanje koda** (zadano isključeno): `run_code` pokreće Python, JavaScript, Bash, Ruby, PHP ili Lua u sandboxu, vidi dolje.
+- **Predlaganje shella**: samo ako poslužitelj ima `PCL_ALLOW_SHELL=1`, i tada uvijek tek nakon odobrenja.
+- **Pauza**: blokira sve nove zadatke agenta.
+
+Prava se provjeravaju **na poslužitelju**. Ako model u svom odgovoru napiše nedopuštenu radnju, ona se zanemaruje i bilježi u povijesti.
+
+## Pružatelji AI-ja i izbor modela
+
+Za svakog agenta birate **pružatelja i model** (panel → Postavke). Aplikacija modele uživo preuzima od pružatelja;
+sa **▶ Test** odmah provjeravate ključ i model. Tako postavljate odgovarajući model po ulozi: najjači za nadređene
+(planiranje, provjera, razmišljanje), dobri modeli za tekst ili kod za suradnike, brzi i jeftini za jednostavan posao.
+
+| Pružatelj | Ključ u `.env` | Napomena |
+|---|---|---|
+| Claude (Anthropic) | `ANTHROPIC_API_KEY` | Sonnet, Haiku, Opus … bira se po agentu |
+| ChatGPT (OpenAI) | `OPENAI_API_KEY` | |
+| OpenRouter | `OPENROUTER_API_KEY` | jedan ključ za stotine modela (Claude, GPT, Gemini, DeepSeek, Qwen, Llama …) |
+| Groq, Gemini, DeepSeek, Qwen | `GROQ_API_KEY`, `GEMINI_API_KEY`, … | više ključeva odvojenih zarezom = rotacija kada se dostigne limit |
+| Mistral, NVIDIA NIM, Together, Perplexity | `MISTRAL_API_KEY`, `NVIDIA_API_KEY`, `TOGETHER_API_KEY`, `PERPLEXITY_API_KEY` | Perplexity modeli (`sonar`) sami pretražuju web |
+| Hugging Face, Cloudflare Workers AI | `HF_TOKEN` odnosno `CF_ACCOUNT_ID` + `CF_API_TOKEN` | male besplatne kvote |
+| Ollama | – | lokalni modeli na Pi-ju |
+| Claude (CLI, vaša pretplata) / ChatGPT (Codex CLI, vaša pretplata) | – | ugrađeno: `claude -p --tools "" --strict-mcp-config --no-session-persistence` (Claude bez vlastitih alata i konektora, samo tekst; radne upute zamjenjuju sistemski prompt Claude Codea) odnosno `codex exec --skip-git-repo-check --ephemeral -` (Codex sam radi u sandboxu samo za čitanje), model u padajućem izborniku (Claude: sonnet/opus/haiku); treba `PCL_ALLOW_CLI=1` i prijavljen program na Pi-ju |
+| CLI agent | – | naredba koja čita prompt sa stdin-a, npr. `claude -p --model sonnet`; treba `PCL_ALLOW_CLI=1` |
+
+**Važno:** web prijava (OAuth, „pretplata“) kod ChatGPT-a ili Claudea ne može se čisto koristiti kao API; preuzimanje
+web sesija krši uvjete korištenja. Putovi: **API ključ** pružatelja (naplata po potrošnji, ne chat pretplata) ili
+**CLI agent** sa službenim CLI-jem, jednom prijavljenim. Aplikacija nema proračun: kod plaćenih API-ja i mnogo krugova s alatima
+mogu nastati troškovi; bilancu po agentu vidite na čvoru.
+
+## Sigurnost
+
+- Stranica za prijavu s potpisanim kolačićem (7 dana, `HttpOnly`, `SameSite=Strict`, `Secure` iza HTTPS-a).
+- Nakon 5 pogrešnih lozinki zaključavanje od 10 minuta po IP adresi; svi pokušaji su u dnevniku revizije.
+- Pišući API pozivi moraju imati vlastito zaglavlje (CSRF zaštita), uz CSP i dodatna zaglavlja.
+- Shell i CLI agenti su zadano **isključeni**. Tko zna lozinku i ima postavljeno `PCL_ALLOW_SHELL=1`,
+  može odobriti naredbe s pravima korisnika aplikacije. `workspace/` je radni direktorij, ali **nije sandbox**.
+- `.env`, baza podataka i radne mape su u `.gitignore`. Ključevi nikada ne pripadaju repozitoriju.
+- Kod botova za trgovanje (NEXUS) agentima nikada ne dopustite trgovinu bez ljudskog odobrenja.
+
+## Znanje tvrtke i pamćenje
+
+- **🧠 Znanje tvrtke** (bočna traka): ono što svi agenti projekta uvijek trebaju znati (tvrtka, klijenti, stil, cijene, pravila). Stoji u
+  `wissen/firmenwissen.md` u mapi projekta. Svi `.md`/`.txt` datoteke u `wissen/` idu uz svaki zadatak i u chat (zajedno do
+  `PCL_KNOWLEDGE_CHARS`, zadano 8000 znakova); ostale dokumente tamo (PDF, Word …) agenti vide kao popis i čitaju po potrebi.
+- **Pamćenje po agentu**: agent na kraju zadatka može zapamtiti najviše 5 trajnih činjenica (preference, odluke, klijenti,
+  što je radilo). One se prikazuju u panelu agenta pod „🧠 Gedächtnis“ (pamćenje); možete ih mijenjati ili brisati. Granica `PCL_MEMORY_CHARS`
+  (4000); najstariji unosi prvi ispadaju. Svaka nova bilješka je u dnevniku revizije.
+
+## Ciljevi, odobrenja, upotreba (kao kod Paperclipa)
+
+- **🎯 Ciljevi**: ciljevi i podciljevi po projektu. Pri dodjeljivanju zadatka neobavezno birate cilj; delegirani zadaci ga nasljeđuju.
+  Nadređeni vide ciljeve s napretkom u promptu, a CEO-ov kontrolni obilazak to izvješćuje. Označeno = ostvareno.
+- **Prvo pitaj** (prozor ✋ Freigaben, po projektu, zadano isključeno): *Odobri plan najvišeg nadređenog* zadržava novi zadatak
+  dok ne odobrite plan raspodjele; *Odobri nove suradnike* zadržava CEO-ovo samostalno kadriranje. Odobravanje/odbijanje i preko
+  Telegram gumba. Odbijeno = zadatak završi kao ❌ u pošti; vaš odgovor na to tjera nadređenog da ponovno planira.
+  Odobrenja za shell i dalje idu samo preko weba.
+- **📊 Upotreba i troškovi**: pozivi, tokeni i procijenjeni troškovi po projektu, agentu i modelu (danas, 7, 30 dana). Bez limita.
+  Pretplatni CLI-ji i Ollama broje se kao 0 $; od `PCL_ABO_WARN_5H` pretplatnih poziva u 5 sati (zadano 150, 0 = isključeno) stiže upozorenje na Telegramu.
+  Cijene su grube procjene; vlastite zadajte preko `PCL_PRICES='{"sonnet": 5}'` (US$ po 1 milijun tokena, dio naziva modela).
+
+## Testovi
+
+```bash
+./venv/bin/pip install pytest && ./venv/bin/python -m pytest -q tests
+```
+Radi bez interneta i bez ključeva (pružatelj `mock`, vlastita baza).
+
+## 🔌 Veze (webhookovi)
+
+- **Izlaz:** u prozoru 🔌 Verbindungen unosite adrese (n8n, Zapier, Make, vlastita usluga; i `http://127.0.0.1:…` na Pi-ju),
+  s opisom za agente i neobaveznim zaglavljima. Tajne pripadaju `.env` i koriste se kao `${NAME}`.
+  Agenti s pravom **„Darf Verbindungen nutzen“** (smije koristiti veze) zovu ih alatom `call_connection`; agent ne može mijenjati
+  adresu ni zaglavlja, samo šalje podatke. **„Nur nach meiner Freigabe“** (samo nakon mog odobrenja, zadano uključeno) svaki poziv prvo stavlja pod ✋ Freigaben.
+  **„Bei Post benachrichtigen“** (obavijesti u pošti) šalje svaki gotov rezultat zadatka na vrhu kao JSON na adresu. Vremensko ograničenje `PCL_CONN_TIMEOUT` (30 s).
+- **Ulaz:** uključite „Aufträge von außen“ (zadaci izvana), zatim `POST /hook/<projekt>/<ključ>` s `{"text": "…", "agent": "neobavezno"}`
+  prima zadatak za nadređenog (npr. iz n8n, iOS prečaca ili DEXTER-a). Bez prijave; štiti ga samo ključ u adresi.
+  „Neuen Schlüssel“ (novi ključ) poništava staru adresu. Dostupna je samo onoliko koliko je dostupan i sam PaperclipLite (npr. samo u tailnetu).
+
+## 🌐 Pravi preglednik i ▶ pokretanje koda
+
+- **Preglednik** (`./install.sh --browser`, instalira Playwright + Chromium, oko 400 MB, samo 64-bitni sustav): agenti s pravom
+  „Internet recherchieren“ (istraživanje interneta) dobivaju `browse_page`. Stranica radi uz JavaScript; agent dobiva vidljivi tekst, poveznice i
+  po želji snimku zaslona (vidi je kao kod `view_image`; `save` je sprema u `assets/screenshots/`). Svaki zahtjev stranice
+  (skripte, okviri, XHR, WebSocketi) mora ići na javnu adresu; LAN/localhost je blokiran, WebRTC i preuzimanja su isključeni.
+  Samo jedan preglednik u isto vrijeme (RAM), vremensko ograničenje `PCL_BROWSER_TIMEOUT` (30 s). Vlastiti Chromium: `PCL_BROWSER_PATH`, isključeno: `PCL_BROWSER=0`.
+- **Pokretanje koda** (`./install.sh --run`, instalira bubblewrap): pravo „Darf Code ausführen“ (smije pokretati kod, zadano isključeno) daje `run_code`.
+  Skripta radi izolirano: **bez interneta**, vidljivi su samo `/usr` i mapa projekta (samo za čitanje pod `/projekt`),
+  bez `.env`-a, bez baze, bez kućne mape. Ono što skripta upiše u svoj radni direktorij završi u `output/run/<vrijeme>/`
+  (najviše 50 datoteka/50 MB). Granice: `PCL_RUN_TIMEOUT` (60 s), `PCL_RUN_MEM_MB` (1024). Pokreće Python/Node sustava,
+  dakle samo pakete instalirane preko apta (npr. `sudo apt install python3-pandas python3-matplotlib`). Globalno isključeno: `PCL_ALLOW_RUN=0`.
+  Provjera: `./venv/bin/python selftest.py run browser`.
+
+## Paralelni rad
+
+Istodobno može raditi do `PCL_WORKERS` zadataka (zadano 2, najviše 6), npr. više suradnika jednog nadređenog ili zadaci
+različitih projekata. Agent nikada ne radi na dva zadatka odjednom, a istodobno radi najviše jedan Ollama zadatak
+(RAM na Pi-ju). Kod pretplatnih CLI-ja (Claude, Codex) paralelni pozivi brže dostižu limit pretplate; tada postavite `PCL_WORKERS=1`.
+
+## Granice ove verzije
+
+- Nema automatskog heartbeata po rasporedu (zadaci se pokreću ručno ili delegiranjem).
+- Nema AI za tekst u video, nema OCR za skenirane/slikovne PDF-ove; CEO sam ne zapošljava nove agente (organigram izrađujete vi).
+- Pravi preglednik (`browse_page`) čita stranice, ali ne klikće i ne popunjava obrasce (bez prijava, bez kupnji). Pretraga DuckDuckGo-a bez ključa može biti ograničena ili promijenjena.
+- Nema proračuna: tokeni i procijenjeni troškovi se samo prikazuju (📊). Limiti krugova (dorade, provjere, dubina) sprječavaju beskonačne petlje.
+- Sesije su jednostavni potpisani kolačići; jedan uređaj ne može se posebno odjaviti
+  (promjena lozinke poništava sve sesije).
+
+
+## Samoprovjera
+
+Nakon instalacije i unosa ključeva `./venv/bin/python selftest.py` provjerava sve stvarne stvari koje se bez interneta nisu mogle testirati:
+web pretragu, čitanje stranica, pretragu slika i generator slika, SSRF zaštitu, svakog AI pružatelja mini zahtjevom (uključujući Ollama),
+Telegram (token bota i probna poruka na vaš ID chata), ffmpeg, glasovni izlaz, PDF s dijakriticima, OCR. Pojedinačne skupine:
+`selftest.py web | llm | telegram | media | ocr`. Svaki redak prikazuje OK, FEHLT (neobavezno) ili FEHLER s konkretnom napomenom.
+
+## Ollama (lokalni modeli)
+
+Pružatelj „Ollama (lokal)“: ključ nije potreban, popis modela dolazi izravno iz Ollama (`ollama pull qwen2.5:3b`). U dijalogu „Firma aus Vorlage“ (tvrtka iz predloška)
+postoje gumbi „Alles lokal“ (sve lokalno) i „Nur Mitarbeiter lokal“ (samo suradnici lokalno); inače Ollamu birate po agentu. Ako Ollama radi na drugom računalu
+(npr. laptopu), postavite `OLLAMA_URL` na njegovu adresu. Mali modeli (3B) su na Pi-ju spori i često loše drže protokol alata;
+za nadređene jak model, lokalno prije svega za jednostavne suradnike ili chat.
+
+## Claude i ChatGPT preko vaše pretplate (CLI umjesto API ključa)
+
+U `.env`: `PCL_ALLOW_CLI=1`. Programe sami instalirate i jednom prijavljujete na Pi-ju (upute proizvođača:
+Claude Code `claude`, OpenAI Codex `codex`; prijava s vašom pretplatom). Nakon toga se „Claude (CLI, dein Abo)“ i „ChatGPT (Codex-CLI, dein Abo)“
+pojavljuju u svim popisima pružatelja. Poslužitelj ih poziva bez shella, u praznoj mapi i **bez naših API ključeva u okruženju**
+(inače bi `claude` naplaćivao API ključ umjesto pretplate). Ograničenja: sporije od API-ja (pokretanje programa po odgovoru), vrijede limiti pretplate
+(mnogo agenata = brzo do limita), a CLI programi imaju vlastite alate; po potrebi prilagodite naredbu preko `PCL_CLI_CLAUDE` / `PCL_CLI_CODEX`.
+
+## Model nestao? Prebacite agente
+
+PaperclipLite svakih 6 sati (`PCL_MODEL_CHECK_HOURS`) provjerava postoje li modeli agenata još kod pružatelja i primjećuje i kada poziv javi „Modell nicht gefunden“ (model nije pronađen). Tada stiže Telegram poruka, zadatak pada uz jasnu napomenu, a u izborniku **⚠ Modelle** sve pogođene agente prebacujete na drugi model jednim klikom.
+
+## Veliki timovi
+
+Nadređeni može imati koliko god želite suradnika. U panelu nadređenog (Postavke) pod **Unterstellte Mitarbeiter** (podređeni suradnici) označite sve potvrdnim poljima i spremite dodjelu. Alternativno: povucite donju točku nadređenog na suradnika. Gumb **🗂 Ordnen** (poredaj) izrađuje cijeli organigram (skupine od 6 i više suradnika u redovima po 5).
+
+## CEO sam sastavlja svoj tim
+
+CEO iz palete ima pravo **„Darf sein Team selbst zusammenstellen“** (smije sam sastaviti svoj tim, `recruit`). Ako još nema suradnike i dobije zadatak, analizira ga i stvara suradnike s ulogom, radnim uputama i linijama izvješćivanja (do 20, uključujući voditelje odjela s vlastitim timom). Novi suradnici **još nemaju AI**: dodjeljujete ih u izborniku **⚠ Modelle** (svi odjednom) ili po agentu u postavkama, pa odgovorite u **Pošti** na zadatak (npr. „Weiter“ = nastavi). Nakon toga CEO raspoređuje posao kao i obično. CEO novim suradnicima može dati samo web, slike, čitanje/pisanje datoteka i medije, nikada shell.
+
+## Radno vrijeme i dnevni zadaci
+
+Bočna traka **🕘 Zeitplan** (raspored): za svaki projekt postavite početak rada, kraj rada i radne dane. Za svakog suradnika možete napraviti **dnevne zadatke** (fiksno vrijeme, na početku ili na kraju rada, na odabranim danima u tjednu), npr. „svaki dan u 15:00 provjeri web stranicu“. Rezultat stiže u prikaz „Post“ kao svaka objava (i preko Telegrama). Ako je posljednji zadatak nekog rasporeda još u tijeku, ne pokreće se dvaput; ako je Pi u to vrijeme bio isključen, nadoknađuje se do 6 sati.
+Na početku rada tvrtka ponovno preuzima zadatke koji su ostali nedovršeni (nepokrenuti se pokreću, neuspješni zadaci na vrhu ponavljaju se do `PCL_MAX_RESUMES`=2 puta). Neobavezno tvrtka potpuno miruje izvan radnog vremena. Vrijeme je ono s Pi-ja; ako nije točno, u `.env` postavite `PCL_TZ=Europe/Vienna`.
+
+## CEO kontrolni obilazak
+
+U prozoru **🕘 Zeitplan** **👑 CEO-Kontrollgang** (CEO kontrolni obilazak) postavlja se dnevni kontrolni obilazak najvišeg nadređenog (zadano: na kraju rada; ostala vremena preko „Neue tägliche Aufgabe“ + potvrdno polje *Kontrollgang*). Sustav mu prilaže **statusno izvješće** s činjenicama: po suradniku danas započeto/završeno/neuspješno/otvoreno, početci rada izvan radnog vremena, otvoreni zadaci bez početka rada, suradnici bez AI, nedovršeni zadaci i jesu li dnevni zadaci izvršeni. CEO to procjenjuje, po potrebi raspoređuje naredne zadatke svom timu i u pošti piše kontrolno izvješće. „📋 Statusbericht ansehen“ (pogledaj statusno izvješće) prikazuje činjenice bez CEO-a.
+
+## Projektna mapa
+
+Svaki projekt ima **mapu sa svojim imenom** pod `workspace/` (npr. `workspace/Buchverlag-Content-Agentur/`, njemački znakovi se transkribiraju). Ostaje ista kada se projekt preimenuje i **nikada se ne briše kada se projekt obriše**. Ako napravite novi projekt istog imena, preuzima postojeću mapu s datotekama. Stare mape s brojevima (`workspace/1`, `workspace/2` …) se pri pokretanju automatski preimenuju po imenu projekta.
+
+## Objavljivanje web stranice
+
+U prozoru **📁 Dateien dieses Projekts** postoji **🚀 Veröffentlichen** (objavi). Objavljuje se **samo mapa `www/` u mapi projekta** (`www/index.html`, uz CSS, slike … s relativnim putanjama); sve ostalo u projektu (bilješke, `output/`, `input/`, datoteke s točkom, simboličke veze prema vanjskome) ostaje nevidljivo. Ako nema mape `www/`, isporučuje se, kao i prije, `index.html` iz mape projekta (bez `input/` i skrivenih datoteka). Stranica trajno radi na vlastitom portu (od 8800, `PCL_SITE_PORT_BASE`), zadano samo na samom Pi-ju: `http://127.0.0.1:8800/`. Za pristup u mreži u `.env` postavite `PCL_SITE_HOST=0.0.0.0`. Agenti s pravom „Darf die Webseite zur Veröffentlichung vorschlagen“ (smije predložiti web stranicu za objavu) mogu zatražiti odobrenje za „veröffentlichen“; stranicu na mreži tek vaš klik pod **Freigaben** pušta online. Promjene agenata su odmah vidljive; nakon ponovnog pokretanja stranica se sama ponovno pokreće. Za otvoreni internet ispred mora stajati obrnuti proxy s HTTPS-om (npr. Caddy), a ne mali poslužitelj.
