@@ -1033,7 +1033,7 @@ def check_code(root, path):
     with tempfile.TemporaryDirectory(prefix="pcl-code-") as o:
         args = [a.replace("{f}", str(f)).replace("{o}", o) for a in cmd]
         try:
-            r = subprocess.run(args, cwd=o, env=env, capture_output=True, text=True, timeout=CODE_TIMEOUT)
+            r = subprocess.run(args, cwd=o, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=CODE_TIMEOUT)
         except subprocess.TimeoutExpired:
             return f"{lang}: Pruefung nach {CODE_TIMEOUT} s abgebrochen (zu langsam/zu gross)."
     out = (r.stdout + r.stderr).replace(str(f.parent) + os.sep, "").strip()
@@ -1243,7 +1243,7 @@ def pdf_text(data):
         with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
             f.write(data)
             f.flush()
-            r = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, timeout=60)
+            r = subprocess.run(["pdftotext", "-layout", f.name, "-"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
             if r.stdout.strip():
                 return r.stdout
     return ""
@@ -1253,7 +1253,7 @@ def _tess_lang():
     """OCR-Sprachen: PCL_OCR_LANG (z.B. deu+eng), sonst alles Vorhandene aus deu/eng/tur."""
     want = _env("PCL_OCR_LANG")
     try:
-        have = set(subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, timeout=20).stdout.split()[1:])
+        have = set(subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20).stdout.split()[1:])
     except Exception:
         have = set()
     langs = [l for l in (want.split("+") if want else ["deu", "eng", "tur"]) if l in have]
@@ -1266,7 +1266,7 @@ def ocr_image(path):
         raise ToolError("OCR nicht installiert (Raspberry Pi: sudo apt install tesseract-ocr tesseract-ocr-deu)")
     lang = _tess_lang()
     cmd = ["tesseract", str(path), "-"] + (["-l", lang] if lang else [])
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
     return r.stdout.strip()
 
 
@@ -1503,7 +1503,7 @@ def _ff(args, root, timeout=None):
     timeout = timeout or int(_env("PCL_FFMPEG_TIMEOUT", "3600"))
     try:
         r = subprocess.run([_bin("ffmpeg"), "-nostdin", "-y", "-hide_banner", "-loglevel", "error"] + [str(a) for a in args],
-                           cwd=str(root), capture_output=True, text=True, timeout=timeout)
+                           cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         raise ToolError(f"ffmpeg Zeitlimit ({timeout} s). Kuerzere Clips oder kleinere Aufloesung nehmen.")
     if r.returncode != 0:
@@ -1513,7 +1513,7 @@ def _ff(args, root, timeout=None):
 def _probe(path):
     try:
         r = subprocess.run([_bin("ffprobe"), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
         d = json.loads(r.stdout or "{}")
     except (subprocess.TimeoutExpired, ValueError):
         raise ToolError("Datei konnte nicht analysiert werden")
@@ -1838,7 +1838,7 @@ def speak(root, text, lang="de", name=""):
         pl = Path(pmodel).name.split("_")[0].lower() if pmodel else ""
         if pexe and (engine == "piper" or (engine == "auto" and pl == lang.split("-")[0])):
             wav = tmp / "o.wav"
-            r = subprocess.run([pexe, "--model", pmodel, "--output_file", str(wav)], input=text, text=True,
+            r = subprocess.run([pexe, "--model", pmodel, "--output_file", str(wav)], input=text, text=True, encoding="utf-8", errors="replace",
                                capture_output=True, timeout=600)
             if r.returncode == 0 and wav.exists():
                 _ff(["-i", wav, "-c:a", "libmp3lame", "-q:a", "3", target], root)
@@ -1846,14 +1846,16 @@ def speak(root, text, lang="de", name=""):
         if not done and engine in ("auto", "espeak") and shutil.which("espeak-ng"):
             wav = tmp / "o.wav"
             r = subprocess.run(["espeak-ng", "-v", lang.split("-")[0], "-s", "150", "-f", str(txt), "-w", str(wav)],
-                               capture_output=True, text=True, timeout=300)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
             if r.returncode == 0 and wav.exists():
                 _ff(["-i", wav, "-c:a", "libmp3lame", "-q:a", "3", target], root)
                 done = True
         if not done and engine == "edge":
             voice = _env("EDGE_VOICE") or _VOICES_EDGE.get(lang.split("-")[0], "en-US-AriaNeural")
-            r = subprocess.run(["python3", "-m", "edge_tts", "--voice", voice, "--file", str(txt), "--write-media", str(target)],
-                               capture_output=True, text=True, timeout=300)
+            import importlib.util
+            py = sys.executable if importlib.util.find_spec("edge_tts") else (shutil.which("python3") or sys.executable)
+            r = subprocess.run([py, "-m", "edge_tts", "--voice", voice, "--file", str(txt), "--write-media", str(target)],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
             done = r.returncode == 0 and target.exists()
         if not done:
             raise ToolError("Keine Sprachausgabe verfuegbar. Auf dem Pi: sudo apt install espeak-ng (einfache Stimme), oder "
