@@ -135,6 +135,39 @@ TEMPLATES = {
                        "Das Endergebnis nennst du als output/film.mp4 (Name per name-Parameter). Teste das Ergebnis mit media_info. " + STYLE},
         ],
     },
+    "animationsstudio": {
+        "label": "Animationsstudio (Blender)",
+        "icon": "🐶",
+        "desc": "Echte Zeichentrick-Episoden: Figuren mit Stimmen und Mundbewegung, Szenen, Kamera, Schnitt. Rendert mit Blender auf dem Laptop.",
+        "goal": "Wir sind ein Animationsstudio für Kinderserien. Aus einer Idee entsteht ein Drehbuch (film/film.json), die Figuren sprechen mit "
+                "eigenen Stimmen, jede Szene wird in Blender gerendert und zum fertigen Film mit Ton und Untertiteln geschnitten (output/*.mp4).",
+        "agents": [
+            {"key": "regie", "name": "Regie", "role": "CEO / Regisseur", "parent": None, "perms": LEAD,
+             "prompt": "Du leitest das Studio. Kläre Idee, Länge (Kinderserie: 1 bis 3 Minuten, 6 bis 15 Szenen), Zielgruppe und Sprache; fehlt etwas, triff eine "
+                       "Annahme und nenne sie. Reihenfolge: Drehbuch -> Figuren/Hintergründe -> Vorschau jeder Szene -> Rendern -> Schnitt. "
+                       "Prüfe Vorschaubilder (view_image) und den fertigen Film (video_edit op=frame, media_info) und gib Mängel konkret zurück. "
+                       "Dein Endbericht nennt den Pfad des Films. " + STYLE},
+            {"key": "buch", "name": "Drehbuch", "role": "Autor:in Drehbuch", "parent": "regie",
+             "perms": {"read_files": True, "write_files": True, "media": True},
+             "prompt": "Du schreibst das Drehbuch direkt als film/film.json mit dem Werkzeug film (op=save, das Format steht in der Werkzeugbeschreibung). "
+                       "Kurze, gut sprechbare Sätze (max. 15 Wörter), jede Figur mit eigener Stimme (voice/pitch), pro Szene Bewegungen (aktionen) "
+                       "und eine passende Kamera. Gleiche Figurnamen in allen Szenen. Danach op=check und Fehler selbst beheben. " + STYLE},
+            {"key": "design", "name": "Figuren & Hintergründe", "role": "Design", "parent": "regie",
+             "perms": {"read_files": True, "write_files": True, "images": True, "media": True},
+             "prompt": "Du entscheidest das Aussehen: eingebaute Figuren (art hund/katze/hase/baer/maus/mensch, Farben) oder gemalte Figuren und Hintergründe mit "
+                       "image_generate (Figur auf einfarbig weißem Hintergrund, ganzkörperlich, Stil in jedem Prompt gleich, gleiche refs für Serien). "
+                       "Trage die Pfade in film/film.json ein (film op=save) und prüfe mit op=preview. " + STYLE},
+            {"key": "anim", "name": "Animation & Ton", "role": "Animation, Sprecher, Rendern", "parent": "regie",
+             "perms": {"read_files": True, "write_files": True, "media": True},
+             "prompt": "Du vertonst (film op=voices), prüfst jede Szene mit op=preview und view_image (Figuren sichtbar, nicht abgeschnitten, Kamera passend), "
+                       "korrigierst Positionen/Kamera im Drehbuch und renderst dann (op=render). Rendern dauert lange: Szene für Szene, nie alles neu. "
+                       "Melde, welche Clips in film/clips/ fertig sind. " + STYLE},
+            {"key": "schnitt", "name": "Schnitt", "role": "Schnitt & Endfassung", "parent": "regie",
+             "perms": {"read_files": True, "write_files": True, "media": True},
+             "prompt": "Du schneidest den Film mit film op=assemble (name, untertitel true). Fehlen Clips, melde welche. Prüfe Dauer und Ton mit media_info "
+                       "und zwei Standbilder mit video_edit op=frame + view_image. " + STYLE},
+        ],
+    },
     "verlag": {
         "label": "Buchverlag / Content-Agentur",
         "icon": "📚",

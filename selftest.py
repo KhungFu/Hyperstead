@@ -2,7 +2,7 @@
 """PaperclipLite Selbsttest: prueft auf dem echten Rechner (Pi), ob alles funktioniert, was die Agenten brauchen.
 
     ./venv/bin/python selftest.py            # alles pruefen
-    ./venv/bin/python selftest.py web        # nur Gruppe: web | browser | run | llm | telegram | media | ocr | code
+    ./venv/bin/python selftest.py web        # nur Gruppe: web | browser | run | llm | telegram | media | ocr | code | film
 
 Jede Zeile: OK / FEHLT (optional) / FEHLER, bei Problemen mit konkretem Hinweis. Es werden keine Keys ausgegeben.
 Die LLM-Tests senden je Anbieter eine winzige Anfrage (kostet praktisch nichts). Bilder werden nur im Temp-Ordner erzeugt.
@@ -291,7 +291,31 @@ def group_run():
         check("Sandbox ohne Netz", nonet)
 
 
-GROUPS = {"web": group_web, "browser": group_browser, "run": group_run, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr, "code": group_code}
+def group_film():
+    print("\nFilmstudio (Blender, Werkzeug film)")
+    import film_studio as F
+    exe = F.blender_exe()
+    if not exe:
+        line("warn", "Blender", fix("nicht gefunden: sudo apt install blender oder BLENDER_PATH in .env",
+                                    "nicht gefunden: BLENDER_PATH=C:\\Program Files\\Blender Foundation\\Blender 4.2\\blender.exe in .env"))
+        return
+    line("ok", "Blender", exe)
+    with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
+        root = Path(td)
+        plan = {"titel": "Selbsttest", "aufloesung": "320x180", "fps": 6,
+                "figuren": {"Bello": {"art": "hund"}, "Mimi": {"art": "katze", "farbe": "#888888"}},
+                "szenen": [{"id": "s01", "figuren": {"Bello": {"pos": [-1.5, 0]}, "Mimi": {"pos": [1.5, 0]}},
+                            "requisiten": [{"typ": "baum", "pos": [-4, 3]}], "dialog": [{"figur": "Bello", "text": "Hallo Mimi!"}],
+                            "aktionen": [{"zeit": 0.3, "figur": "Mimi", "tun": "springen"}], "dauer": 1.5}]}
+        F.film(root, {"op": "save", "film": plan})
+        if check("Vorschaubild (1 Bild)", lambda: F.film(root, {"op": "preview"})[:60],
+                 hint="Grafiktreiber alt? In .env BLENDER_ENGINE=cycles probieren (langsamer, ohne Grafikkarte)") is None:
+            return
+        check("Szene rendern (1,5 s)", lambda: F.film(root, {"op": "render"}).splitlines()[0][:80],
+              hint="ffmpeg und Sprachausgabe noetig (Gruppe media)")
+
+
+GROUPS = {"web": group_web, "browser": group_browser, "run": group_run, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr, "code": group_code, "film": group_film}
 
 if __name__ == "__main__":
     wanted = [a for a in sys.argv[1:] if a in GROUPS] or list(GROUPS)

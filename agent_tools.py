@@ -112,7 +112,26 @@ TOOLS = {
      op=convert: input, format mp4|webm|gif|mp3|wav, optional width, height, fps
      op=frame: input, at (Sekunde) -> PNG-Standbild
      optional bei allen: name (Dateiname des Ergebnisses ohne Endung)"""),
-    "speak": ("media", '{"tool": "speak", "text": "Sprechertext", "lang": "de", "name": "sprecher1"}  Text zu gesprochener Audiodatei (output/audio/). lang: de, en, tr ...'),
+    "speak": ("media", '{"tool": "speak", "text": "Sprechertext", "lang": "de", "name": "sprecher1"}  Text zu gesprochener Audiodatei (output/audio/). lang: de, en, tr ... '
+                       'Optional eigene Stimme: voice (espeak-Variante m1-m7/f1-f5, Piper-Modell x.onnx oder Edge-Stimme), pitch 0-99 (50 normal), rate 0.5-2'),
+    "film": ("media", """{"tool": "film", "op": "...", ...}  ANIMATIONSFILM (Blender, Figuren mit Stimmen, Lippensync, Kamera). Drehbuch = film/film.json:
+     {"titel": "Bello und der Ball", "aufloesung": "640x360", "fps": 12,
+      "figuren": {"Bello": {"art": "hund", "farbe": "#c8843c", "farbe2": "#f6e7d0", "stimme": {"lang": "de", "voice": "m3", "pitch": 40}},
+                  "Mimi": {"art": "bild", "bild": "assets/mimi.png", "groesse": 1.6, "blickrichtung": "rechts"}},
+      "szenen": [{"id": "s01", "ort": {"himmel": "#9fd7ff", "boden": "#7cc96b", "licht": "tag"},
+                  "requisiten": [{"typ": "baum", "pos": [-4, 3]}, {"id": "ball", "typ": "ball", "pos": [1, 0]}],
+                  "figuren": {"Bello": {"pos": [-3, 0]}, "Mimi": {"pos": [2.5, 0], "blick": "links"}},
+                  "aktionen": [{"zeit": 0.5, "figur": "Bello", "tun": "gehen", "nach": [0, 0]}, {"zeit": 3, "figur": "Mimi", "tun": "winken"}],
+                  "dialog": [{"figur": "Bello", "text": "Hallo Mimi!"}, {"figur": "Mimi", "text": "Hallo Bello!"}],
+                  "kamera": {"einstellung": "total", "bewegung": "keine"}, "dauer": 5}]}
+     art: hund katze hase baer maus mensch (eingebaut, haar = Haarfarbe) | bild (Figurbild aus image_generate, Hintergrund wird freigestellt) | blend (datei, objekt, aktion).
+     pos [x, tiefe]: x -6..6 links/rechts, tiefe 0 vorne bis 8 hinten. blick/richtung: vorne links rechts hinten.
+     tun: gehen (nach, dauer), springen (hoehe), winken, drehen (richtung), nicken, erscheinen, verschwinden. Requisiten auch per id bewegen.
+     requisiten typ: baum busch haus stein ball wolke blume kiste bild. ort: himmel, boden (false = keiner), hintergrund (Bild), licht tag|abend|nacht.
+     kamera: einstellung total|halbtotal|nah, ziel (Figur), bewegung keine|zoom_rein|zoom_raus|schwenk_links|schwenk_rechts|folgen.
+     dialog ohne figur = Erzaehler (erzaehler_stimme). Optional: musik, musik_lautstaerke, titelkarte (Sekunden), renderer eevee|workbench|cycles.
+     Ablauf: op=save mit "film": {...} (prueft + speichert) -> op=check -> op=voices -> op=preview, szene "s01" (Standbild, danach view_image)
+     -> op=render (szene "s01" oder alle; nur geaenderte Szenen, kann lange dauern) -> op=assemble, name "film", untertitel true -> output/<name>.mp4"""),
     "make_document": ("media", """{"tool": "make_document", "format": "pdf", "title": "Buchtitel", "author": "Name", "sources": ["kapitel1.md", "kapitel2.md"], "name": "buch"}
      Erzeugt aus Markdown-Dateien ein fertiges Dokument in output/. format: pdf | docx | epub | html. Optional: content (Markdown direkt statt sources),
      cover (Bildpfad, nur epub), page A4|A5 (pdf). Markdown: # Kapitel, ## Abschnitt, ### Unterabschnitt, - Listen, 1. nummeriert, > Zitat, **fett**, *kursiv*, ![Text](assets/bild.png)""
@@ -814,7 +833,7 @@ def _gen_pollinations(prompt, refs, fmt, call):
     raise ToolError(f"Pollinations ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
 
 
-_sdcpp_lock = __import__("threading").Lock()  # der Bildrechner schafft nur ein Bild gleichzeitig (RAM)
+_heavy_lock = __import__("threading").Lock()  # Bildrechner und Blender (film_studio) nie gleichzeitig: 8 GB RAM
 
 
 def _sdcpp_size(fmt):
@@ -842,7 +861,7 @@ def _gen_sdcpp(prompt, refs, fmt, call):
             "seed": int(time.time() * 1000) % 2_000_000_000}  # fester Wert: seed -1 liefert bei manchen Builds nichts
     if refs:
         body["extra_images"] = [f"data:{mime};base64,{base64.b64encode(d).decode()}" for _, d, mime in refs]
-    with _sdcpp_lock:
+    with _heavy_lock:
         r = requests.post(url + "/sdapi/v1/txt2img", json=body, timeout=(10, timeout))
     try:
         data = r.json()
@@ -1960,17 +1979,33 @@ def _piper():
     return (exe, model) if exe and model and Path(model).exists() else (None, None)
 
 
-def speak(root, text, lang="de", name=""):
+def _num(v, lo, hi):
+    """Zahl aus Agenten-Eingabe, begrenzt auf [lo, hi]; None, wenn nicht lesbar."""
+    try:
+        return max(lo, min(hi, float(v)))
+    except (TypeError, ValueError):
+        return None
+
+
+def speak(root, text, lang="de", name="", voice=None, pitch=None, rate=None, target=None):
+    """voice/pitch/rate geben jeder Filmfigur eine eigene Stimme: espeak-ng Variante (z. B. m3, f2) bzw. Piper-Modell
+    (Dateiname in models/piper/) bzw. Edge-Stimme; pitch 0-99 (50 = normal), rate 0.5-2.0. target = fester Zielpfad (film/ton/)."""
     text = str(text or "").strip()[:6000]
     if not text:
         raise ToolError("text fehlt")
     lang = re.sub(r"[^a-z-]", "", str(lang or "de").lower())[:5] or "de"
-    outdir = root / "output" / "audio"
-    outdir.mkdir(parents=True, exist_ok=True)
-    base, i = _safe_name(name, "sprecher"), 0
-    while (outdir / f"{base}{'' if not i else '-' + str(i)}.mp3").exists():
-        i += 1
-    target = outdir / f"{base}{'' if not i else '-' + str(i)}.mp3"
+    voice = re.sub(r"[^A-Za-z0-9_.+-]", "", str(voice or ""))[:60]
+    pitch, rate = _num(pitch, 0, 99), _num(rate, 0.5, 2.0)
+    if target is None:
+        outdir = root / "output" / "audio"
+        outdir.mkdir(parents=True, exist_ok=True)
+        base, i = _safe_name(name, "sprecher"), 0
+        while (outdir / f"{base}{'' if not i else '-' + str(i)}.mp3").exists():
+            i += 1
+        target = outdir / f"{base}{'' if not i else '-' + str(i)}.mp3"
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.unlink(missing_ok=True)
     engine = _env("TTS_ENGINE", "auto").lower()
     tmp = Path(tempfile.mkdtemp(prefix=".tmp-", dir=root))
     try:
@@ -1978,27 +2013,33 @@ def speak(root, text, lang="de", name=""):
         txt.write_text(text, encoding="utf-8")
         done = False
         pexe, pmodel = _piper()
+        if pexe and voice.endswith(".onnx") and (Path(pmodel).parent / voice).is_file():  # eigene Piper-Stimme je Figur
+            pmodel = str(Path(pmodel).parent / voice)
         # Piper-Stimmen sind einsprachig (Dateiname z.B. de_DE-thorsten-medium.onnx): automatisch nur fuer passende Sprache
         pl = Path(pmodel).name.split("_")[0].lower() if pmodel else ""
         if pexe and (engine == "piper" or (engine == "auto" and pl == lang.split("-")[0])):
             wav = tmp / "o.wav"
-            r = subprocess.run([pexe, "--model", pmodel, "--output_file", str(wav)], input=text, text=True, encoding="utf-8", errors="replace",
+            r = subprocess.run([pexe, "--model", pmodel, "--output_file", str(wav)]
+                               + (["--length_scale", f"{1 / rate:.2f}"] if rate else []), input=text, text=True, encoding="utf-8", errors="replace",
                                capture_output=True, timeout=600)
             if r.returncode == 0 and wav.exists():
                 _ff(["-i", wav, "-c:a", "libmp3lame", "-q:a", "3", target], root)
                 done = True
         if not done and engine in ("auto", "espeak") and shutil.which("espeak-ng"):
             wav = tmp / "o.wav"
-            r = subprocess.run(["espeak-ng", "-v", lang.split("-")[0], "-s", "150", "-f", str(txt), "-w", str(wav)],
+            ev = lang.split("-")[0] + ("+" + voice if voice and not voice.endswith(".onnx") and "-" not in voice else "")
+            r = subprocess.run(["espeak-ng", "-v", ev, "-s", str(int(150 * (rate or 1))), "-p", str(int(50 if pitch is None else pitch)),
+                                "-f", str(txt), "-w", str(wav)],
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
             if r.returncode == 0 and wav.exists():
                 _ff(["-i", wav, "-c:a", "libmp3lame", "-q:a", "3", target], root)
                 done = True
         if not done and engine == "edge":
-            voice = _env("EDGE_VOICE") or _VOICES_EDGE.get(lang.split("-")[0], "en-US-AriaNeural")
+            ev = voice if "Neural" in voice else (_env("EDGE_VOICE") or _VOICES_EDGE.get(lang.split("-")[0], "en-US-AriaNeural"))
             import importlib.util
             py = sys.executable if importlib.util.find_spec("edge_tts") else (shutil.which("python3") or sys.executable)
-            r = subprocess.run([py, "-m", "edge_tts", "--voice", voice, "--file", str(txt), "--write-media", str(target)],
+            extra = ([f"--pitch={int((pitch - 50) * 2):+d}Hz"] if pitch is not None else []) + ([f"--rate={int((rate - 1) * 100):+d}%"] if rate else [])
+            r = subprocess.run([py, "-m", "edge_tts", "--voice", ev, "--file", str(txt), "--write-media", str(target)] + extra,
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
             done = r.returncode == 0 and target.exists()
         if not done:
@@ -2453,14 +2494,18 @@ def run_tool(call, root, perms):
         elif name == "video_edit":
             out = video_edit(root, call)
         elif name == "speak":
-            out = speak(root, call.get("text"), call.get("lang"), call.get("name"))
+            out = speak(root, call.get("text"), call.get("lang"), call.get("name"), call.get("voice"), call.get("pitch"), call.get("rate"))
         elif name == "make_document":
             out = make_document(root, call)
+        elif name == "film":
+            import film_studio  # erst hier: film_studio importiert dieses Modul
+            out = film_studio.film(root, call)
         else:
             out = read_file(root, call.get("path"), call.get("offset"))
         made = None
-        m = re.search(r"((?:assets|downloads|output|karten)/[\w./-]+?)(?:\s|\(|$|\.\s)", out) if name in (
-            "image_save", "image_generate", "video_generate", "download_file", "video_edit", "speak", "make_document", "run_code", "browse_page") else None
+        m = re.search(r"((?:assets|downloads|output|karten|film)/[\w./-]+?)(?:\s|\(|$|\.\s|,)", out) if name in (
+            "image_save", "image_generate", "video_generate", "download_file", "video_edit", "speak", "make_document", "run_code", "browse_page",
+            "film") else None
         if m:
             made = m.group(1)
         return out, made
