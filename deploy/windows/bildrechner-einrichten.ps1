@@ -41,7 +41,7 @@ function Laden($url, $datei, $mindestMB) {
   Ok (Split-Path $datei -Leaf)
 }
 
-Schritt "1/5 Pruefen: Speicher und Platz"
+Schritt "1/6 Pruefen: Speicher und Platz"
 $ramGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
 Write-Host "   Arbeitsspeicher: $ramGB GB"
 if ($ramGB -lt 7.5) { Fehler "Mindestens 8 GB Arbeitsspeicher noetig." }
@@ -58,7 +58,7 @@ Write-Host "   Freier Platz auf ${lw}: $freiGB GB (noetig noch etwa $bedarf GB)"
 if ($freiGB -lt $bedarf) { Fehler "Auf Laufwerk $lw sind nur $freiGB GB frei, noetig sind noch etwa $bedarf GB." }
 Ok "genug Speicher und Platz"
 
-Schritt "2/5 Programm stable-diffusion.cpp (sd-server.exe)"
+Schritt "2/6 Programm stable-diffusion.cpp (sd-server.exe)"
 if (Test-Path "$Ziel\sd-server.exe") {
   Ok "sd-server.exe ist schon da (zum Aktualisieren loeschen und Skript erneut starten)"
 } else {
@@ -86,7 +86,22 @@ if (Test-Path "$Ziel\sd-server.exe") {
   Ok "sd-server.exe nach $Ziel entpackt"
 }
 
-Schritt "3/5 Modelle (zusammen ca. 5 GB)"
+Schritt "3/6 Laufzeit fuer sd-server (Visual C++, VCOMP140.DLL)"
+if (Test-Path "$env:WINDIR\System32\VCOMP140.DLL") {
+  Ok "Laufzeit ist schon installiert"
+} else {
+  $redist = Join-Path $env:TEMP "vc_redist.x64.exe"
+  Write-Host "   fehlt: Microsoft Visual C++ Laufzeit. Windows fragt gleich nach Administrator-Rechten (Ja klicken)."
+  Laden "https://aka.ms/vs/17/release/vc_redist.x64.exe" $redist 10
+  try {
+    $p = Start-Process -FilePath $redist -ArgumentList "/install", "/quiet", "/norestart" -Verb RunAs -Wait -PassThru
+  } catch { Fehler "Installation abgebrochen. Datei von Hand starten: $redist (Doppelklick)" }
+  if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Fehler "Installation der Laufzeit meldet Code $($p.ExitCode). Datei von Hand starten: $redist" }
+  if (-not (Test-Path "$env:WINDIR\System32\VCOMP140.DLL")) { Fehler "VCOMP140.DLL fehlt auch nach der Installation. Windows-Updates pruefen oder melden." }
+  Ok "Laufzeit installiert"
+}
+
+Schritt "4/6 Modelle (zusammen ca. 5 GB)"
 Laden "https://huggingface.co/leejet/FLUX.2-klein-4B-GGUF/resolve/main/flux-2-klein-4b-Q4_0.gguf" "$Ziel\modelle\flux-2-klein-4b-Q4_0.gguf" 2200
 if ($Klein) {
   Laden "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q3_K_M.gguf" "$Ziel\modelle\Qwen3-4B-Q3_K_M.gguf" 1900
@@ -97,11 +112,11 @@ if ($Klein) {
 }
 Laden "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors" "$Ziel\modelle\full_encoder_small_decoder.safetensors" 200
 
-Schritt "4/5 Startdatei"
+Schritt "5/6 Startdatei"
 Copy-Item -Path (Join-Path $PSScriptRoot "bildrechner-start.bat") -Destination "$Ziel\bildrechner-start.bat" -Force
 Ok "$Ziel\bildrechner-start.bat"
 
-Schritt "5/5 Firewall (nur noetig, wenn der Pi oder andere Rechner Bilder bestellen)"
+Schritt "6/6 Firewall (nur noetig, wenn der Pi oder andere Rechner Bilder bestellen)"
 if (Get-NetFirewallRule -DisplayName "Bildrechner sd-server" -ErrorAction SilentlyContinue) {
   Ok "Firewall-Regel ist schon da"
 } else {

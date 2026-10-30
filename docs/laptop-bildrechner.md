@@ -28,12 +28,13 @@ von selbst.
    powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1
    ```
 
-3. Das Skript macht fünf Schritte und schreibt zu jedem „ok“ oder einen FEHLER mit Erklärung:
+3. Das Skript macht sechs Schritte und schreibt zu jedem „ok“ oder einen FEHLER mit Erklärung:
    1. prüft RAM und freien Platz,
    2. lädt das Programm (`sd-server.exe`, Datei `...-bin-win-cpu-x64.zip` aus den Releases) und entpackt es nach `C:\bildrechner\`,
-   3. lädt die drei Modelldateien (zusammen ca. 5 GB) nach `C:\bildrechner\modelle\`,
-   4. legt `C:\bildrechner\bildrechner-start.bat` ab,
-   5. fragt nach Administrator-Rechten für die Firewall-Regel (Ja klicken; nur nötig, wenn der Pi Bilder bestellt).
+   3. installiert die Microsoft-Laufzeit (VCOMP140.DLL), falls sie fehlt,
+   4. lädt die drei Modelldateien (zusammen ca. 5 GB) nach `C:\bildrechner\modelle\`,
+   5. legt `C:\bildrechner\bildrechner-start.bat` ab,
+   6. fragt nach Administrator-Rechten für die Firewall-Regel (Ja klicken; nur nötig, wenn der Pi Bilder bestellt).
 4. Bricht der Download ab: denselben Befehl noch einmal starten. Fertige Dateien werden übersprungen, angefangene
    fortgesetzt.
 5. Stürzt der Bildrechner später wegen Speichermangel ab: Skript mit `-Klein` am Ende erneut starten (kleineres
@@ -69,6 +70,11 @@ C:\bildrechner\
    `venv\Scripts\python.exe selftest.py web`. Das erzeugt zwei Testbilder und dauert mehrere Minuten.
 
 Meldet die Startdatei „sd-server.exe fehlt“ oder „Modelldatei fehlt“: Schritt 1 wiederholen.
+
+Meldet Windows „VCOMP140.DLL nicht gefunden“: Dem Programm fehlt die Microsoft-Laufzeit. Das Einrichtungsskript
+installiert sie seit diesem Stand selbst (Schritt 3 von 6). Vorhandene Einrichtung reparieren: `git pull`, dann das
+Skript erneut starten, danach die Startdatei öffnen. Den Fehlerdialog schließt du mit OK. Dabei geht nichts verloren,
+das Fenster war nur der Dialog von `sd-server.exe`.
 
 Autostart: Win+R, `shell:startup` eingeben, eine Verknüpfung zu `C:\bildrechner\bildrechner-start.bat` hineinlegen.
 
