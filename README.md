@@ -15,6 +15,11 @@ nano .env                  # API-Keys eintragen, danach: sudo systemctl restart 
 Ohne Dienst: `./install.sh` und dann `./venv/bin/python app.py` → http://127.0.0.1:8787.
 Das Login-Passwort steht in `.env` (`APP_TOKEN`). Update später: `git pull && sudo systemctl restart paperclip-lite`.
 
+## Installation (Windows)
+
+PowerShell im PaperclipLite-Ordner: `powershell -ExecutionPolicy Bypass -File install.ps1`, starten mit
+`deploy\windows\paperclip-start.bat`. Was unter Windows fehlt (u. a. `run_code`): [docs/windows.md](docs/windows.md).
+
 ## Zugriff aus dem Internet
 
 Die App lauscht absichtlich nur auf `127.0.0.1`. Statt einen Port zu öffnen, nutzt du einen Tunnel.

@@ -217,7 +217,7 @@ def group_code():
     print("\nProgrammieren (Recht 'Programmieren': Code pruefen/kompilieren)")
     with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
         for fn, src in CODE_SAMPLES.items():
-            (Path(td) / fn).write_text(src)
+            (Path(td) / fn).write_text(src, encoding="utf-8")
             def run(fn=fn):
                 r = T.check_code(td, fn)
                 if "nicht installiert" in r:

@@ -114,6 +114,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 ```bash
 ./install.sh && ./venv/bin/python app.py      # http://127.0.0.1:8787
 ```
+Windows: `install.ps1` + `deploy/windows/paperclip-start.bat`, Doku `docs/windows.md`. Subprozesse mit `text=True` immer `encoding="utf-8", errors="replace"` (Windows-Standard ist cp1252), `.env` mit `utf-8-sig`, `_run_cli` loest das Programm per `shutil.which` auf (`claude.cmd`). Auf echtem Windows ungetestet.
 Tests: `python -m pytest -q tests` (mock-Anbieter, ohne Internet). UI-Prüfung weiter per Playwright (nicht im Repo).
 
 ## Roadmap (Reihenfolge nach Wunsch des Besitzers)

@@ -40,7 +40,7 @@ def load_env():
     f = BASE / ".env"
     if not f.exists():
         return
-    for line in f.read_text(encoding="utf-8").splitlines():
+    for line in f.read_text(encoding="utf-8-sig").splitlines():  # -sig: Windows-Editoren schreiben teils ein BOM
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -415,8 +415,11 @@ def _run_cli(argv, prompt):
     wd = Path(WORKSPACE) / ".cli-run"
     wd.mkdir(parents=True, exist_ok=True)
     tmo = int(os.environ.get("PCL_CLI_TIMEOUT", "600"))
+    exe = shutil.which(argv[0]) if argv else None  # Windows: findet auch claude.cmd/codex.cmd aus npm
+    if exe:
+        argv = [exe] + list(argv[1:])
     try:
-        r = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=tmo, cwd=str(wd), env=env)
+        r = subprocess.run(argv, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=tmo, cwd=str(wd), env=env)
     except FileNotFoundError:
         raise RuntimeError(f"Programm '{argv[0]}' nicht gefunden")
     except subprocess.TimeoutExpired:
@@ -3440,7 +3443,7 @@ def api_approval_decide(aid):
         pdir.mkdir(parents=True, exist_ok=True)
         try:
             r = subprocess.run(ap["payload"], shell=True, cwd=str(pdir),
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
             out = (r.stdout + r.stderr)[-4000:]
             out = f"(Exit {r.returncode})\n{out}"
         except subprocess.TimeoutExpired:
