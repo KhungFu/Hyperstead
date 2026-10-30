@@ -72,6 +72,18 @@ SDCPP_URL=http://<görsel bilgisayarının IP'si>:1234    # görsel bilgisayarı
 
 Kurulum: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
 
+### Blender ile animasyon filmleri
+
+PaperclipLite'in çalıştığı bilgisayarda Blender kuruluysa, ajanlar çizgi film çeker: kendi sesi ve ağız hareketi olan karakterler,
+sahneler, kamera, altyazı, sesli bitmiş film (`film` aracı, „🐶 Animationsstudio“ şirket şablonu).
+PaperclipLite Blender'ı kendisi bulamazsa `.env` dosyasına ekleyin:
+
+```
+BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.2\blender.exe
+```
+
+Kılavuz ve senaryo biçimi (Almanca): [docs/filmstudio.md](docs/filmstudio.md).
+
 ## İşletim: kim neyi, nerede, ne zaman, nasıl yapar
 
 **Kim:** Bunların hepsini bilgisayarın sahibi (siz) yapar, ajanlar değil. Komutlar PaperclipLite klasöründe çalışır: Pi'de terminalde (`cd ~/paperclip-lite`), Windows'ta PowerShell'de
@@ -150,6 +162,13 @@ bundan asla etkilenmez, çünkü Git bunları bilmez.
 - **Nasıl çalıştırılır:** `C:\bildrechner\bildrechner-start.bat` dosyasını başlatın, pencereyi açık bırakın. PaperclipLite'in `.env` dosyasında
   `IMAGE_PROVIDER=sdcpp` ve `SDCPP_URL=...` ([kılavuz](docs/laptop-bildrechner.md)), ardından PaperclipLite'i yeniden başlatın.
 
+### Film stüdyosu (kullanılıyorsa)
+
+- **Nerede:** Blender'ın kurulu olduğu bilgisayarda (ör. dizüstü). `film` aracını kullanan şirket **bu** PaperclipLite kurulumunda çalışmalıdır.
+- **Ne zaman:** Blender'ın açık olması gerekmez, PaperclipLite onu her sahne için arka planda başlatır ve yeniden kapatır.
+- **Kontrol:** `venv\Scripts\python.exe selftest.py film` (Windows) ya da `./venv/bin/python selftest.py film`.
+- **Ne kadar sürer:** 640×360 ve saniyede 12 karede, dizüstüne göre 10 saniyelik film başına yaklaşık 1 ila 5 dakika. Blender hiçbir zaman görsel bilgisayarıyla aynı anda çalışmaz.
+
 ### Taşınma (ör. Pi → dizüstü)
 
 Adım adım [docs/windows.md](docs/windows.md) dosyasında, „Phase 2 – Umzug“ bölümünde (Almanca). Kısaca: ikisini de durdurun, `data.db`,
@@ -172,6 +191,11 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | Windows çalışma zamanı `VCOMP140.DLL` | `sd-server.exe` „VCOMP140.DLL nicht gefunden“ (bulunamadı) bildirir ve kapanır. | Kurulum betiğini yeniden çalıştırın (3. adım çalışma zamanını kurar), sonra başlatma dosyasını açın. |
 | Port 1234 için güvenlik duvarı kuralı (Windows) | Yalnızca Pi görsel bilgisayarına ulaşamaz. Dizüstünün kendisi çalışmaya devam eder. | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) dosyasındaki 4. bölümden komutu yönetici olarak çalıştırın. |
 | `ffmpeg`, `tesseract`, `pdftoppm`, sesli çıktı | İşlev eksiktir. Bunu kullanması gereken ajanlar hatayı sonuçta bildirir. Selbsttest FEHLER (Pi) ya da FEHLT (Windows) gösterir. | Programı kurun (komutlar selbsttest'te ve [docs/windows.md](docs/windows.md) dosyasında). |
+| Blender (`film` aracı) | `save`, `check`, `voices` ve `assemble` yine çalışır. `preview` ve `render`, `BLENDER_PATH` ipucuyla „Blender wurde nicht gefunden“ (Blender bulunamadı) bildirir. Selbsttest FEHLT gösterir. | Blender'ı kurun (`winget install BlenderFoundation.Blender`) ya da `.env` içinde `BLENDER_PATH` ayarlayın, yeniden başlatın. |
+| `film/film.json` (senaryo) | `film`, „film/film.json fehlt“ (eksik) bildirir ve önce `op=save` ile bir senaryo kaydedilmesini ister. Hatalı bir senaryo kaydedilmez, yanıt tüm hataları listeler. | Hiçbir şey, ajanlar onu kendileri oluşturur. Elle de yazabilirsiniz ([docs/filmstudio.md](docs/filmstudio.md)). |
+| Senaryoda adı geçen görsel, müzik ya da `.blend` dosyası | Kontrol sahneyi, karakteri ve yolu bildirir, hiçbir şey render edilmez. | Dosyayı `assets/` ya da `input/` klasörüne koyun veya senaryodaki yolu düzeltin. |
+| Bir sahnenin klibi (`film/clips/`) | `assemble` eksik sahneleri bildirir ve kurgu yapmaz. `render` yarıda kalırsa (zaman sınırı), biten kareler korunur ve sonraki çağrı oradan devam eder. | Hiçbir şey, ajanlar `render` komutunu yeniden çağırır. |
+| Film için sesli okuma | `voices`/`render`, „Keine Sprachausgabe verfügbar“ (sesli okuma yok) ile durur. Hiç diyaloğu olmayan sahneler yine çalışır. | Yukarıdaki „sesli okuma“ satırındaki gibi (Windows'ta `edge-tts` + `TTS_ENGINE=edge`). |
 | Telegram belirteci ya da sohbet kimliği | Telegram kapalı kalır, diğer her şey çalışır. Selbsttest FEHLT gösterir. | Yalnızca mesajları telefonunuza almak istiyorsanız gerekir. |
 | Projede bir klasör ya da dosya (`wissen/`, `input/`) | Var olmayan klasörler boş sayılır. Ajanlar şirket bilgisi olmadan çalışmaya devam eder. | Projede dosyayı ya da klasörü oluşturun veya yükleyin. |
 
@@ -260,7 +284,8 @@ Görsel lisansları (CC) çoğu zaman atıf ister; görsel editörü bunu `bildn
 | Araç | Neler yapabilir |
 |---|---|
 | `video_edit` | videoyu kesme (`trim`), birleştirme (`concat`), görsellerden **zoom'lu slayt gösterisi animasyonu** (`slideshow`, isteğe bağlı sesle), metin/altyazı/logo ekleme, sesi değiştirme ya da karıştırma, hızı değiştirme, GIF/WebM/MP3'e dönüştürme, durağan kare çıkarma |
-| `speak` | metni konuşmacı sesine çevirir (espeak-ng çevrimdışı; daha iyisi: Piper; isteğe bağlı Edge sesleri) |
+| `speak` | metni konuşmacı sesine çevirir (espeak-ng çevrimdışı; daha iyisi: Piper; isteğe bağlı Edge sesleri), farklı sesler için `voice`, `pitch`, `rate` ile |
+| `film` | **Blender ile animasyon filmi**: JSON olarak senaryo, karakterler (köpek, kedi, tavşan, ayı, fare, insan, kendi görselleriniz ya da `.blend` karakterleri), ağız hareketli sesler, hareketler, kamera, önizleme görseli, sahne sahne render, altyazılı kurgu ([kılavuz](docs/filmstudio.md)) |
 | `write_file` | **dosya yazma** hakkıyla: bölümleri, HTML, CSV vb. hemen oluşturur; böylece aynı görevde bunlardan bir PDF/DOCX/EPUB üretilebilir |
 | `make_document` | Markdown bölümlerinden **PDF, DOCX, EPUB ya da HTML** (A4/A5, kapak, görseller, Almanca ve Türkçe karakterler); `html` ile **HTML+CSS**'ten serbest düzenli bir PDF (şablonları yeniden oluşturma, WeasyPrint ile, yalnızca proje dosyalarını yükler) |
 | `video_generate` | metinden **yapay zekâ video klibi** (isteğe bağlı başlangıç görseliyle), yaklaşık 4–10 sn, Google'ın Gemini API'si üzerinden (Google Flow'un arkasındaki model). Varsayılan kapalı, `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY` ile açılır. **Video saniyesi başına ücret alır**; Flow/Google One aboneliği burada geçerli değildir |
@@ -276,7 +301,7 @@ ve ajana gönderir; ajan bildirmeden önce görevin her gereksinimini kontrol ed
 doğrudan **💬 Chat** içinde bir ajana gönderilir (📎 düğmesi, sürükleyip bırakma ya da görsel yapıştırma, birden çok birden). Dosyalar
 `input/` klasörüne düşer (adı temizlenir, mevcut dosyalar asla üzerine yazılmaz, bunun yerine `name-1.png` … olur, sınır `PCL_MAX_UPLOAD_MB`);
 sohbette ajan **içeriği** doğrudan mesajla birlikte alır (metinler, PDF'ler, Word metin olarak, görseller görsel olarak, model görselleri anlıyorsa;
-aksi halde metin tanıma). **📂 aus input/** ile zaten orada duran dosyaları ekleyebilir ya da mesajın içine dosya adını yazabilirsiniz; „Als Auftrag erteilen“ (görev olarak ver) bunu ekibe iletir. Biten sonuçlar `output/` içinde, görseller `assets/` içinde durur. Dürüst sınırlar: `video_generate` olmadan **yapay zekâ ile video üretimi yoktur** (metinden videoya); „Animation“ o zaman şu demektir: yapay zekâ görselleriyle sahne görüntüleri + zoom/kaydırma + konuşmacı + kurgu. `video_generate` ile kısa klipler oluşur; daha uzun filmler `video_edit op=concat` ile birleştirilir. MagicLight'ın API'si yoktur: orada üretilen videoları `input/` klasörüne yükleyin. Raspberry Pi'de
+aksi halde metin tanıma). **📂 aus input/** ile zaten orada duran dosyaları ekleyebilir ya da mesajın içine dosya adını yazabilirsiniz; „Als Auftrag erteilen“ (görev olarak ver) bunu ekibe iletir. Biten sonuçlar `output/` içinde, görseller `assets/` içinde durur. Dürüst sınırlar: `video_generate` olmadan **yapay zekâ ile video üretimi yoktur** (metinden videoya); „Animation“ o zaman şu demektir: yapay zekâ görselleriyle sahne görüntüleri + zoom/kaydırma + konuşmacı + kurgu ya da `film` ile Blender üzerinden gerçek karakter animasyonu. `video_generate` ile kısa klipler oluşur; daha uzun filmler `video_edit op=concat` ile birleştirilir. MagicLight'ın API'si yoktur: orada üretilen videoları `input/` klasörüne yükleyin. Raspberry Pi'de
 ffmpeg yavaş çalışır (720p videonun bir dakikası birkaç dakika sürebilir), zaman sınırı `PCL_FFMPEG_TIMEOUT` (adım başına varsayılan 1 saat).
 
 **Taranmış PDF'ler ve görseller (OCR):** `read_file` taramaları `tesseract` ile otomatik okur (`sudo apt install tesseract-ocr tesseract-ocr-deu poppler-utils`). Bu yavaştır (Pi'de sayfa başına yaklaşık 5–15 sn, sınır `PCL_OCR_MAX_PAGES`) ve hatalar içerebilir.
@@ -435,7 +460,7 @@ farklı projelerin görevleri. Bir ajan asla aynı anda iki görev üzerinde ça
 Kurulum ve anahtarların girilmesinden sonra `./venv/bin/python selftest.py` internet olmadan test edilemeyen her gerçek şeyi kontrol eder:
 web araması, sayfa okuma, görsel araması ve görsel üretici, SSRF koruması, her yapay zekâ sağlayıcısı mini bir istekle (Ollama dahil),
 Telegram (bot belirteci ve sohbet kimliğinize test mesajı), ffmpeg, sesli çıktı, Almanca karakterli PDF, OCR. Tek tek gruplar:
-`selftest.py web | llm | telegram | media | ocr`. Her satır OK, FEHLT (isteğe bağlı) ya da somut bir notla FEHLER gösterir.
+`selftest.py web | llm | telegram | media | ocr | film`. Her satır OK, FEHLT (isteğe bağlı) ya da somut bir notla FEHLER gösterir.
 
 ## Ollama (yerel modeller)
 

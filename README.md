@@ -71,6 +71,18 @@ SDCPP_URL=http://<IP des Bildrechners>:1234    # auf dem Bildrechner selbst: htt
 
 Einrichtung: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
 
+### Animationsfilme mit Blender
+
+Ist Blender auf dem Rechner installiert, auf dem PaperclipLite läuft, drehen die Agenten Zeichentrickfilme: Figuren mit eigenen
+Stimmen und Mundbewegung, Szenen, Kamera, Untertitel, fertiger Film mit Ton (Werkzeug `film`, Firmenvorlage „🐶 Animationsstudio“).
+Findet PaperclipLite Blender nicht selbst, in `.env` eintragen:
+
+```
+BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.2\blender.exe
+```
+
+Anleitung und Drehbuch-Format: [docs/filmstudio.md](docs/filmstudio.md).
+
 ## Betrieb: wer macht was, wo, wann, wie
 
 **Wer:** alles hier erledigt der Besitzer des Rechners (du), nicht die Agenten. Die Befehle laufen im
@@ -151,6 +163,13 @@ sind davon nie betroffen, Git kennt sie nicht.
 - **Wie:** `C:\bildrechner\bildrechner-start.bat` starten, Fenster offen lassen. In der `.env` von PaperclipLite
   `IMAGE_PROVIDER=sdcpp` und `SDCPP_URL=...` ([Anleitung](docs/laptop-bildrechner.md)), danach PaperclipLite neu starten.
 
+### Filmstudio (falls genutzt)
+
+- **Wo:** auf dem Rechner mit Blender (z. B. Laptop). Die Firma mit dem Werkzeug `film` muss in **dieser** PaperclipLite-Instanz laufen.
+- **Wann:** Blender muss nicht offen sein, PaperclipLite startet es für jede Szene im Hintergrund und beendet es wieder.
+- **Prüfen:** `venv\Scripts\python.exe selftest.py film` (Windows) bzw. `./venv/bin/python selftest.py film`.
+- **Wie lange:** bei 640×360 und 12 Bildern/s je nach Laptop etwa 1 bis 5 Minuten pro 10 Sekunden Film. Blender läuft nie gleichzeitig mit dem Bildrechner.
+
 ### Umziehen (z. B. Pi → Laptop)
 
 Schritt für Schritt in [docs/windows.md](docs/windows.md), „Phase 2 – Umzug“. Kurz: beide beenden, `data.db`,
@@ -173,6 +192,11 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Windows-Laufzeit `VCOMP140.DLL` | `sd-server.exe` meldet „VCOMP140.DLL nicht gefunden“ und bricht ab. | Einrichtungsskript erneut starten (Schritt 3 installiert die Laufzeit), dann Startdatei öffnen. |
 | Firewall-Regel Port 1234 (Windows) | Nur der Pi erreicht den Bildrechner nicht. Der Laptop selbst funktioniert weiter. | Befehl aus [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md), Abschnitt 4, als Administrator ausführen. |
 | `ffmpeg`, `tesseract`, `pdftoppm`, Sprachausgabe | Die Funktion fehlt. Agenten, die sie brauchen, melden den Fehler im Ergebnis. Der Selbsttest zeigt FEHLER (Pi) bzw. FEHLT (Windows). | Programm nachinstallieren (Befehle im Selbsttest und in [docs/windows.md](docs/windows.md)). |
+| Blender (Werkzeug `film`) | `save`, `check`, `voices` und `assemble` gehen trotzdem. `preview` und `render` melden „Blender wurde nicht gefunden“ mit dem Hinweis auf `BLENDER_PATH`. Der Selbsttest zeigt FEHLT. | Blender installieren (`winget install BlenderFoundation.Blender`) oder `BLENDER_PATH` in `.env` setzen, neu starten. |
+| `film/film.json` (Drehbuch) | `film` meldet „film/film.json fehlt“ und bittet, zuerst mit `op=save` ein Drehbuch zu speichern. Ein fehlerhaftes Drehbuch wird nicht gespeichert, die Antwort listet alle Fehler auf. | Nichts, die Agenten legen es selbst an. Du kannst es auch von Hand schreiben ([docs/filmstudio.md](docs/filmstudio.md)). |
+| Bild-, Musik- oder `.blend`-Datei, die im Drehbuch steht | Die Prüfung nennt Szene, Figur und Pfad, es wird nichts gerendert. | Datei nach `assets/` oder `input/` legen oder den Pfad im Drehbuch korrigieren. |
+| Clip einer Szene (`film/clips/`) | `assemble` nennt die fehlenden Szenen und schneidet nichts. Bricht `render` ab (Zeitlimit), bleiben die fertigen Bilder erhalten und der nächste Aufruf macht dort weiter. | Nichts, die Agenten rufen `render` erneut auf. |
+| Sprachausgabe beim Film | `voices`/`render` brechen mit „Keine Sprachausgabe verfügbar“ ab. Szenen ganz ohne Dialog gehen trotzdem. | Wie bei „Sprachausgabe“ oben (unter Windows `edge-tts` + `TTS_ENGINE=edge`). |
 | Telegram-Token oder Chat-ID | Telegram bleibt aus, alles andere läuft. Der Selbsttest zeigt FEHLT. | Nur nötig, wenn du Nachrichten aufs Handy willst. |
 | Ein Ordner oder eine Datei im Projekt (`wissen/`, `input/`) | Nicht vorhandene Ordner gelten als leer. Die Agenten arbeiten ohne Firmenwissen weiter. | Datei oder Ordner im Projekt anlegen oder hochladen. |
 
@@ -264,7 +288,8 @@ Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem P
 | Werkzeug | Was es kann |
 |---|---|
 | `video_edit` | Video schneiden (`trim`), zusammenfügen (`concat`), **Diashow-Animation mit Zoom** aus Bildern (`slideshow`, optional mit Ton), Text/Untertitel/Logo einblenden, Ton ersetzen/mischen, Tempo ändern, in GIF/WebM/MP3 umwandeln, Standbild ziehen |
-| `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen) |
+| `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen), mit `voice`, `pitch`, `rate` für verschiedene Stimmen |
+| `film` | **Animationsfilm mit Blender**: Drehbuch als JSON, Figuren (Hund, Katze, Hase, Bär, Maus, Mensch, eigene Bilder oder `.blend`-Figuren), Stimmen mit Mundbewegung, Bewegungen, Kamera, Vorschaubild, Rendern Szene für Szene, Schnitt mit Untertiteln ([Anleitung](docs/filmstudio.md)) |
 | `write_file` | mit dem Recht **Dateien schreiben**: legt Kapitel, HTML, CSV usw. sofort an, damit im selben Auftrag daraus ein PDF/DOCX/EPUB wird |
 | `make_document` | aus Markdown-Kapiteln **PDF, DOCX, EPUB oder HTML** (A4/A5, Cover, Bilder, Umlaute und türkische Zeichen); mit `html` aus **HTML+CSS** ein PDF mit freiem Layout (Vorlagen nachbauen, per WeasyPrint, lädt nur Dateien aus dem Projekt) |
 | `video_generate` | **KI-Videoclip** aus Text (optional mit Startbild), ca. 4–10 s, über Googles Gemini-API (Modell hinter Google Flow). Standard aus, einschalten mit `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Kostet pro Sekunde Video**, ein Flow-/Google-One-Abo zählt hier nicht |
@@ -281,7 +306,7 @@ direkt im **💬 Chat** mit einem Agenten mit (📎-Knopf, hineinziehen oder Bil
 `input/` (Name bereinigt, vorhandene Dateien werden nie überschrieben, sondern `name-1.png` …, Grenze `PCL_MAX_UPLOAD_MB`); im Chat
 bekommt der Agent den **Inhalt** direkt mit der Nachricht (Texte, PDFs, Word als Text, Bilder als Bild, sofern das Modell Bilder versteht;
 sonst Texterkennung). Mit **📂 aus input/** hängst du Dateien an, die schon dort liegen, oder du schreibst einfach den Dateinamen in die Nachricht, und „Als Auftrag erteilen“ gibt ihn ans Team weiter; fertige Ergebnisse liegen in `output/`, Bilder in `assets/`. Ehrliche Grenzen: Ohne `video_generate` gibt es **keine KI-Videogenerierung**
-(Text-zu-Video), „Animation“ heißt dann: Szenenbilder per Bild-KI + Zoom/Schwenk + Sprecher + Schnitt. Mit `video_generate` entstehen
+(Text-zu-Video), „Animation“ heißt dann: Szenenbilder per Bild-KI + Zoom/Schwenk + Sprecher + Schnitt, oder mit Blender echte Figurenanimation über `film`. Mit `video_generate` entstehen
 kurze Clips, längere Filme setzt `video_edit op=concat` zusammen. MagicLight hat keine API: dort erzeugte Videos lädst du nach `input/` hoch. Auf dem Raspberry Pi
 rechnet ffmpeg langsam (eine Minute 720p-Video kann mehrere Minuten dauern), Zeitlimit `PCL_FFMPEG_TIMEOUT` (Standard 1 Stunde je Schritt).
 
@@ -443,7 +468,7 @@ verschiedener Projekte. Ein Agent bearbeitet nie zwei Aufgaben auf einmal, und e
 Nach Installation und Eintragen der Keys prüft `./venv/bin/python selftest.py` alles Echte, was sich ohne Internet nicht testen ließ:
 Websuche, Seiten lesen, Bildsuche und Bildgenerator, SSRF-Schutz, jeder KI-Anbieter mit Mini-Anfrage (inkl. Ollama), Telegram
 (Bot-Token und Testnachricht an deine Chat-ID), ffmpeg, Sprachausgabe, PDF mit Umlauten, OCR. Einzelne Gruppen:
-`selftest.py web | llm | telegram | media | ocr`. Jede Zeile zeigt OK, FEHLT (optional) oder FEHLER mit konkretem Hinweis.
+`selftest.py web | llm | telegram | media | ocr | film`. Jede Zeile zeigt OK, FEHLT (optional) oder FEHLER mit konkretem Hinweis.
 
 ## Ollama (lokale Modelle)
 

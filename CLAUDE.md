@@ -72,13 +72,25 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   Kann ein Modell keine Bilder, sagt `call_llm_img` ihm das (Bericht nennt Agent/Modell). Angeworbene Mitarbeiter haben immer `read_files`.
   Telegram: Datei-Nachrichten (`tg_file_of`) → `tg_save_file` → Bildunterschrift = Auftrag/Überarbeitung, ohne Text in `_tg_pending` für den nächsten Auftrag, Alben über `_tg_groups`/`tg_flush_groups`.
 - Oberfläche responsive: unter 820 px Menü ☰ (`#app.side-open`), Panel als Vollbild, Canvas per Pointer-Events (Touch, zwei Finger = Zoom).
-- Installer: `install.sh --system` (Medien/OCR per apt), `--code` (Compiler aus `CODE_PKGS`), `--all` (alles inkl. Piper + Dienst). `selftest.py code` prüft alle Sprachen.
+- Installer: `install.sh --system` (Medien/OCR per apt), `--code` (Compiler aus `CODE_PKGS`), `--all` (alles inkl. Piper + Dienst). `selftest.py code` prüft alle Sprachen, `selftest.py film` Blender.
 - OCR: `ocr_pdf`/`ocr_image` (tesseract + pdftoppm) als Rückfall in `_doc_text`/`read_file`. Piper: `_piper()` sucht im venv und in `models/piper/`. `selftest.py` prüft auf dem Pi alle externen Dienste (Suche, Bilder, LLMs, Telegram, Medien, OCR). Ollama-Zeitlimit `OLLAMA_TIMEOUT`.
 - `call_llm`: bei 429/5xx oder leerer Antwort (`EmptyReply` aus `_parse_reply`, z. B. Gemini ohne `content` bei Filter) erst alle Keys, dann `PCL_LLM_RETRIES` (3) weitere Runden mit Pause `PCL_LLM_RETRY_WAIT` (8 s, verdoppelt, Retry-After beachtet). Abgeschnittene leere Antworten (`length`) werden nicht wiederholt.
 - Gruppen-Umstellung: Menü „🔀 KI für Gruppe“, `GET /api/agents/all`, `POST /api/models/assign` (`agent_ids`, `provider`, `model`).
 - Standardmodelle: `default_model(pid)` nimmt `PROVIDERS[pid]['model']`, ersetzt es aber, wenn die Live-Liste es nicht mehr führt (`_MODEL_PREF`). OpenRouter-Bezahlmodelle bekommen ohne `PCL_MAX_OUTPUT` `max_tokens=8192` (sonst 402 bei wenig Guthaben). Windows: Schriften aus `%WINDIR%\Fonts`, `selftest.py` gibt Windows-Hinweise (`fix()`). README-Abschnitt „Betrieb“ = Bedienanleitung je System.
 - Modell-Überwachung: `model_health` (Agenten-Modell nicht mehr in der Live-Liste oder Aufruf mit 404/„model not found“ → `_bad_models`), Worker prüft alle `PCL_MODEL_CHECK_HOURS` (6) und meldet Änderungen einmalig (Audit + Telegram, Marker `settings.model_alert_sig`). UI: Menü „⚠ Modelle“, `GET /api/model_health`, `POST /api/models/replace` (Sammel-Umstellung).
 - Nur gegen simulierte Antworten getestet, in der Entwicklungsumgebung gab es kein Internet: echte Suche/Bildanbieter zuerst auf dem Pi prüfen.
+
+## Filmstudio (Werkzeug `film`, Recht `media`)
+- `film_studio.py`: Drehbuch `film/film.json` (deutsche Schluessel: figuren/szenen/aktionen/dialog/kamera), `normalize` prueft und sammelt ALLE Fehler.
+  Ops: save (prueft vor dem Schreiben), check, voices (`film/ton/`, Cache per Hash in `index.json`), preview (`film/vorschau/<id>.png`, app.run_with_tools haengt
+  es wie view_image an), render (`film/clips/<id>.mp4`, Hash in `clips/index.json`, unveraenderte Szenen uebersprungen, `PCL_FILM_BUDGET`), assemble (`output/<name>.mp4` + `.srt`).
+- Die ganze Zeitlogik (Gehen, Springen, Winken, Blick, Kamera, Mund aus Lautstaerke per ffmpeg-Rohdaten, Blinzeln) rechnet `entity_frames`/`camera_frames`
+  in Python; `blender/pcl_film.py` baut nur die Szene und setzt je Bild die Werte (Bild fuer Bild rendern, fertige PNGs in `film/.frames/` werden
+  bei Abbruch weiterverwendet). Bei Aenderungen am Blender-Skript `SCRIPT_VERSION` erhoehen.
+- Blender-Aufruf: `-b --factory-startup --disable-autoexec -noaudio --python-exit-code 3`, Umgebung ohne KEY/TOKEN/SECRET/PASSWORD, `T._heavy_lock`
+  (gleiche Sperre wie sdcpp). `blender_exe`: `BLENDER_PATH`, PATH, Windows-Standardordner (neueste Version). Erfolg nur mit `PCL_FERTIG` in der Ausgabe.
+- Bildfiguren drehen sich nie (werden gespiegelt), Hintergrundbild haengt an der Kamera. `speak` hat `voice/pitch/rate/target`.
+- Getestet mit Blender 5.2 als pip-Paket `bpy` (Huellskript als BLENDER_PATH, `PCL_TEST_BLENDER`), eevee/workbench/cycles rendern; echtes Windows-Blender ungetestet.
 
 ## Gedaechtnis, Firmenwissen, parallele Worker
 - `agents.memory`: Agent liefert optional `remember` (max. `REMEMBER_MAX`), `save_memory` haengt datiert an, dedupliziert, kuerzt auf `PCL_MEMORY_CHARS`.

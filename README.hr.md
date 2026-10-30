@@ -72,6 +72,18 @@ SDCPP_URL=http://<IP računala za slike>:1234    # na samom računalu za slike: 
 
 Postavljanje: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
 
+### Animirani filmovi uz Blender
+
+Ako je Blender instaliran na računalu na kojem radi PaperclipLite, agenti izrađuju crtane filmove: likove s vlastitim glasovima i
+pokretima usta, scene, kameru, titlove, gotov film sa zvukom (alat `film`, predložak tvrtke „🐶 Animationsstudio“).
+Ako PaperclipLite sam ne pronađe Blender, upišite ga u `.env`:
+
+```
+BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.2\blender.exe
+```
+
+Upute i format scenarija (na njemačkom): [docs/filmstudio.md](docs/filmstudio.md).
+
 ## Rad: tko što, gdje, kada i kako
 
 **Tko:** sve ovo radi vlasnik računala (vi), a ne agenti. Naredbe se izvršavaju u
@@ -151,6 +163,13 @@ nikada nisu ugroženi, jer ih Git ne poznaje.
 - **Kako se pokreće:** pokrenite `C:\bildrechner\bildrechner-start.bat`, prozor ostavite otvoren. U `.env` datoteci PaperclipLitea
   `IMAGE_PROVIDER=sdcpp` i `SDCPP_URL=...` ([upute](docs/laptop-bildrechner.md)), zatim ponovno pokrenite PaperclipLite.
 
+### Filmski studio (ako se koristi)
+
+- **Gdje:** na računalu s Blenderom (npr. laptop). Tvrtka s alatom `film` mora raditi u **ovoj** instanci PaperclipLite.
+- **Kada:** Blender ne mora biti otvoren, PaperclipLite ga za svaku scenu pokreće u pozadini i ponovno zatvara.
+- **Provjera:** `venv\Scripts\python.exe selftest.py film` (Windows) ili `./venv/bin/python selftest.py film`.
+- **Koliko traje:** pri 640×360 i 12 sličica u sekundi, ovisno o laptopu, oko 1 do 5 minuta po 10 sekundi filma. Blender nikad ne radi istovremeno s računalom za slike.
+
 ### Selidba (npr. Pi → laptop)
 
 Korak po korak u [docs/windows.md](docs/windows.md), „Phase 2 – Umzug“ (na njemačkom). Ukratko: zaustavite oba, kopirajte `data.db`,
@@ -173,6 +192,11 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | Windows runtime `VCOMP140.DLL` | `sd-server.exe` javlja „VCOMP140.DLL nicht gefunden“ (nije pronađen) i prekida rad. | Ponovno pokrenite skriptu za postavljanje (korak 3 instalira runtime), pa otvorite startnu datoteku. |
 | Pravilo vatrozida za port 1234 (Windows) | Samo Pi ne može doći do računala za slike. Sam laptop radi dalje. | Pokrenite naredbu iz [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md), odjeljak 4, kao administrator. |
 | `ffmpeg`, `tesseract`, `pdftoppm`, glasovni izlaz | Funkcija nedostaje. Agenti koji je traže javljaju pogrešku u rezultatu. Samoprovjera prikazuje FEHLER (Pi) odnosno FEHLT (Windows). | Instalirajte program (naredbe u samoprovjeri i u [docs/windows.md](docs/windows.md)). |
+| Blender (alat `film`) | `save`, `check`, `voices` i `assemble` i dalje rade. `preview` i `render` javljaju „Blender wurde nicht gefunden“ (Blender nije pronađen) uz napomenu o `BLENDER_PATH`. Samoprovjera prikazuje FEHLT. | Instalirajte Blender (`winget install BlenderFoundation.Blender`) ili postavite `BLENDER_PATH` u `.env`, ponovno pokrenite. |
+| `film/film.json` (scenarij) | `film` javlja „film/film.json fehlt“ (nedostaje) i traži da se prvo s `op=save` spremi scenarij. Neispravan scenarij se ne sprema, odgovor navodi sve pogreške. | Ništa, agenti ga sami izrađuju. Možete ga napisati i ručno ([docs/filmstudio.md](docs/filmstudio.md)). |
+| Slika, glazba ili `.blend` datoteka navedena u scenariju | Provjera navodi scenu, lik i putanju, ništa se ne renderira. | Stavite datoteku u `assets/` ili `input/` ili ispravite putanju u scenariju. |
+| Klip scene (`film/clips/`) | `assemble` navodi scene koje nedostaju i ništa ne montira. Ako se `render` prekine (vremensko ograničenje), gotove sličice ostaju spremljene i sljedeći poziv nastavlja odatle. | Ništa, agenti ponovno pozivaju `render`. |
+| Govor za film | `voices`/`render` se prekidaju porukom „Keine Sprachausgabe verfügbar“ (nema govora). Scene bez dijaloga i dalje rade. | Kao kod „govora“ iznad (na Windowsu `edge-tts` + `TTS_ENGINE=edge`). |
 | Telegram token ili ID chata | Telegram ostaje isključen, sve ostalo radi. Samoprovjera prikazuje FEHLT. | Potrebno samo ako želite poruke na telefonu. |
 | Mapa ili datoteka u projektu (`wissen/`, `input/`) | Mape koje ne postoje smatraju se praznima. Agenti rade dalje bez znanja o tvrtki. | Stvorite ili otpremite datoteku ili mapu u projektu. |
 
@@ -264,7 +288,8 @@ Uz pravo **izrade medija i dokumenata** (i `ffmpeg`/fontovi na Pi-ju, vidi `inst
 | Alat | Što može |
 |---|---|
 | `video_edit` | reže video (`trim`), spaja (`concat`), **animaciju slideshowa sa zumom** iz slika (`slideshow`, neobavezno sa zvukom), dodaje tekst/titlove/logo, mijenja ili miješa zvuk, mijenja brzinu, pretvara u GIF/WebM/MP3, izvlači nepomičan kadar |
-| `speak` | pretvara tekst u glas govornika (espeak-ng offline; bolje: Piper; neobavezno Edge glasovi) |
+| `speak` | pretvara tekst u glas govornika (espeak-ng offline; bolje: Piper; neobavezno Edge glasovi), uz `voice`, `pitch`, `rate` za različite glasove |
+| `film` | **animirani film uz Blender**: scenarij kao JSON, likovi (pas, mačka, zec, medvjed, miš, čovjek, vlastite slike ili `.blend` likovi), glasovi s pokretima usta, pokreti, kamera, slika pregleda, renderiranje scenu po scenu, montaža s titlovima ([upute](docs/filmstudio.md)) |
 | `write_file` | uz pravo **pisanje datoteka**: odmah izrađuje poglavlja, HTML, CSV itd., tako da se u istom zadatku od njih može napraviti PDF/DOCX/EPUB |
 | `make_document` | iz Markdown poglavlja **PDF, DOCX, EPUB ili HTML** (A4/A5, naslovna stranica, slike, dijakritici i turski znakovi); s `html` PDF slobodnog rasporeda iz **HTML+CSS** (izrada predložaka, preko WeasyPrinta, učitava samo datoteke iz projekta) |
 | `video_generate` | **AI video isječak** iz teksta (neobavezno s početnom slikom), oko 4–10 s, preko Google Gemini API-ja (model iza Google Flowa). Zadano isključeno, uključuje se s `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Naplaćuje se po sekundi videa**; Flow/Google One pretplata se ovdje ne računa |
@@ -281,7 +306,7 @@ izravno u **💬 Chat** s agentom (gumb 📎, povucite ih ili zalijepite sliku, 
 `input/` (ime se čisti, postojeće datoteke se nikada ne prepisuju nego postaju `name-1.png` …, granica `PCL_MAX_UPLOAD_MB`);
 u chatu agent dobiva **sadržaj** izravno uz poruku (tekstovi, PDF-ovi, Word kao tekst, slike kao slike, ako model razumije slike;
 inače prepoznavanje teksta). S **📂 aus input/** dodajete datoteke koje već stoje tamo, ili jednostavno upišete ime datoteke u poruku, a „Als Auftrag erteilen“ (pošalji kao zadatak) to prosljeđuje timu; gotovi rezultati su u `output/`, slike u `assets/`. Iskrena ograničenja: bez `video_generate` **nema AI generiranja videa** (tekst u video);
-„animacija“ tada znači: scene kao slike uz AI slike + zum/pomicanje + govornik + montaža. Uz `video_generate` nastaju
+„animacija“ tada znači: scene kao slike uz AI slike + zum/pomicanje + govornik + montaža, ili prava animacija likova uz Blender preko alata `film`. Uz `video_generate` nastaju
 kratki isječci; duži filmovi se sastavljaju s `video_edit op=concat`. MagicLight nema API: videe napravljene tamo otpremite u `input/`. Na Raspberry Pi-ju
 ffmpeg radi sporo (jedna minuta 720p videa može trajati nekoliko minuta), vremensko ograničenje `PCL_FFMPEG_TIMEOUT` (zadano 1 sat po koraku).
 
@@ -442,7 +467,7 @@ različitih projekata. Agent nikada ne radi na dva zadatka odjednom, a istodobno
 Nakon instalacije i unosa ključeva `./venv/bin/python selftest.py` provjerava sve stvarne stvari koje se bez interneta nisu mogle testirati:
 web pretragu, čitanje stranica, pretragu slika i generator slika, SSRF zaštitu, svakog AI pružatelja mini zahtjevom (uključujući Ollama),
 Telegram (token bota i probna poruka na vaš ID chata), ffmpeg, glasovni izlaz, PDF s dijakriticima, OCR. Pojedinačne skupine:
-`selftest.py web | llm | telegram | media | ocr`. Svaki redak prikazuje OK, FEHLT (neobavezno) ili FEHLER s konkretnom napomenom.
+`selftest.py web | llm | telegram | media | ocr | film`. Svaki redak prikazuje OK, FEHLT (neobavezno) ili FEHLER s konkretnom napomenom.
 
 ## Ollama (lokalni modeli)
 

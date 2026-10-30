@@ -1501,6 +1501,13 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
                     made_file = None
                 else:
                     out, made_file = tools.run_tool(c, root, perms)
+                    if (c.get("tool") == "film" and str(made_file or "").endswith(".png") and "view_image" in allowed
+                            and len(seen) < RUN_MAX_IMAGES):  # Filmvorschau gleich ansehen lassen, wie view_image
+                        try:
+                            seen += tools.view_image(root, made_file)[1][:1]
+                            out += f" Du siehst die Vorschau als Bild Nr. {len(seen)}."
+                        except Exception:
+                            pass
                 if made_file:
                     made.append(made_file)
                 arg = str(c.get("query") or c.get("url") or c.get("prompt") or c.get("path") or c.get("name") or "")[:120]
