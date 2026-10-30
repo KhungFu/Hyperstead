@@ -191,7 +191,6 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Modelldatei (Windows, Bildrechner) | Die Startdatei nennt die fehlende Datei und startet nicht. Fehlt nur das große Sprachmodell (`Qwen3-4B-Q4_K_M.gguf`), nimmt sie das kleinere, falls vorhanden. | Einrichtungsskript erneut starten, es lädt nur die fehlende Datei. |
 | Windows-Laufzeit `VCOMP140.DLL` | `sd-server.exe` meldet „VCOMP140.DLL nicht gefunden“ und bricht ab. | Einrichtungsskript erneut starten (Schritt 3 installiert die Laufzeit), dann Startdatei öffnen. |
 | Firewall-Regel Port 1234 (Windows) | Nur der Pi erreicht den Bildrechner nicht. Der Laptop selbst funktioniert weiter. | Befehl aus [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md), Abschnitt 4, als Administrator ausführen. |
-| `FAL_KEY` (mit `VIDEO_PROVIDER=fal`) | Videoerzeugung meldet „VIDEO_PROVIDER=fal, aber FAL_KEY fehlt“. Die Samoprüfung zeigt FEHLT. | fal.ai-Schlüssel in `.env` eintragen, oder `VIDEO_PROVIDER` leer lassen. |
 | `ffmpeg`, `tesseract`, `pdftoppm`, Sprachausgabe | Die Funktion fehlt. Agenten, die sie brauchen, melden den Fehler im Ergebnis. Der Selbsttest zeigt FEHLER (Pi) bzw. FEHLT (Windows). | Programm nachinstallieren (Befehle im Selbsttest und in [docs/windows.md](docs/windows.md)). |
 | Blender (Werkzeug `film`) | `save`, `check`, `voices` und `assemble` gehen trotzdem. `preview` und `render` melden „Blender wurde nicht gefunden“ mit dem Hinweis auf `BLENDER_PATH`. Der Selbsttest zeigt FEHLT. | Blender installieren (`winget install BlenderFoundation.Blender`) oder `BLENDER_PATH` in `.env` setzen, neu starten. |
 | `film/film.json` (Drehbuch) | `film` meldet „film/film.json fehlt“ und bittet, zuerst mit `op=save` ein Drehbuch zu speichern. Ein fehlerhaftes Drehbuch wird nicht gespeichert, die Antwort listet alle Fehler auf. | Nichts, die Agenten legen es selbst an. Du kannst es auch von Hand schreiben ([docs/filmstudio.md](docs/filmstudio.md)). |
@@ -200,6 +199,11 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Sprachausgabe beim Film | `voices`/`render` brechen mit „Keine Sprachausgabe verfügbar“ ab. Szenen ganz ohne Dialog gehen trotzdem. | Wie bei „Sprachausgabe“ oben (unter Windows `edge-tts` + `TTS_ENGINE=edge`). |
 | Telegram-Token oder Chat-ID | Telegram bleibt aus, alles andere läuft. Der Selbsttest zeigt FEHLT. | Nur nötig, wenn du Nachrichten aufs Handy willst. |
 | Ein Ordner oder eine Datei im Projekt (`wissen/`, `input/`) | Nicht vorhandene Ordner gelten als leer. Die Agenten arbeiten ohne Firmenwissen weiter. | Datei oder Ordner im Projekt anlegen oder hochladen. |
+| Key eines Videoanbieters (z. B. `KLING_SECRET_KEY`, `HIGGSFIELD_API_KEY_SECRET`) | `video_generate` meldet „VIDEO_PROVIDER=…, aber … fehlt“ und erzeugt nichts, die anderen Anbieter aus der Liste gehen weiter. Der Selbsttest zeigt den Anbieter als FEHLT. | Key eintragen ([docs/videodienste.md](docs/videodienste.md)) oder den Anbieter aus `VIDEO_PROVIDER` streichen, neu starten. |
+| Guthaben beim Videoanbieter | Der Anbieter antwortet mit einem Fehler (oft HTTP 402/429 oder „insufficient balance“), der Agent bekommt den Text ins Ergebnis. Es springt kein anderer Anbieter ein. | Guthaben aufladen oder mit `provider` bzw. in `VIDEO_PROVIDER` einen anderen Anbieter wählen. |
+| `FAL_KEY` (bei `VIDEO_PROVIDER=fal`, `VIDEO_AI=fal` oder `AUDIO_PROVIDER=fal`) | `video_generate`, `video_ai` bzw. `sound_generate` meldet „FAL_KEY fehlt“ und erzeugt nichts. | Key von fal.ai eintragen oder die Zeile `VIDEO_AI`/`AUDIO_PROVIDER` entfernen. |
+| `ELEVENLABS_API_KEY` oder `OPENAI_API_KEY` für Cloud-Stimmen (`TTS_ENGINE=elevenlabs` bzw. `openai`) | `speak` meldet den fehlenden Key. Es gibt dann keine Ersatzstimme, auch der Film bricht bei Dialogen ab. | Key eintragen oder `TTS_ENGINE=auto` setzen. |
+| `video_providers.py` (Programmdatei) | Die Video-, Ton- und Cloud-Stimmen-Werkzeuge verschwinden für die Agenten, alles andere läuft weiter. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 
 ## Zugriff aus dem Internet
 
@@ -289,11 +293,13 @@ Mit dem Recht **Medien & Dokumente erstellen** (und `ffmpeg`/Schriften auf dem P
 | Werkzeug | Was es kann |
 |---|---|
 | `video_edit` | Video schneiden (`trim`), zusammenfügen (`concat`), **Diashow-Animation mit Zoom** aus Bildern (`slideshow`, optional mit Ton), Text/Untertitel/Logo einblenden, Ton ersetzen/mischen, Tempo ändern, in GIF/WebM/MP3 umwandeln, Standbild ziehen |
-| `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen), mit `voice`, `pitch`, `rate` für verschiedene Stimmen |
+| `speak` | Text zu Sprecher-Audio (espeak-ng offline; besser: Piper; optional Edge-Stimmen oder Cloud-Stimmen von ElevenLabs/OpenAI über `TTS_ENGINE`), mit `voice`, `pitch`, `rate` für verschiedene Stimmen |
 | `film` | **Animationsfilm mit Blender**: Drehbuch als JSON, Figuren (Hund, Katze, Hase, Bär, Maus, Mensch, eigene Bilder oder `.blend`-Figuren), Stimmen mit Mundbewegung, Bewegungen, Kamera, Vorschaubild, Rendern Szene für Szene, Schnitt mit Untertiteln ([Anleitung](docs/filmstudio.md)) |
 | `write_file` | mit dem Recht **Dateien schreiben**: legt Kapitel, HTML, CSV usw. sofort an, damit im selben Auftrag daraus ein PDF/DOCX/EPUB wird |
 | `make_document` | aus Markdown-Kapiteln **PDF, DOCX, EPUB oder HTML** (A4/A5, Cover, Bilder, Umlaute und türkische Zeichen); mit `html` aus **HTML+CSS** ein PDF mit freiem Layout (Vorlagen nachbauen, per WeasyPrint, lädt nur Dateien aus dem Projekt) |
-| `video_generate` | **KI-Videoclip** aus Text (optional mit Startbild), ca. 4–10 s. Anbieter: Googles Gemini-API (Modell hinter Google Flow, mit Startbild möglich) oder fal.ai (`VIDEO_PROVIDER=fal` + `FAL_KEY`, Standardmodell MiniMax H3 Max (0,03 $/s), nur Text). Standard aus, einschalten mit `VIDEO_PROVIDER=gemini` oder `fal`. **Kostet pro Sekunde Video**, ein Flow-/Google-One-Abo zählt hier nicht |
+| `video_generate` | **KI-Videoclip** aus Text oder Startbild über 12 Anbieter: Google Veo/Omni, OpenAI Sora, OpenRouter, Runway, Luma, **Kling**, **MiniMax Hailuo**, **Wan**, Seedance, **Higgsfield** (Standard MiniMax H3), fal.ai, Replicate. Standard aus, einschalten mit `VIDEO_PROVIDER=…` + Key, mehrere mit Komma getrennt. **Kostet pro Clip** beim Anbieter, App-Abos zählen meist nicht ([Anleitung](docs/videodienste.md)) |
+| `video_ai` | KI-Nachbearbeitung über fal.ai: Video **hochskalieren**, **Lippensync** zu einer Sprachaufnahme, **Geräusche** zum stummen Video. Einschalten mit `VIDEO_AI=fal` + `FAL_KEY` |
+| `sound_generate` | **Geräusche oder Musik** aus einer Beschreibung (ElevenLabs oder fal.ai), einschalten mit `AUDIO_PROVIDER` |
 | `media_info` | Dauer, Auflösung, Codecs |
 | `download_file` | PDFs, EPUB, Office, Audio, Video, ZIP aus dem Netz in `downloads/` laden |
 | `read_file` | liest Text, Markdown, HTML, **PDF, DOCX, EPUB**, auch lange Dateien in Abschnitten |
