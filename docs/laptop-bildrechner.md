@@ -9,42 +9,90 @@ Modell: FLUX.2 klein 4B (Apache 2.0, auch kommerziell nutzbar), auf 4 Bit verkle
 
 ## Was du brauchst
 
-- Windows 10/11, 64 Bit, mindestens 8 GB RAM, etwa 6 GB freier Platz
-- Laptop und Pi im selben Netz (oder beide in Tailscale)
+- Windows 10/11, 64 Bit, mindestens 8 GB RAM, etwa 6 GB freier Platz auf `C:`
+- PaperclipLite-Ordner auf dem Laptop (für das Einrichtungsskript), z. B. `C:\Users\<Name>\paperclip-lite`
 - Laptop am Strom, Energiesparen aus
 
-## 1. Programm herunterladen
+Wichtig: Auf der GitHub-Seite von stable-diffusion.cpp **nicht** die Ordner (`assets`, `docs`, `examples`) anklicken.
+Das sind nur Beispielbilder und Quelltext. Das fertige Programm liegt unter „Releases“, und das Skript unten lädt es
+von selbst.
 
-1. Auf <https://github.com/leejet/stable-diffusion.cpp/releases> die neueste Version öffnen.
-2. Unter „Assets“ die ZIP-Datei mit `win-avx2-x64` im Namen laden (ohne `cuda`/`rocm`).
-3. Nach `C:\bildrechner\` entpacken. Darin muss `sd-server.exe` liegen.
+## 1. Automatisch einrichten (empfohlen)
 
-## 2. Modelle herunterladen (zusammen ca. 5,2 GB)
+1. Startmenü → „PowerShell“ eingeben → **Windows PowerShell** öffnen (normal, nicht als Administrator).
+2. Diese Zeilen eingeben, jeweils mit Enter:
 
-In `C:\bildrechner\modelle\` speichern:
+   ```powershell
+   cd $HOME\paperclip-lite
+   git pull
+   powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1
+   ```
 
-| Datei | Größe | Link |
-| --- | --- | --- |
-| `flux-2-klein-4b-Q4_0.gguf` | 2,46 GB | <https://huggingface.co/leejet/FLUX.2-klein-4B-GGUF/resolve/main/flux-2-klein-4b-Q4_0.gguf> |
-| `Qwen3-4B-Q4_K_M.gguf` | 2,5 GB | <https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf> |
-| `full_encoder_small_decoder.safetensors` | 250 MB | <https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors> |
+3. Das Skript macht fünf Schritte und schreibt zu jedem „ok“ oder einen FEHLER mit Erklärung:
+   1. prüft RAM und freien Platz,
+   2. lädt das Programm (`sd-server.exe`, Datei `...-bin-win-cpu-x64.zip` aus den Releases) und entpackt es nach `C:\bildrechner\`,
+   3. lädt die drei Modelldateien (zusammen ca. 5 GB) nach `C:\bildrechner\modelle\`,
+   4. legt `C:\bildrechner\bildrechner-start.bat` ab,
+   5. fragt nach Administrator-Rechten für die Firewall-Regel (Ja klicken; nur nötig, wenn der Pi Bilder bestellt).
+4. Bricht der Download ab: denselben Befehl noch einmal starten. Fertige Dateien werden übersprungen, angefangene
+   fortgesetzt.
+5. Stürzt der Bildrechner später wegen Speichermangel ab: Skript mit `-Klein` am Ende erneut starten (kleineres
+   Sprachmodell, die Startdatei nimmt es dann von selbst).
 
-Reicht der Speicher nicht (Absturz, „out of memory“): statt `Qwen3-4B-Q4_K_M.gguf` die kleinere
-`Qwen3-4B-Q3_K_M.gguf` (2,08 GB) nehmen und in der Startdatei den Namen ändern.
+Danach sieht der Ordner so aus:
 
-## 3. Startdatei
+```
+C:\bildrechner\
+  sd-server.exe            (+ weitere .dll/.exe aus der ZIP-Datei)
+  bildrechner-start.bat
+  modelle\
+    flux-2-klein-4b-Q4_0.gguf                 2,46 GB
+    Qwen3-4B-Q4_K_M.gguf                      2,5 GB   (mit -Klein: Qwen3-4B-Q3_K_M.gguf, 2,08 GB)
+    full_encoder_small_decoder.safetensors    250 MB
+```
 
-`deploy/windows/bildrechner-start.bat` aus dem PaperclipLite-Ordner nach `C:\bildrechner\` kopieren und
-doppelklicken. Das Fenster muss offen bleiben. Beim ersten Start lädt es die Modelle (1–2 Minuten).
+## 2. Starten und prüfen
 
-Erst wenn im Fenster steht, dass der Server lauscht, Anfragen schicken: Eine Anfrage während des Ladens kann hängen bleiben
-([bekannter Fehler](https://github.com/leejet/stable-diffusion.cpp/issues/2081)), dann das Fenster schließen und neu starten.
+1. Doppelklick auf `C:\bildrechner\bildrechner-start.bat`. Ein schwarzes Fenster geht auf, **offen lassen**.
+2. 1–2 Minuten warten, bis die Modelle geladen sind. Vorher keine Bilder bestellen: Eine Anfrage während des Ladens
+   kann hängen bleiben ([bekannter Fehler](https://github.com/leejet/stable-diffusion.cpp/issues/2081)), dann
+   Fenster schließen und neu starten.
+3. Test im Browser auf dem Laptop: <http://127.0.0.1:1234> muss eine Seite zeigen.
+4. In der `.env` von PaperclipLite auf dem Laptop (`notepad .env`) genau diese zwei Zeilen aktiv:
 
-Test im Browser auf dem Laptop: <http://127.0.0.1:1234> sollte eine Seite zeigen.
+   ```
+   IMAGE_PROVIDER=sdcpp
+   SDCPP_URL=http://127.0.0.1:1234
+   ```
 
-Autostart: Win+R, `shell:startup` eingeben, eine Verknüpfung zur `.bat` hineinlegen.
+5. PaperclipLite neu starten (Startfenster schließen, `deploy\windows\paperclip-start.bat`) und prüfen:
+   `venv\Scripts\python.exe selftest.py web`. Das erzeugt zwei Testbilder und dauert mehrere Minuten.
 
-## 4. Firewall und Energiesparen (Eingabeaufforderung als Administrator)
+Meldet die Startdatei „sd-server.exe fehlt“ oder „Modelldatei fehlt“: Schritt 1 wiederholen.
+
+Autostart: Win+R, `shell:startup` eingeben, eine Verknüpfung zu `C:\bildrechner\bildrechner-start.bat` hineinlegen.
+
+## 3. Von Hand einrichten (nur falls das Skript nicht geht)
+
+1. <https://github.com/leejet/stable-diffusion.cpp/releases> öffnen, beim obersten Eintrag „Assets“ aufklappen.
+2. Die Datei mit **`bin-win-cpu-x64.zip`** im Namen laden (nicht `cuda`, `rocm`, `vulkan`, nicht „Source code“).
+3. Rechtsklick → „Alle extrahieren…“ → Ziel `C:\bildrechner`. Darin muss direkt `sd-server.exe` liegen
+   (liegt sie in einem Unterordner: dessen Inhalt nach `C:\bildrechner` verschieben).
+4. Ordner `C:\bildrechner\modelle` anlegen und diese drei Dateien hineinladen:
+
+   | Datei | Größe | Link |
+   | --- | --- | --- |
+   | `flux-2-klein-4b-Q4_0.gguf` | 2,46 GB | <https://huggingface.co/leejet/FLUX.2-klein-4B-GGUF/resolve/main/flux-2-klein-4b-Q4_0.gguf> |
+   | `Qwen3-4B-Q4_K_M.gguf` | 2,5 GB | <https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf> |
+   | `full_encoder_small_decoder.safetensors` | 250 MB | <https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors> |
+
+5. `deploy\windows\bildrechner-start.bat` aus dem PaperclipLite-Ordner nach `C:\bildrechner\` kopieren.
+6. Weiter mit Abschnitt 2.
+
+## 4. Firewall und Energiesparen
+
+Das Skript legt die Firewall-Regel an. Von Hand: Startmenü → „cmd“ → Rechtsklick → **Als Administrator ausführen**,
+dann (ohne `cd` davor):
 
 ```bat
 netsh advfirewall firewall add rule name="Bildrechner sd-server" dir=in action=allow protocol=TCP localport=1234 profile=private
@@ -59,7 +107,7 @@ den Port 1234 nie im Router freigeben.
 `ipconfig` in der Eingabeaufforderung, Zeile „IPv4-Adresse“, z. B. `192.168.1.50`. Im Router am besten
 eine feste Adresse für den Laptop einstellen, sonst ändert sie sich irgendwann.
 
-## 6. PaperclipLite auf dem Pi
+## 6. PaperclipLite auf dem Pi (bestellt beim Laptop)
 
 In `.env`:
 

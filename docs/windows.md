@@ -95,7 +95,8 @@ ohne Passwort (netplwiz) oder automatische Anmeldung einrichten, sonst startet n
 
 ## 5. Bildrechner auf demselben Laptop
 
-Wenn der Bildrechner ([Anleitung](laptop-bildrechner.md)) auf demselben Laptop läuft, in `.env`:
+Einrichten mit einem Befehl: `powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1`
+([Anleitung](laptop-bildrechner.md)). Läuft der Bildrechner auf demselben Laptop, in `.env`:
 
 ```
 IMAGE_PROVIDER=sdcpp
