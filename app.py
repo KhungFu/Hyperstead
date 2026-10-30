@@ -131,6 +131,52 @@ PROVIDERS = {
         "key_env": "QWEN_API_KEY",
         "model": "qwen-plus",
     },
+    "mistral": {
+        "label": "Mistral AI",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "models_url": "https://api.mistral.ai/v1/models",
+        "key_env": "MISTRAL_API_KEY",
+        "model": "mistral-small-latest",
+    },
+    "nvidia": {
+        "label": "NVIDIA NIM (build.nvidia.com)",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "models_url": "https://integrate.api.nvidia.com/v1/models",
+        "key_env": "NVIDIA_API_KEY",
+        "model": "meta/llama-3.3-70b-instruct",
+    },
+    "together": {
+        "label": "Together AI",
+        "url": "https://api.together.xyz/v1/chat/completions",
+        "models_url": "https://api.together.xyz/v1/models",
+        "key_env": "TOGETHER_API_KEY",
+        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    },
+    "perplexity": {
+        "label": "Perplexity (mit Websuche)",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "models_url": None,  # Perplexity hat keine Modellliste per API
+        "models": ["sonar", "sonar-pro", "sonar-reasoning-pro", "sonar-deep-research"],
+        "key_env": "PERPLEXITY_API_KEY",
+        "model": "sonar",
+    },
+    "huggingface": {
+        "label": "Hugging Face (Inference Router)",
+        "url": "https://router.huggingface.co/v1/chat/completions",
+        "models_url": "https://router.huggingface.co/v1/models",
+        "key_env": "HF_TOKEN",
+        "model": "meta-llama/Llama-3.3-70B-Instruct",
+    },
+    "cloudflare": {
+        "label": "Cloudflare Workers AI",
+        "url": f"https://api.cloudflare.com/client/v4/accounts/{os.environ.get('CF_ACCOUNT_ID', '').strip()}/ai/v1/chat/completions",
+        "models_url": None,
+        "models": ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/meta/llama-3.1-8b-instruct",
+                   "@cf/qwen/qwen2.5-coder-32b-instruct", "@cf/mistralai/mistral-small-3.1-24b-instruct"],
+        "key_env": "CF_API_TOKEN",
+        "needs_env": "CF_ACCOUNT_ID",
+        "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    },
     "ollama": {
         "label": "Ollama (lokal)",
         "url": os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/v1/chat/completions"),
@@ -404,6 +450,9 @@ def provider_configured(pid):
         return ALLOW_CLI and bool(shutil.which(PROVIDERS[pid]["bin"]))
     if pid == "ollama":
         return ollama_reachable()
+    need = PROVIDERS.get(pid, {}).get("needs_env")
+    if need and not os.environ.get(need, "").strip():
+        return False
     return bool(provider_keys(pid))
 
 
@@ -498,6 +547,8 @@ def est_cost(provider, model, tokens):
     if provider in FREE_PROVIDERS:
         return 0.0
     m = (model or "").lower()
+    if m.endswith(":free"):  # Gratis-Varianten (OpenRouter)
+        return 0.0
     for k, price in PRICES:
         if k in m:
             return round(tokens * price / 1_000_000, 6)
@@ -718,7 +769,7 @@ def list_models(pid, force=False):
     if cfg.get("kind") == "cli":
         return {**base, "models": cfg.get("models", [])}
     if pid in ("mock", "cli") or not cfg.get("models_url"):
-        return {**base, "models": [cfg["model"]] if cfg["model"] else []}
+        return {**base, "models": cfg.get("models") or ([cfg["model"]] if cfg["model"] else [])}
     hit = _models_cache.get(pid)
     if hit and not force and time.time() - hit[0] < 600:
         return hit[1]
@@ -735,7 +786,9 @@ def list_models(pid, force=False):
             r = requests.get(cfg["models_url"], headers=headers, timeout=15)
             if r.status_code != 200:
                 raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
-            ids = [str(m.get("id", "")).removeprefix("models/") for m in r.json().get("data", [])]
+            data = r.json()
+            items = data if isinstance(data, list) else data.get("data", [])  # Together liefert eine reine Liste
+            ids = [str(m.get("id", "")).removeprefix("models/") for m in items if isinstance(m, dict)]
             ids = sorted({i for i in ids if i and not any(x in i.lower() for x in _NOT_CHAT)})
             if ids:
                 res = {**base, "models": ids, "live": True}
@@ -3662,7 +3715,8 @@ def serve_file(pid, tok, rel):
 
 
 def default_provider():
-    for pid in ("anthropic", "openai", "openrouter", "groq", "gemini", "deepseek", "qwen"):
+    for pid in ("anthropic", "openai", "openrouter", "groq", "gemini", "deepseek", "qwen", "mistral", "nvidia",
+                "together", "perplexity", "huggingface", "cloudflare"):
         if provider_configured(pid):
             return pid
     return "ollama" if ollama_reachable() else "mock"
