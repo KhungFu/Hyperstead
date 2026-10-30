@@ -101,21 +101,21 @@ PROVIDERS = {
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "models_url": "https://openrouter.ai/api/v1/models",
         "key_env": "OPENROUTER_API_KEY",
-        "model": "openai/gpt-4o-mini",
+        "model": "openrouter/free",  # waehlt selbst ein gerade verfuegbares Gratis-Modell
     },
     "groq": {
         "label": "Groq",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "models_url": "https://api.groq.com/openai/v1/models",
         "key_env": "GROQ_API_KEY",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
     },
     "gemini": {
         "label": "Gemini",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "models_url": "https://generativelanguage.googleapis.com/v1beta/openai/models",
         "key_env": "GEMINI_API_KEY",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.1-flash-lite",
     },
     "deepseek": {
         "label": "DeepSeek",
@@ -634,7 +634,7 @@ def _call_llm(agent, messages, images=None):
     keys = provider_keys(pid)
     if not keys:
         raise RuntimeError(f"Kein API-Key fuer {cfg['label']} ({cfg['key_env']}) in .env")
-    model = agent.get("model") or cfg["model"]
+    model = agent.get("model") or default_model(pid)
     if images:
         messages = _with_images(cfg, messages, images)
     start = _key_idx.get(pid, 0)
@@ -716,6 +716,8 @@ def _post_openai(cfg, key, model, messages):
     body = {"model": model, "messages": messages, "temperature": 0.4}
     if MAX_OUTPUT:
         body["max_tokens"] = MAX_OUTPUT
+    elif cfg is PROVIDERS["openrouter"] and not model.endswith((":free", "openrouter/free")):
+        body["max_tokens"] = 8192  # ohne Angabe reserviert OpenRouter die Hoechstlaenge und meldet bei wenig Guthaben 402
     # Lokale Modelle (Ollama) antworten auf dem Pi sehr langsam -> eigenes, grosszuegiges Zeitlimit
     tmo = int(os.environ.get("OLLAMA_TIMEOUT", "900")) if cfg is PROVIDERS["ollama"] else 180
     return requests.post(cfg["url"], headers=headers, timeout=tmo, json=body)
@@ -759,6 +761,28 @@ def _parse_reply(cfg, d, messages):
 _models_cache = {}
 _NOT_CHAT = ("embed", "whisper", "tts", "moderation", "dall-e", "imagen", "veo", "aqa", "transcribe", "realtime",
              "audio", "guard", "rerank", "image", "vision-preview", "babbage", "davinci", "speech")
+
+
+_MODEL_PREF = {"gemini": ("flash-lite", "flash"), "groq": ("gpt-oss-120b", "gpt-oss", "llama"),
+               "openrouter": (":free",), "mistral": ("small",), "nvidia": ("llama", "nemotron")}
+
+
+def default_model(pid):
+    """Standardmodell des Anbieters; steht es nicht mehr in der Live-Liste, ein passendes vorhandenes nehmen
+    (Anbieter schalten Modelle laufend ab, z. B. Groq llama-3.3-70b-versatile, Gemini 2.0/2.5)."""
+    cfg = PROVIDERS.get(pid) or {}
+    m = cfg.get("model", "")
+    if not cfg.get("models_url") or cfg.get("kind") == "cli" or pid == "ollama" or not provider_keys(pid):
+        return m
+    lm = list_models(pid)
+    ids = lm.get("models") or []
+    if not lm.get("live") or m in ids or not ids:
+        return m
+    for want in _MODEL_PREF.get(pid, ()):
+        hit = [i for i in ids if want in i and not any(x in i for x in ("image", "tts", "vision", "audio", "guard"))]
+        if hit:
+            return sorted(hit)[-1]  # neueste Version steht alphabetisch meist hinten
+    return ids[0]
 
 
 def list_models(pid, force=False):
@@ -1890,7 +1914,7 @@ def model_health(refresh=False, cached_only=False):
         cfg = PROVIDERS.get(pid)
         if not cfg or pid in ("mock", "cli") or cfg.get("kind") == "cli":
             continue
-        eff = a["model"] or cfg["model"]
+        eff = a["model"] or (cfg["model"] if cached_only and pid not in _models_cache else default_model(pid))
         reason = ""
         if (pid, eff) in _bad_models and time.time() - _bad_models[(pid, eff)] < 86400:
             reason = "Der Anbieter hat das Modell bei einem Aufruf abgelehnt (nicht gefunden)."
@@ -2915,7 +2939,8 @@ def api_agents_all():
     for r in rows:
         cfg = PROVIDERS.get(r["provider"] or "")
         r["provider_label"] = cfg["label"] if cfg else ("noch keine KI" if not r["provider"] else r["provider"])
-        r["effective"] = r["model"] or (cfg["model"] if cfg else "")
+        r["effective"] = r["model"] or ((cfg["model"] if r["provider"] not in _models_cache else default_model(r["provider"]))
+                                        if cfg else "")
     return jsonify(rows)
 
 

@@ -1707,8 +1707,10 @@ def _secs(v, default=None):
 
 
 def _find_font(bold=False):
-    names = (["DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf"] if bold else ["DejaVuSans.ttf", "LiberationSans-Regular.ttf"])
-    for d in ("/usr/share/fonts/truetype/dejavu", "/usr/share/fonts/truetype/liberation", "/usr/share/fonts/TTF", "/usr/share/fonts"):
+    names = (["DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "arialbd.ttf"] if bold
+             else ["DejaVuSans.ttf", "LiberationSans-Regular.ttf", "arial.ttf"])
+    for d in ("/usr/share/fonts/truetype/dejavu", "/usr/share/fonts/truetype/liberation", "/usr/share/fonts/TTF", "/usr/share/fonts",
+              os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts")):
         for n in names:
             if os.path.exists(os.path.join(d, n)):
                 return os.path.join(d, n)
@@ -2175,10 +2177,14 @@ def _img_path(root, rel):
         return None
 
 
+_WIN_FONTS = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts") + os.sep
 _FONT_SETS = [
     ("DejaVuSerif", "/usr/share/fonts/truetype/dejavu/", ("DejaVuSerif.ttf", "DejaVuSerif-Bold.ttf", "DejaVuSerif-Italic.ttf", "DejaVuSerif-BoldItalic.ttf")),
     ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/", ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans-Oblique.ttf", "DejaVuSans-BoldOblique.ttf")),
     ("LiberationSerif", "/usr/share/fonts/truetype/liberation/", ("LiberationSerif-Regular.ttf", "LiberationSerif-Bold.ttf", "LiberationSerif-Italic.ttf", "LiberationSerif-BoldItalic.ttf")),
+    # Windows: Systemschriften mit Umlauten und Tuerkisch
+    ("Georgia", _WIN_FONTS, ("georgia.ttf", "georgiab.ttf", "georgiai.ttf", "georgiaz.ttf")),
+    ("Arial", _WIN_FONTS, ("arial.ttf", "arialbd.ttf", "ariali.ttf", "arialbi.ttf")),
 ]
 
 
