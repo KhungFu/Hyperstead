@@ -172,6 +172,7 @@ This list is extended with every change to the program. Each row says what the s
 | Model file (Windows, image computer) | The start file names the missing file and does not start. If only the large language model (`Qwen3-4B-Q4_K_M.gguf`) is missing, it uses the smaller one if present. | Run the set-up script again; it only downloads the missing file. |
 | Windows runtime `VCOMP140.DLL` | `sd-server.exe` reports „VCOMP140.DLL nicht gefunden“ (not found) and aborts. | Run the set-up script again (step 3 installs the runtime), then open the start file. |
 | Firewall rule for port 1234 (Windows) | Only the Pi cannot reach the image computer. The laptop itself keeps working. | Run the command from [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md), section 4, as administrator. |
+| `FAL_KEY` (with `VIDEO_PROVIDER=fal`) | Video generation reports „VIDEO_PROVIDER=fal, aber FAL_KEY fehlt“. The self-test shows FEHLT (missing). | Enter the fal.ai key in `.env`, or leave `VIDEO_PROVIDER` empty. |
 | `ffmpeg`, `tesseract`, `pdftoppm`, speech output | The function is missing. Agents that need it report the error in the result. The self-test shows FEHLER (Pi) or FEHLT (Windows). | Install the program (commands in the self-test and in [docs/windows.md](docs/windows.md)). |
 | Telegram token or chat ID | Telegram stays off, everything else runs. The self-test shows FEHLT. | Only needed if you want messages on your phone. |
 | A folder or file in the project (`wissen/`, `input/`) | Folders that do not exist count as empty. The agents keep working without company knowledge. | Create or upload the file or folder in the project. |
@@ -267,7 +268,7 @@ With the right **create media & documents** (and `ffmpeg`/fonts on the Pi, see `
 | `speak` | text to speaker audio (espeak-ng offline; better: Piper; optional Edge voices) |
 | `write_file` | with the right **write files**: creates chapters, HTML, CSV etc. immediately, so that a PDF/DOCX/EPUB can be made from them in the same task |
 | `make_document` | from Markdown chapters **PDF, DOCX, EPUB or HTML** (A4/A5, cover, images, umlauts and Turkish characters); with `html` a PDF with free layout from **HTML+CSS** (rebuild templates, via WeasyPrint, loads only files from the project) |
-| `video_generate` | **AI video clip** from text (optionally with a start image), about 4–10 s, via Google's Gemini API (the model behind Google Flow). Off by default, switch on with `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Costs per second of video**; a Flow/Google One subscription does not count here |
+| `video_generate` | **AI video clip** from text (optionally with a start image), about 4–10 s. Providers: Google's Gemini API (the model behind Google Flow, start image possible) or fal.ai (`VIDEO_PROVIDER=fal` + `FAL_KEY`, default model Kling, text only). Off by default, switch on with `VIDEO_PROVIDER=gemini` or `fal`. **Costs per second of video**; a Flow/Google One subscription does not count here |
 | `media_info` | duration, resolution, codecs |
 | `download_file` | download PDFs, EPUB, Office, audio, video, ZIP from the internet into `downloads/` |
 | `read_file` | reads text, Markdown, HTML, **PDF, DOCX, EPUB**, also long files in sections |

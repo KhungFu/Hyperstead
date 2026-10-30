@@ -76,7 +76,7 @@ TOOLS = {
      ueber viele Bilder gleich bleiben (bei Serien IMMER dieselben Referenzbilder mitgeben); "format": "quadrat" | "hoch" | "quer";
      "path": "karten/bilder/k01.png" = fester Zielpfad in assets/, output/ oder karten/ (vorhandene Datei wird ersetzt);
      "quality": "low" | "medium" | "high" (nur OpenAI, high kostet mehr). Danach mit view_image pruefen."""),
-    "video_generate": ("media", """{"tool": "video_generate", "prompt": "Szene: Ort, Figuren, Handlung, Kamera, Licht, Ton", "name": "szene1"}  Kurzen Videoclip per KI erzeugen (Google Veo/Omni, ca. 4-10 s, kostet pro Sekunde), Ergebnis in output/.
+    "video_generate": ("media", """{"tool": "video_generate", "prompt": "Szene: Ort, Figuren, Handlung, Kamera, Licht, Ton", "name": "szene1"}  Kurzen Videoclip per KI erzeugen (Google Veo/Omni oder fal.ai, ca. 4-10 s, kostet pro Sekunde), Ergebnis in output/.
      optional: aspect 16:9|9:16, resolution 720p|1080p, image (Startbild im Projekt, z.B. assets/figur.png), continue_id (ID aus einem frueheren Ergebnis: Clip fortsetzen, nur Omni).
      Laengere Filme: mehrere Clips erzeugen und mit video_edit op=concat zusammensetzen. Gleiche Figuren in jedem Prompt gleich beschreiben"""),
     "list_files": ("read_files", '{"tool": "list_files", "path": ""}  Dateien im Projektordner auflisten (input/ = vom Besitzer hochgeladen, '
@@ -459,15 +459,26 @@ MAX_VIDEO_BYTES = 300_000_000
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
+FAL_BASE = "https://queue.fal.run/"
+FAL_VIDEO_MODEL = "fal-ai/kling-video/v2.5-turbo/pro/text-to-video"
+
+
 def video_enabled():
-    """Standard aus: erst mit VIDEO_PROVIDER=gemini (kostet pro Sekunde Video)."""
-    return _env("VIDEO_PROVIDER").lower() == "gemini"
+    """Standard aus: erst mit VIDEO_PROVIDER=gemini oder fal (kostet pro Sekunde Video)."""
+    return _env("VIDEO_PROVIDER").lower() in ("gemini", "fal")
 
 
 def _gemini_key():
     key = _env("GEMINI_API_KEY").split(",")[0].strip()
     if not key:
         raise ToolError("VIDEO_PROVIDER=gemini, aber GEMINI_API_KEY fehlt")
+    return key
+
+
+def _fal_key():
+    key = _env("FAL_KEY").split(",")[0].strip()
+    if not key:
+        raise ToolError("VIDEO_PROVIDER=fal, aber FAL_KEY fehlt")
     return key
 
 
@@ -492,7 +503,9 @@ def _video_image(root, rel):
 
 
 def _download_video(url, key, dst):
-    with requests.get(url, headers={"x-goog-api-key": key}, stream=True, timeout=300, allow_redirects=True) as r:
+    # Ohne Schluessel (fal-CDN) wird kein Schluessel mitgeschickt
+    headers = {"x-goog-api-key": key} if key else {}
+    with requests.get(url, headers=headers, stream=True, timeout=300, allow_redirects=True) as r:
         if r.status_code >= 400:
             raise ToolError(f"Video-Download fehlgeschlagen (HTTP {r.status_code})")
         size = 0
@@ -560,23 +573,60 @@ def _veo_video(key, model, call, root, deadline):
     return None, uri, None
 
 
+def _fal_video(key, call, deadline):
+    if call.get("image"):
+        raise ToolError("Das fal-Standardmodell macht nur Text-zu-Video. Fuer Bild-zu-Video VIDEO_MODEL auf ein Bild-zu-Video-Modell setzen (siehe fal.ai) und ohne image aufrufen")
+    # VIDEO_MODEL ist bei fal ein Endpunkt wie fal-ai/...; ohne Schraegstrich gilt der Standard
+    model = _env("VIDEO_MODEL").strip("\"' \r")
+    if "/" not in model:
+        model = FAL_VIDEO_MODEL
+    inputs = {"prompt": str(call.get("prompt") or "").strip()[:2000]}
+    if call.get("aspect") in ("16:9", "9:16", "1:1"):
+        inputs["aspect_ratio"] = call["aspect"]
+    h = {"Authorization": "Key " + key}
+    sub = _gjson(requests.post(FAL_BASE + model, headers=h, json=inputs, timeout=60))
+    status_url, response_url = sub.get("status_url"), sub.get("response_url")
+    if not status_url or not response_url:
+        raise ToolError("fal: unerwartete Antwort beim Einreichen: " + _clip(json.dumps(sub), 300))
+    while True:
+        st = _gjson(requests.get(status_url, headers=h, timeout=60))
+        if st.get("status") == "COMPLETED":
+            break
+        if st.get("status") not in ("IN_QUEUE", "IN_PROGRESS"):
+            raise ToolError("Video wurde nicht erzeugt: " + _clip(json.dumps(st), 300))
+        if time.time() > deadline:
+            raise ToolError("Zeitlimit fuer die Videoerzeugung erreicht (PCL_VIDEO_TIMEOUT)")
+        time.sleep(5)
+    res = _gjson(requests.get(response_url, headers=h, timeout=60))
+    uri = (res.get("video") or {}).get("url")
+    if not uri:
+        raise ToolError("Kein Video in der Antwort (Prompt evtl. vom Sicherheitsfilter abgelehnt): " + _clip(json.dumps(res), 300))
+    return None, uri, None
+
+
 def video_generate(root, call):
-    if not video_enabled():
-        raise ToolError("Videoerzeugung ist aus (VIDEO_PROVIDER=gemini in .env setzen)")
+    provider = _env("VIDEO_PROVIDER").lower()
+    if provider not in ("gemini", "fal"):
+        raise ToolError("Videoerzeugung ist aus (VIDEO_PROVIDER=gemini oder fal in .env setzen)")
     if not str(call.get("prompt") or "").strip():
         raise ToolError("prompt fehlt")
-    key = _gemini_key()
-    model = _model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")
     deadline = time.time() + int(_env("PCL_VIDEO_TIMEOUT", "900") or 900)
-    gen = _veo_video if model.startswith("veo") else _omni_video
-    data, uri, iid = gen(key, model, call, root, deadline)
+    if provider == "fal":
+        key = _fal_key()
+        data, uri, iid = _fal_video(key, call, deadline)
+    else:
+        key = _gemini_key()
+        model = _model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")
+        gen = _veo_video if model.startswith("veo") else _omni_video
+        data, uri, iid = gen(key, model, call, root, deadline)
     dst = _out_path(root, call, "video", "mp4")
     if data is not None:
         if len(data) > MAX_VIDEO_BYTES:
             raise ToolError("Video ist zu gross")
         dst.write_bytes(data)
     else:
-        _download_video(uri, key, dst)
+        # Der fal-Schluessel geht nie an den Download-Server
+        _download_video(uri, key if provider == "gemini" else "", dst)
     rel = _rel(root, dst)
     try:
         p = _probe(dst)

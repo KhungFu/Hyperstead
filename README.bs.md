@@ -172,6 +172,7 @@ Ova lista se dopunjava pri svakoj promjeni programa. Svaki red kaže šta sistem
 | Fajl modela (Windows, računar za slike) | Startni fajl navodi nedostajući fajl i ne pokreće se. Ako nedostaje samo veliki jezički model (`Qwen3-4B-Q4_K_M.gguf`), koristi manji, ako postoji. | Ponovo pokrenite skriptu za podešavanje; preuzima samo nedostajući fajl. |
 | Windows runtime `VCOMP140.DLL` | `sd-server.exe` javlja „VCOMP140.DLL nicht gefunden“ (nije pronađen) i prekida rad. | Ponovo pokrenite skriptu za podešavanje (korak 3 instalira runtime), pa otvorite startni fajl. |
 | Pravilo firewall-a za port 1234 (Windows) | Samo Pi ne može doći do računara za slike. Sam laptop radi dalje. | Pokrenite komandu iz [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md), odjeljak 4, kao administrator. |
+| `FAL_KEY` (uz `VIDEO_PROVIDER=fal`) | Generisanje videa javlja „VIDEO_PROVIDER=fal, aber FAL_KEY fehlt“. Samoprovjera prikazuje FEHLT. | Unesite fal.ai ključ u `.env`, ili ostavite `VIDEO_PROVIDER` prazan. |
 | `ffmpeg`, `tesseract`, `pdftoppm`, glasovni izlaz | Funkcija nedostaje. Agenti koji je traže prijavljuju grešku u rezultatu. Samoprovjera prikazuje FEHLER (Pi) odnosno FEHLT (Windows). | Instalirajte program (komande u samoprovjeri i u [docs/windows.md](docs/windows.md)). |
 | Telegram token ili ID čata | Telegram ostaje isključen, sve ostalo radi. Samoprovjera prikazuje FEHLT. | Potrebno samo ako želite poruke na telefonu. |
 | Folder ili fajl u projektu (`wissen/`, `input/`) | Folderi koji ne postoje smatraju se praznim. Agenti rade dalje bez znanja o firmi. | Napravite ili otpremite fajl ili folder u projektu. |
@@ -267,7 +268,7 @@ Uz pravo **pravljenje medija i dokumenata** (i `ffmpeg`/fontovi na Pi-ju, vidi `
 | `speak` | pretvara tekst u glas govornika (espeak-ng offline; bolje: Piper; opciono Edge glasovi) |
 | `write_file` | uz pravo **pisanje fajlova**: odmah pravi poglavlja, HTML, CSV itd., tako da se u istom zadatku od njih može napraviti PDF/DOCX/EPUB |
 | `make_document` | iz Markdown poglavlja **PDF, DOCX, EPUB ili HTML** (A4/A5, naslovna strana, slike, dijakritici i turski znakovi); sa `html` PDF slobodnog rasporeda iz **HTML+CSS** (pravljenje šablona, preko WeasyPrint-a, učitava samo fajlove iz projekta) |
-| `video_generate` | **AI video klip** iz teksta (opciono sa početnom slikom), oko 4–10 s, preko Google Gemini API-ja (model iza Google Flow-a). Podrazumijevano isključeno, uključuje se sa `VIDEO_PROVIDER=gemini` + `GEMINI_API_KEY`. **Naplaćuje se po sekundi videa**; Flow/Google One pretplata se ovdje ne računa |
+| `video_generate` | **AI video klip** iz teksta (opciono sa početnom slikom), oko 4–10 s. Dobavljači: Google Gemini API (model iza Google Flow-a, moguća početna slika) ili fal.ai (`VIDEO_PROVIDER=fal` + `FAL_KEY`, standardni model Kling, samo tekst). Podrazumijevano isključeno, uključuje se sa `VIDEO_PROVIDER=gemini` ili `fal`. **Naplaćuje se po sekundi videa**; Flow/Google One pretplata se ovdje ne računa |
 | `media_info` | trajanje, rezolucija, kodeci |
 | `download_file` | preuzima PDF, EPUB, Office, audio, video, ZIP sa interneta u `downloads/` |
 | `read_file` | čita tekst, Markdown, HTML, **PDF, DOCX, EPUB**, i duge fajlove po dijelovima |
