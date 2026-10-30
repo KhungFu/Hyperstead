@@ -191,7 +191,6 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | Datoteka modela (Windows, računalo za slike) | Startna datoteka navodi nedostajuću datoteku i ne pokreće se. Ako nedostaje samo veliki jezični model (`Qwen3-4B-Q4_K_M.gguf`), koristi se manji, ako postoji. | Ponovno pokrenite skriptu za postavljanje; preuzima samo nedostajuću datoteku. |
 | Windows runtime `VCOMP140.DLL` | `sd-server.exe` javlja „VCOMP140.DLL nicht gefunden“ (nije pronađen) i prekida rad. | Ponovno pokrenite skriptu za postavljanje (korak 3 instalira runtime), pa otvorite startnu datoteku. |
 | Pravilo vatrozida za port 1234 (Windows) | Samo Pi ne može doći do računala za slike. Sam laptop radi dalje. | Pokrenite naredbu iz [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md), odjeljak 4, kao administrator. |
-| `FAL_KEY` (uz `VIDEO_PROVIDER=fal`) | Generiranje videa javlja „VIDEO_PROVIDER=fal, aber FAL_KEY fehlt“. Samoprovjera prikazuje FEHLT. | Unesite fal.ai ključ u `.env` ili ostavite `VIDEO_PROVIDER` prazan. |
 | `ffmpeg`, `tesseract`, `pdftoppm`, glasovni izlaz | Funkcija nedostaje. Agenti koji je traže javljaju pogrešku u rezultatu. Samoprovjera prikazuje FEHLER (Pi) odnosno FEHLT (Windows). | Instalirajte program (naredbe u samoprovjeri i u [docs/windows.md](docs/windows.md)). |
 | Blender (alat `film`) | `save`, `check`, `voices` i `assemble` i dalje rade. `preview` i `render` javljaju „Blender wurde nicht gefunden“ (Blender nije pronađen) uz napomenu o `BLENDER_PATH`. Samoprovjera prikazuje FEHLT. | Instalirajte Blender (`winget install BlenderFoundation.Blender`) ili postavite `BLENDER_PATH` u `.env`, ponovno pokrenite. |
 | `film/film.json` (scenarij) | `film` javlja „film/film.json fehlt“ (nedostaje) i traži da se prvo s `op=save` spremi scenarij. Neispravan scenarij se ne sprema, odgovor navodi sve pogreške. | Ništa, agenti ga sami izrađuju. Možete ga napisati i ručno ([docs/filmstudio.md](docs/filmstudio.md)). |
@@ -200,6 +199,11 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | Govor za film | `voices`/`render` se prekidaju porukom „Keine Sprachausgabe verfügbar“ (nema govora). Scene bez dijaloga i dalje rade. | Kao kod „govora“ iznad (na Windowsu `edge-tts` + `TTS_ENGINE=edge`). |
 | Telegram token ili ID chata | Telegram ostaje isključen, sve ostalo radi. Samoprovjera prikazuje FEHLT. | Potrebno samo ako želite poruke na telefonu. |
 | Mapa ili datoteka u projektu (`wissen/`, `input/`) | Mape koje ne postoje smatraju se praznima. Agenti rade dalje bez znanja o tvrtki. | Stvorite ili otpremite datoteku ili mapu u projektu. |
+| Ključ video pružatelja (npr. `KLING_SECRET_KEY`, `HIGGSFIELD_API_KEY_SECRET`) | `video_generate` javlja „VIDEO_PROVIDER=…, aber … fehlt“ i ništa ne stvara; ostali pružatelji s popisa rade dalje. Samoprovjera prikazuje pružatelja kao FEHLT. | Unesite ključ ([docs/videodienste.md](docs/videodienste.md)) ili uklonite pružatelja iz `VIDEO_PROVIDER`, ponovno pokrenite. |
+| Kredit kod video pružatelja | Pružatelj odgovara pogreškom (često HTTP 402/429 ili „insufficient balance“), agent dobiva tekst u rezultatu. Nijedan drugi pružatelj ne uskače. | Nadoplatite kredit ili odaberite drugog pružatelja preko `provider` ili u `VIDEO_PROVIDER`. |
+| `FAL_KEY` (uz `VIDEO_PROVIDER=fal`, `VIDEO_AI=fal` ili `AUDIO_PROVIDER=fal`) | `video_generate`, `video_ai` odnosno `sound_generate` javlja „FAL_KEY fehlt“ i ništa ne stvara. | Unesite ključ s fal.ai ili uklonite redak `VIDEO_AI`/`AUDIO_PROVIDER`. |
+| `ELEVENLABS_API_KEY` ili `OPENAI_API_KEY` za glasove iz oblaka (`TTS_ENGINE=elevenlabs` ili `openai`) | `speak` javlja da ključ nedostaje. Tada nema zamjenskog glasa, a i film se prekida kod dijaloga. | Unesite ključ ili postavite `TTS_ENGINE=auto`. |
+| `video_providers.py` (programska datoteka) | Alati za video, zvuk i glasove iz oblaka nestaju za agente, sve ostalo radi dalje. | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 
 ## Pristup s interneta
 
@@ -289,11 +293,13 @@ Uz pravo **izrade medija i dokumenata** (i `ffmpeg`/fontovi na Pi-ju, vidi `inst
 | Alat | Što može |
 |---|---|
 | `video_edit` | reže video (`trim`), spaja (`concat`), **animaciju slideshowa sa zumom** iz slika (`slideshow`, neobavezno sa zvukom), dodaje tekst/titlove/logo, mijenja ili miješa zvuk, mijenja brzinu, pretvara u GIF/WebM/MP3, izvlači nepomičan kadar |
-| `speak` | pretvara tekst u glas govornika (espeak-ng offline; bolje: Piper; neobavezno Edge glasovi), uz `voice`, `pitch`, `rate` za različite glasove |
+| `speak` | pretvara tekst u glas govornika (espeak-ng offline; bolje: Piper; neobavezno Edge glasovi ili glasovi iz oblaka ElevenLabs/OpenAI preko `TTS_ENGINE`), uz `voice`, `pitch`, `rate` za različite glasove |
 | `film` | **animirani film uz Blender**: scenarij kao JSON, likovi (pas, mačka, zec, medvjed, miš, čovjek, vlastite slike ili `.blend` likovi), glasovi s pokretima usta, pokreti, kamera, slika pregleda, renderiranje scenu po scenu, montaža s titlovima ([upute](docs/filmstudio.md)) |
 | `write_file` | uz pravo **pisanje datoteka**: odmah izrađuje poglavlja, HTML, CSV itd., tako da se u istom zadatku od njih može napraviti PDF/DOCX/EPUB |
 | `make_document` | iz Markdown poglavlja **PDF, DOCX, EPUB ili HTML** (A4/A5, naslovna stranica, slike, dijakritici i turski znakovi); s `html` PDF slobodnog rasporeda iz **HTML+CSS** (izrada predložaka, preko WeasyPrinta, učitava samo datoteke iz projekta) |
-| `video_generate` | **AI video isječak** iz teksta (neobavezno s početnom slikom), oko 4–10 s. Pružatelji: Googleov Gemini API (model iza Google Flowa, moguća početna slika) ili fal.ai (`VIDEO_PROVIDER=fal` + `FAL_KEY`, zadani model MiniMax H3 Max (0,03 $/s), samo tekst). Zadano isključeno, uključuje se s `VIDEO_PROVIDER=gemini` ili `fal`. **Naplaćuje se po sekundi videa**; Flow/Google One pretplata se ovdje ne računa |
+| `video_generate` | **AI video isječak** iz teksta ili početne slike preko 12 pružatelja: Google Veo/Omni, OpenAI Sora, OpenRouter, Runway, Luma, **Kling**, **MiniMax Hailuo**, **Wan**, Seedance, **Higgsfield** (zadano MiniMax H3), fal.ai, Replicate. Zadano isključeno, uključuje se s `VIDEO_PROVIDER=…` + ključ, više njih odvojenih zarezom. **Naplaćuje se po isječku** kod pružatelja, pretplate na aplikacije se uglavnom ne računaju ([upute](docs/videodienste.md), na njemačkom) |
+| `video_ai` | AI obrada preko fal.ai: **povećanje razlučivosti** videa, **sinkronizacija usana** sa snimkom glasa, **zvučni efekti** za nijemi video. Uključuje se s `VIDEO_AI=fal` + `FAL_KEY` |
+| `sound_generate` | **zvučni efekti ili glazba** iz opisa (ElevenLabs ili fal.ai), uključuje se s `AUDIO_PROVIDER` |
 | `media_info` | trajanje, rezolucija, kodeci |
 | `download_file` | preuzima PDF, EPUB, Office, audio, video, ZIP s interneta u `downloads/` |
 | `read_file` | čita tekst, Markdown, HTML, **PDF, DOCX, EPUB**, i duge datoteke po dijelovima |

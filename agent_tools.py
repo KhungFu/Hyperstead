@@ -76,9 +76,16 @@ TOOLS = {
      ueber viele Bilder gleich bleiben (bei Serien IMMER dieselben Referenzbilder mitgeben); "format": "quadrat" | "hoch" | "quer";
      "path": "karten/bilder/k01.png" = fester Zielpfad in assets/, output/ oder karten/ (vorhandene Datei wird ersetzt);
      "quality": "low" | "medium" | "high" (nur OpenAI, high kostet mehr). Danach mit view_image pruefen."""),
-    "video_generate": ("media", """{"tool": "video_generate", "prompt": "Szene: Ort, Figuren, Handlung, Kamera, Licht, Ton", "name": "szene1"}  Kurzen Videoclip per KI erzeugen (Google Veo/Omni oder fal.ai, ca. 4-10 s, kostet pro Sekunde), Ergebnis in output/.
-     optional: aspect 16:9|9:16, resolution 720p|1080p, image (Startbild im Projekt, z.B. assets/figur.png), continue_id (ID aus einem frueheren Ergebnis: Clip fortsetzen, nur Omni).
+    "video_generate": ("media", """{"tool": "video_generate", "prompt": "Szene: Ort, Figuren, Handlung, Kamera, Licht, Ton", "name": "szene1"}  Kurzen Videoclip per KI erzeugen (ca. 4-15 s, kostet pro Clip/Sekunde), Ergebnis in output/.
+     optional: provider (einer der eingeschalteten Videoanbieter, Standard = erster), aspect 16:9|9:16|1:1, resolution 720p|1080p, seconds (Laenge),
+     image (Startbild im Projekt, z.B. assets/figur.png, oder https-Adresse), continue_id (ID aus einem frueheren Ergebnis: Clip fortsetzen, nur gemini/openai).
      Laengere Filme: mehrere Clips erzeugen und mit video_edit op=concat zusammensetzen. Gleiche Figuren in jedem Prompt gleich beschreiben"""),
+    "video_ai": ("media", """{"tool": "video_ai", "op": "upscale", "input": "output/szene1.mp4"}  KI-Nachbearbeitung eines Videos (fal.ai, kostet), Ergebnis in output/:
+     op=upscale: input, scale 2-4 (hoehere Aufloesung, schaerfer) | op=lipsync: input (Video mit Gesicht), audio (Sprache, z.B. aus speak) = Lippen passend zur Sprache |
+     op=sound: input, prompt (welche Geraeusche) = passender Ton/Geraeusche zum stummen Video. Videos max. 50 MB"""),
+    "sound_generate": ("media", '{"tool": "sound_generate", "prompt": "Regen auf Blechdach, entfernter Donner", "kind": "sfx", "seconds": 8, "name": "regen"}  '
+                                'Geraeusch (kind sfx) oder Musik (kind music, z.B. "ruhige Klaviermusik, traurig") per KI erzeugen, Ergebnis in output/audio/. '
+                                'Ins Video mit video_edit add_audio mode mix'),
     "list_files": ("read_files", '{"tool": "list_files", "path": ""}  Dateien im Projektordner auflisten (input/ = vom Besitzer hochgeladen, '
                                  'assets/ = Bilder, downloads/ = geladene Dateien, output/ = fertige Medien/Dokumente)'),
     "read_file": ("read_files", '{"tool": "read_file", "path": "datei.pdf", "offset": 0}  Datei lesen: Text, Markdown, HTML, PDF, DOCX, EPUB. '
@@ -113,7 +120,8 @@ TOOLS = {
      op=frame: input, at (Sekunde) -> PNG-Standbild
      optional bei allen: name (Dateiname des Ergebnisses ohne Endung)"""),
     "speak": ("media", '{"tool": "speak", "text": "Sprechertext", "lang": "de", "name": "sprecher1"}  Text zu gesprochener Audiodatei (output/audio/). lang: de, en, tr ... '
-                       'Optional eigene Stimme: voice (espeak-Variante m1-m7/f1-f5, Piper-Modell x.onnx oder Edge-Stimme), pitch 0-99 (50 normal), rate 0.5-2'),
+                       'Optional eigene Stimme: voice (espeak-Variante m1-m7/f1-f5, Piper-Modell x.onnx, Edge-Stimme, ElevenLabs-Stimmen-ID oder OpenAI-Stimme '
+                       'wie nova/onyx, je nach TTS_ENGINE), pitch 0-99 (50 normal), rate 0.5-2'),
     "film": ("media", """{"tool": "film", "op": "...", ...}  ANIMATIONSFILM (Blender, Figuren mit Stimmen, Lippensync, Kamera). Drehbuch = film/film.json:
      {"titel": "Bello und der Ball", "aufloesung": "640x360", "fps": 12,
       "figuren": {"Bello": {"art": "hund", "farbe": "#c8843c", "farbe2": "#f6e7d0", "stimme": {"lang": "de", "voice": "m3", "pitch": 40}},
@@ -150,6 +158,8 @@ def available(perms):
             if (perms.get(right) or (n == "make_document" and perms.get("write_files"))  # Dokumente bauen gehoert zum Dateien schreiben
                 or (n == "image_generate" and perms.get("media")))  # Bilder erzeugen gehoert auch zu den Medien
             and (n != "video_generate" or video_enabled())
+            and (n != "video_ai" or _vp_on("video_ai_enabled"))
+            and (n != "sound_generate" or _vp_on("audio_provider"))
             and (n != "browse_page" or browser_enabled())
             and (n != "run_code" or run_enabled())]
 
@@ -473,32 +483,33 @@ def _sniff(data):
     return None
 
 
-# ------------------------------------------------------------------------- Video per KI (Google)
+# ------------------------------------------------------------------------- Video per KI (Google; weitere Anbieter in video_providers.py)
 MAX_VIDEO_BYTES = 300_000_000
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
-FAL_BASE = "https://queue.fal.run/"
-# Guenstigster Endpunkt mit bekanntem Preis (fal.ai/pricing: 0,03 $/s). Andere: VIDEO_MODEL
-FAL_VIDEO_MODEL = "minimax/h3-max/text-to-video"
+def _vp():
+    import video_providers  # erst hier: video_providers importiert dieses Modul
+    return video_providers
+
+
+def _vp_on(flag):
+    """Schalter aus video_providers; fehlt die Datei, sind die Video-/Tonwerkzeuge einfach unsichtbar."""
+    try:
+        return bool(getattr(_vp(), flag)())
+    except ImportError:
+        return False
 
 
 def video_enabled():
-    """Standard aus: erst mit VIDEO_PROVIDER=gemini oder fal (kostet pro Sekunde Video)."""
-    return _env("VIDEO_PROVIDER").lower() in ("gemini", "fal")
+    """Standard aus: erst mit VIDEO_PROVIDER=<anbieter>[,<anbieter>...] (kostet pro Clip)."""
+    return _vp_on("providers")
 
 
 def _gemini_key():
     key = _env("GEMINI_API_KEY").split(",")[0].strip()
     if not key:
         raise ToolError("VIDEO_PROVIDER=gemini, aber GEMINI_API_KEY fehlt")
-    return key
-
-
-def _fal_key():
-    key = _env("FAL_KEY").split(",")[0].strip()
-    if not key:
-        raise ToolError("VIDEO_PROVIDER=fal, aber FAL_KEY fehlt")
     return key
 
 
@@ -523,9 +534,7 @@ def _video_image(root, rel):
 
 
 def _download_video(url, key, dst):
-    # Ohne Schluessel (fal-CDN) wird kein Schluessel mitgeschickt
-    headers = {"x-goog-api-key": key} if key else {}
-    with requests.get(url, headers=headers, stream=True, timeout=300, allow_redirects=True) as r:
+    with requests.get(url, headers={"x-goog-api-key": key}, stream=True, timeout=300, allow_redirects=True) as r:
         if r.status_code >= 400:
             raise ToolError(f"Video-Download fehlgeschlagen (HTTP {r.status_code})")
         size = 0
@@ -593,67 +602,8 @@ def _veo_video(key, model, call, root, deadline):
     return None, uri, None
 
 
-def _fal_video(key, call, deadline):
-    if call.get("image"):
-        raise ToolError("Das fal-Standardmodell macht nur Text-zu-Video. Fuer Bild-zu-Video VIDEO_MODEL auf ein Bild-zu-Video-Modell setzen (siehe fal.ai) und ohne image aufrufen")
-    # VIDEO_MODEL ist bei fal ein Endpunkt wie fal-ai/...; ohne Schraegstrich gilt der Standard
-    model = _env("VIDEO_MODEL").strip("\"' \r")
-    if "/" not in model:
-        model = FAL_VIDEO_MODEL
-    inputs = {"prompt": str(call.get("prompt") or "").strip()[:2000]}
-    if call.get("aspect") in ("16:9", "9:16", "1:1"):
-        inputs["aspect_ratio"] = call["aspect"]
-    h = {"Authorization": "Key " + key}
-    sub = _gjson(requests.post(FAL_BASE + model, headers=h, json=inputs, timeout=60))
-    status_url, response_url = sub.get("status_url"), sub.get("response_url")
-    if not status_url or not response_url:
-        raise ToolError("fal: unerwartete Antwort beim Einreichen: " + _clip(json.dumps(sub), 300))
-    while True:
-        st = _gjson(requests.get(status_url, headers=h, timeout=60))
-        if st.get("status") == "COMPLETED":
-            break
-        if st.get("status") not in ("IN_QUEUE", "IN_PROGRESS"):
-            raise ToolError("Video wurde nicht erzeugt: " + _clip(json.dumps(st), 300))
-        if time.time() > deadline:
-            raise ToolError("Zeitlimit fuer die Videoerzeugung erreicht (PCL_VIDEO_TIMEOUT)")
-        time.sleep(5)
-    res = _gjson(requests.get(response_url, headers=h, timeout=60))
-    uri = (res.get("video") or {}).get("url")
-    if not uri:
-        raise ToolError("Kein Video in der Antwort (Prompt evtl. vom Sicherheitsfilter abgelehnt): " + _clip(json.dumps(res), 300))
-    return None, uri, None
-
-
 def video_generate(root, call):
-    provider = _env("VIDEO_PROVIDER").lower()
-    if provider not in ("gemini", "fal"):
-        raise ToolError("Videoerzeugung ist aus (VIDEO_PROVIDER=gemini oder fal in .env setzen)")
-    if not str(call.get("prompt") or "").strip():
-        raise ToolError("prompt fehlt")
-    deadline = time.time() + int(_env("PCL_VIDEO_TIMEOUT", "900") or 900)
-    if provider == "fal":
-        key = _fal_key()
-        data, uri, iid = _fal_video(key, call, deadline)
-    else:
-        key = _gemini_key()
-        model = _model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")
-        gen = _veo_video if model.startswith("veo") else _omni_video
-        data, uri, iid = gen(key, model, call, root, deadline)
-    dst = _out_path(root, call, "video", "mp4")
-    if data is not None:
-        if len(data) > MAX_VIDEO_BYTES:
-            raise ToolError("Video ist zu gross")
-        dst.write_bytes(data)
-    else:
-        # Der fal-Schluessel geht nie an den Download-Server
-        _download_video(uri, key if provider == "gemini" else "", dst)
-    rel = _rel(root, dst)
-    try:
-        p = _probe(dst)
-        info = " " + _describe_probe(p) + "." if p["video"] else ""
-    except Exception:  # ffprobe fehlt: Video ist trotzdem da
-        info = ""
-    return f"Video erzeugt: {rel} ({dst.stat().st_size // 1024} KB).{info}" + (f" Fortsetzen mit continue_id: {iid}" if iid else "")
+    return _vp().generate(root, call)
 
 
 def _safe_name(name, default):
@@ -2093,6 +2043,9 @@ def speak(root, text, lang="de", name="", voice=None, pitch=None, rate=None, tar
             r = subprocess.run([py, "-m", "edge_tts", "--voice", ev, "--file", str(txt), "--write-media", str(target)] + extra,
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
             done = r.returncode == 0 and target.exists()
+        if not done and engine in ("elevenlabs", "openai"):  # Cloud-Stimmen (kosten pro Zeichen)
+            _vp().cloud_tts(engine, text, voice, rate, target)
+            done = True
         if not done:
             raise ToolError("Keine Sprachausgabe verfuegbar. Auf dem Pi: sudo apt install espeak-ng (einfache Stimme), oder "
                             "PIPER_MODEL (Piper, gute Offline-Stimme) bzw. TTS_ENGINE=edge mit pip install edge-tts (Online-Stimmen, inoffizieller Dienst).")
@@ -2522,6 +2475,10 @@ def run_tool(call, root, perms):
             out = image_generate(root, call)
         elif name == "video_generate":
             out = video_generate(root, call)
+        elif name == "video_ai":
+            out = _vp().video_ai(root, call)
+        elif name == "sound_generate":
+            out = _vp().sound_generate(root, call)
         elif name == "list_files":
             out = list_files(root, call.get("path"))
         elif name == "view_image":  # die Bilder selbst haengt app.run_with_tools an
@@ -2555,7 +2512,7 @@ def run_tool(call, root, perms):
             out = read_file(root, call.get("path"), call.get("offset"))
         made = None
         m = re.search(r"((?:assets|downloads|output|karten|film)/[\w./-]+?)(?:\s|\(|$|\.\s|,)", out) if name in (
-            "image_save", "image_generate", "video_generate", "download_file", "video_edit", "speak", "make_document", "run_code", "browse_page",
+            "image_save", "image_generate", "video_generate", "video_ai", "sound_generate", "download_file", "video_edit", "speak", "make_document", "run_code", "browse_page",
             "film") else None
         if m:
             made = m.group(1)

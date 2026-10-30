@@ -111,21 +111,33 @@ def group_web():
                 "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],
                   hint="Referenzbilder brauchen ein Bildmodell mit Bearbeiten-Funktion (gpt-image-1, gemini-2.5-flash-image, "
                        "bei Pollinations z. B. black-forest-labs/flux.2-klein-4b)")
-    if T.video_enabled() and T._env("VIDEO_PROVIDER").lower() == "fal":  # noqa: SLF001
-        def vkey():
-            T._fal_key()  # noqa: SLF001
-            return "FAL_KEY gesetzt (kein Clip erzeugt, das kostet Geld)"
-        check("Video-Anbieter (fal.ai)", vkey, optional=True, hint="FAL_KEY in .env eintragen, VIDEO_PROVIDER=fal")
-    elif T.video_enabled():
+    if T.video_enabled():
+        import video_providers as VP
+        for prov in VP.providers():
+            def vkeys(prov=prov):
+                VP.keys_of(prov)
+                return f"Key vorhanden, Modell {VP.model_of(prov, False, VP.providers()[0])} (kein Clip erzeugt, das kostet Geld)"
+            check(f"Video-Anbieter {prov}", vkeys, optional=True, hint="Key in .env eintragen, siehe docs/videodienste.md")
+
         def vmodel():
-            key, model = T._gemini_key(), T._model_env("VIDEO_MODEL", "gemini-omni-1.1-flash")  # noqa: SLF001
+            key, model = T._gemini_key(), VP.model_of("gemini", False, VP.providers()[0])  # noqa: SLF001
             r = requests.get(f"{T.GEMINI_BASE}/models/{model}", headers={"x-goog-api-key": key}, timeout=20)
             if r.status_code >= 400:
                 raise RuntimeError(f"Modell '{model}' nicht verfuegbar (HTTP {r.status_code})")
-            return f"{model} verfuegbar (kein Clip erzeugt, das kostet Geld)"
-        check("Video-Modell (Gemini)", vmodel, optional=True, hint="GEMINI_API_KEY mit Abrechnung? VIDEO_MODEL pruefen")
+            return f"{model} verfuegbar"
+        if "gemini" in VP.providers():
+            check("Video-Modell (Gemini)", vmodel, optional=True, hint="GEMINI_API_KEY mit Abrechnung? VIDEO_MODEL pruefen")
     else:
-        line("warn", "Videoerzeugung", "aus (optional: VIDEO_PROVIDER=gemini oder fal in .env)")
+        line("warn", "Videoerzeugung", "aus (optional: VIDEO_PROVIDER=kling, wan, higgsfield ... in .env, siehe docs/videodienste.md)")
+    import video_providers as VPX
+    if VPX.video_ai_enabled():
+        check("video_ai (fal.ai)", lambda: "Key vorhanden" if T._env("FAL_KEY") else (_ for _ in ()).throw(RuntimeError("FAL_KEY fehlt")),  # noqa: SLF001
+              optional=True, hint="FAL_KEY in .env eintragen (fal.ai)")
+    if VPX.audio_provider():
+        need_key = "ELEVENLABS_API_KEY" if VPX.audio_provider() == "elevenlabs" else "FAL_KEY"
+        check(f"sound_generate ({VPX.audio_provider()})",
+              lambda: "Key vorhanden" if T._env(need_key) else (_ for _ in ()).throw(RuntimeError(f"{need_key} fehlt")),  # noqa: SLF001
+              optional=True, hint=f"{need_key} in .env eintragen")
     check("SSRF-Schutz blockt lokale Adressen", lambda: "ok" if _blocked() else (_ for _ in ()).throw(RuntimeError("nicht blockiert!")))
 
 
