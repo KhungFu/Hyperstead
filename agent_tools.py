@@ -479,7 +479,8 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 FAL_BASE = "https://queue.fal.run/"
-FAL_VIDEO_MODEL = "fal-ai/kling-video/v2.5-turbo/pro/text-to-video"
+# Guenstigster Endpunkt mit bekanntem Preis (fal.ai/pricing: 0,03 $/s). Andere: VIDEO_MODEL
+FAL_VIDEO_MODEL = "minimax/h3-max/text-to-video"
 
 
 def video_enabled():

@@ -18,6 +18,11 @@ def test_fal_braucht_schluessel(monkeypatch, tmp_path):
         T.video_generate(tmp_path, {"prompt": "eine Katze"})
 
 
+def test_fal_standardmodell_ist_der_guenstigste(monkeypatch):
+    monkeypatch.delenv("VIDEO_MODEL", raising=False)
+    assert T.FAL_VIDEO_MODEL == "minimax/h3-max/text-to-video"
+
+
 def test_fal_ablauf_und_download_ohne_schluessel(monkeypatch, tmp_path):
     monkeypatch.setenv("VIDEO_PROVIDER", "fal")
     monkeypatch.setenv("FAL_KEY", "geheim")
