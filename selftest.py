@@ -89,7 +89,7 @@ def group_web():
               hint="IMAGE_PROVIDER=gemini oder openai mit Key waehlen, wenn Pollinations nicht erreichbar ist")
         ref = next(iter(sorted((root / "assets").glob("test.*"))), None) if (root / "assets").exists() else None
         pkey = prov == "pollinations" and T._env("POLLINATIONS_API_KEY").strip()  # noqa: SLF001
-        if (prov in ("openai", "gemini", "openrouter", "sdcpp") or pkey) and ref:
+        if (prov in ("openai", "gemini", "openrouter", "sdcpp", "cloudflare") or pkey) and ref:
             check("Bild mit Referenzbild", lambda: T.image_generate(root, {
                 "prompt": "the same apple, now cut in half, same drawing style", "refs": [f"assets/{ref.name}"],
                 "path": "karten/test-ref.png", "quality": "low" if prov == "openai" else ""})[:80],

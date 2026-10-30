@@ -132,7 +132,7 @@ def test_gemini_bildgroesse_und_abrechnungshinweis(monkeypatch, tmp_path):
 def test_pollinations_lehnt_referenzen_ab(monkeypatch, tmp_path):
     monkeypatch.setenv("IMAGE_PROVIDER", "pollinations")
     (tmp_path / "ref.png").write_bytes(PNG)
-    with pytest.raises(T.ToolError, match="nur mit IMAGE_PROVIDER=openai, gemini, openrouter, sdcpp"):
+    with pytest.raises(T.ToolError, match="nur mit IMAGE_PROVIDER=openai, gemini, openrouter, sdcpp, cloudflare, nvidia"):
         T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"]})
 
 
@@ -328,3 +328,73 @@ def test_sdcpp_laptop_aus_rueckfall(monkeypatch, tmp_path):
     monkeypatch.setattr(T.requests, "get", lambda url, **kw: Raw())
     out = T.image_generate(tmp_path, {"prompt": "x"})
     assert out.startswith("HINWEIS: Auf Pollinations umgestiegen") and "bei sdcpp" in out
+
+
+class Img:
+    status_code, content, headers, text = 200, PNG, {"content-type": "image/png"}, ""
+
+
+def test_nvidia_schnell_und_kontext(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "nvidia")
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    monkeypatch.delenv("IMAGE_MODEL", raising=False)
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return Resp({"artifacts": [{"base64": base64.b64encode(PNG).decode(), "finishReason": "SUCCESS"}]})
+    monkeypatch.setattr(T.requests, "post", post)
+    T.image_generate(tmp_path, {"prompt": "x"})
+    assert seen["url"] == "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.1-schnell"
+    assert seen["json"]["steps"] == 4 and "width" not in seen["json"]
+    monkeypatch.setenv("IMAGE_MODEL", "black-forest-labs/flux.1-kontext-dev")
+    (tmp_path / "ref.png").write_bytes(PNG)
+    out = T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png"], "format": "quadrat"})
+    assert "mit 1 Referenzbild" in out and seen["json"]["image"].startswith("data:image/png;base64,")
+    assert (seen["json"]["width"], seen["json"]["height"]) == (1024, 1024)
+    (tmp_path / "ref2.png").write_bytes(PNG)
+    with pytest.raises(T.ToolError, match="hoechstens 1 Referenzbild"):
+        T.image_generate(tmp_path, {"prompt": "x", "refs": ["ref.png", "ref2.png"]})
+
+
+def test_cloudflare_flux2_multipart_mit_refs(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "cloudflare")
+    monkeypatch.setenv("CF_ACCOUNT_ID", "acc1")
+    monkeypatch.setenv("CF_API_TOKEN", "cf-test")
+    monkeypatch.delenv("IMAGE_MODEL", raising=False)
+    seen = {}
+
+    class J(Resp):
+        headers = {"content-type": "application/json"}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return J({"result": {"image": base64.b64encode(PNG).decode()}, "success": True})
+    monkeypatch.setattr(T.requests, "post", post)
+    (tmp_path / "ref.png").write_bytes(PNG)
+    out = T.image_generate(tmp_path, {"prompt": "K1", "refs": ["ref.png"], "format": "quer"})
+    assert "mit 1 Referenzbild" in out
+    assert seen["url"] == "https://api.cloudflare.com/client/v4/accounts/acc1/ai/run/@cf/black-forest-labs/flux-2-klein-4b"
+    assert seen["files"]["prompt"] == (None, "K1") and "input_image_0" in seen["files"]
+    assert seen["files"]["width"] == (None, "1024")
+    monkeypatch.setenv("IMAGE_MODEL", "@cf/black-forest-labs/flux-1-schnell")
+    with pytest.raises(T.ToolError, match="kann keine Referenzbilder"):
+        T.image_generate(tmp_path, {"prompt": "K1", "refs": ["ref.png"]})
+    monkeypatch.delenv("CF_ACCOUNT_ID")
+    with pytest.raises(T.ToolError, match="CF_ACCOUNT_ID"):
+        T.image_generate(tmp_path, {"prompt": "K1"})
+
+
+def test_hf_bild_und_fehler(monkeypatch, tmp_path):
+    monkeypatch.setenv("IMAGE_PROVIDER", "hf")
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    monkeypatch.delenv("IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("HF_IMAGE_PROVIDER", raising=False)
+    seen = {}
+    monkeypatch.setattr(T.requests, "post", lambda url, **kw: seen.update(url=url, **kw) or Img())
+    T.image_generate(tmp_path, {"prompt": "x"})
+    assert seen["url"] == "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+    assert seen["json"]["inputs"] == "x"
+    monkeypatch.setattr(T.requests, "post", lambda url, **kw: Resp({"error": "credits exceeded"}, 402))
+    with pytest.raises(T.ToolError, match="HTTP 402 \\(Guthaben aufgebraucht\\)"):
+        T.image_generate(tmp_path, {"prompt": "x"})
