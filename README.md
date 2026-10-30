@@ -4,7 +4,22 @@ Ein Agenten-Team als Knoten-Editor, selbst gehostet, leicht genug für den Raspb
 Projekt anlegen, Agenten per Drag & Drop auf die Fläche ziehen, verbinden (Chef → Mitarbeiter),
 pro Knoten KI-Anbieter, Arbeitsanweisung und Rechte einstellen und Aufgaben zuweisen.
 
-## Installation (Pi / Linux)
+## Installation
+
+PaperclipLite ist ein Python-Programm (Flask + SQLite) und läuft auf mehreren Systemen. Mehrere Installationen
+können parallel laufen, jede hat ihre eigenen Firmen und Daten.
+
+| System | Stand | Anleitung |
+| --- | --- | --- |
+| Raspberry Pi / Linux (Debian, Ubuntu) | Hauptsystem, voller Funktionsumfang | unten |
+| Windows 10/11 | läuft, ohne `run_code`, manches braucht Zusatzprogramme | [docs/windows.md](docs/windows.md) |
+| macOS | ungetestet, Grundfunktionen sollten laufen | unten (von Hand) |
+| Eigener Bildrechner (z. B. alter Laptop ohne Grafikkarte) | gratis Bilder mit Referenzbildern für PaperclipLite | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
+
+Umzug von einem Rechner auf einen anderen: PaperclipLite beenden und `data.db`, den Ordner `workspace/` und `.env`
+kopieren ([Beispiel Pi → Windows](docs/windows.md)).
+
+### Raspberry Pi / Linux
 
 ```bash
 git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
@@ -14,11 +29,45 @@ nano .env                  # API-Keys eintragen, danach: sudo systemctl restart 
 
 Ohne Dienst: `./install.sh` und dann `./venv/bin/python app.py` → http://127.0.0.1:8787.
 Das Login-Passwort steht in `.env` (`APP_TOKEN`). Update später: `git pull && sudo systemctl restart paperclip-lite`.
+Mehr Funktionen (Video, OCR, Compiler, Browser): `./install.sh --all`.
 
-## Installation (Windows)
+### Windows
 
-PowerShell im PaperclipLite-Ordner: `powershell -ExecutionPolicy Bypass -File install.ps1`, starten mit
-`deploy\windows\paperclip-start.bat`. Was unter Windows fehlt (u. a. `run_code`): [docs/windows.md](docs/windows.md).
+PowerShell im PaperclipLite-Ordner:
+
+```powershell
+git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
+powershell -ExecutionPolicy Bypass -File install.ps1
+notepad .env
+deploy\windows\paperclip-start.bat
+```
+
+Was unter Windows fehlt, Autostart und Parallelbetrieb mit dem Pi: [docs/windows.md](docs/windows.md).
+Update später: `git pull`, dann neu starten.
+
+### macOS (ungetestet)
+
+```bash
+git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
+cp .env.example .env       # APP_TOKEN=<langes Passwort> eintragen, API-Keys ergänzen
+./venv/bin/python app.py   # http://127.0.0.1:8787
+```
+
+`install.sh` ist für Debian/Ubuntu gebaut (apt), unter macOS daher von Hand wie oben. Zusatzprogramme per Homebrew
+(`brew install ffmpeg tesseract poppler`). `run_code` gibt es nur unter Linux.
+
+### Bilder auf einem eigenen Rechner
+
+Ein Rechner im Heimnetz (auch ohne Grafikkarte, mind. 8 GB RAM) kann für PaperclipLite gratis Bilder mit
+Referenzbildern erzeugen. In `.env` genau diese zwei Zeilen aktiv lassen (nur eine `IMAGE_PROVIDER=`-Zeile ohne `#`):
+
+```
+IMAGE_PROVIDER=sdcpp
+SDCPP_URL=http://<IP des Bildrechners>:1234    # auf dem Bildrechner selbst: http://127.0.0.1:1234
+```
+
+Einrichtung: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
 
 ## Zugriff aus dem Internet
 
