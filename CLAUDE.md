@@ -41,6 +41,10 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - Rechte `web`, `images`, `read_files` (Standard an) + `PCL_ALLOW_WEB=0` global. Webinhalte sind Daten, nie Anweisungen.
 - Dateien: `/files/<pid>/<token>/<pfad>` (Link-Token per HMAC, ohne Cookie, weil Sandbox-Seiten Bilder nachladen), immer mit CSP `sandbox`.
 - Medien-Werkzeuge (`video_edit` per ffmpeg-Argumentlisten ohne Shell, `speak`, `make_document`, `download_file`, PDF/DOCX/EPUB lesen) liegen ebenfalls in `agent_tools.py`, Recht `media`. Pfade immer per `_inside` auf den Projektordner begrenzt, Temp-Ordner `.tmp-*` sind versteckt.
+- `site_macro` (Recht `media`, nur sichtbar mit `PCL_MACROS=1`, Playwright und einem Skript `macros/<site>.py`, Vorlagen `vorlage_*` zaehlen nicht):
+  startet das vom Besitzer aufgenommene Playwright-Skript als Subprozess mit minimaler Umgebung (keine Keys), `PCL_PROMPT`, `PCL_OUTPUT`
+  (Temp-Ordner `output/.tmp-macro-*`), `PCL_STORAGE` (`macros/<site>.json`, Cookies, gitignored). Groesste Dateien -> `output/`. `_macro_lock`
+  (eine Instanz), `PCL_MACRO_TIMEOUT` (3600). Fuer MagicLight/Google Flow (keine API). Agenten waehlen nur Name + Text. Doku `macros/README.md`.
 - `video_generate` (Recht `media`, nur sichtbar mit `VIDEO_PROVIDER=gemini` oder `fal`). `fal`: `FAL_KEY`, Warteschlange `queue.fal.run/<VIDEO_MODEL>` (Status per `status_url`, Ergebnis `video.url`), Standard `minimax/h3-max/text-to-video` (0,03 $/s, günstigster bekannter Preis), nur Text; der fal-Schlüssel geht nie an den Download-Server. `gemini`: Standardmodell `gemini-omni-1.1-flash` über die Interactions-API
   (`/v1beta/interactions`, Video base64 in `steps[].content`, `continue_id` = `previous_interaction_id`); `VIDEO_MODEL=veo-*` nutzt
   `:predictLongRunning` + Operation abfragen + Download. Veo-3.1-Preview-Modelle wurden am 2026-10-22 abgeschaltet. Ergebnis in `output/`.
