@@ -241,6 +241,8 @@ mit **▶ Testen** prüfst du Key und Modell sofort. So setzt du das passende Mo
 | ChatGPT (OpenAI) | `OPENAI_API_KEY` | |
 | OpenRouter | `OPENROUTER_API_KEY` | ein Key für hunderte Modelle (Claude, GPT, Gemini, DeepSeek, Qwen, Llama …) |
 | Groq, Gemini, DeepSeek, Qwen | `GROQ_API_KEY`, `GEMINI_API_KEY`, … | mehrere Keys mit Komma = Rotation bei Limit |
+| Mistral, NVIDIA NIM, Together, Perplexity | `MISTRAL_API_KEY`, `NVIDIA_API_KEY`, `TOGETHER_API_KEY`, `PERPLEXITY_API_KEY` | Perplexity-Modelle (`sonar`) suchen selbst im Netz |
+| Hugging Face, Cloudflare Workers AI | `HF_TOKEN` bzw. `CF_ACCOUNT_ID` + `CF_API_TOKEN` | kleine Gratis-Kontingente |
 | Ollama | – | lokale Modelle auf dem Pi |
 | Claude (CLI, dein Abo) / ChatGPT (Codex-CLI, dein Abo) | – | fest eingebaut: `claude -p --tools "" --strict-mcp-config --no-session-persistence` (Claude ohne eigene Werkzeuge und ohne Konnektoren, nur Text; die Arbeitsanweisung ersetzt den Claude-Code-Systemprompt) bzw. `codex exec --skip-git-repo-check --ephemeral -` (Codex läuft von sich aus im Nur-Lesen-Sandkasten), Modell im Dropdown (Claude: sonnet/opus/haiku); braucht `PCL_ALLOW_CLI=1` und das angemeldete Programm auf dem Pi |
 | CLI-Agent | – | Befehl, der den Prompt von stdin liest, z. B. `claude -p --model sonnet`; braucht `PCL_ALLOW_CLI=1` |
