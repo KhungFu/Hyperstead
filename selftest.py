@@ -42,6 +42,8 @@ def check(name, fn, optional=False, hint=""):
 
 
 WIN = os.name == "nt"
+if WIN:
+    os.system("")  # schaltet Farbcodes in cmd.exe ein (sonst erscheint "←[32m")
 # Installationshinweis je System: (Linux/Pi, Windows)
 WIN_HINTS = {
     "ffmpeg": "winget install Gyan.FFmpeg (danach neues Fenster)",
@@ -189,8 +191,8 @@ def group_telegram():
 
 def group_media():
     print("\nVideo, Sprache, Dokumente")
-    check("ffmpeg", lambda: need("ffmpeg", "ffmpeg") and "ok")
-    check("ffprobe", lambda: need("ffprobe", "ffmpeg") and "ok")
+    check("ffmpeg", lambda: need("ffmpeg", "ffmpeg") and "ok", optional=WIN)
+    check("ffprobe", lambda: need("ffprobe", "ffmpeg") and "ok", optional=WIN)
     with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
         root = Path(td)
 
@@ -198,7 +200,7 @@ def group_media():
             out = T.speak(root, "Hallo, das ist ein Test der Sprachausgabe.", "de", "t")
             eng = "Piper" if T._piper()[0] else "espeak-ng"  # noqa: SLF001
             return f"{eng}: {out[:60]}"
-        check("Sprachausgabe", tts, hint=fix("sudo apt install espeak-ng; besser: ./install.sh --piper",
+        check("Sprachausgabe", tts, optional=WIN, hint=fix("sudo apt install espeak-ng; besser: ./install.sh --piper",
                                              "venv\\Scripts\\pip install edge-tts und TTS_ENGINE=edge in .env (Online-Stimme)"))
         check("Piper (gute Stimme)", lambda: (lambda x: "Modell " + Path(x[1]).name if x[0] else (_ for _ in ()).throw(RuntimeError("nicht eingerichtet")))(T._piper()),  # noqa: SLF001
               optional=True, hint=fix("./install.sh --piper", "optional, unter Windows von Hand (siehe docs/windows.md)"))
@@ -213,8 +215,9 @@ def group_media():
 
 def group_ocr():
     print("\nOCR (gescannte PDFs und Bilder)")
-    check("tesseract", lambda: need("tesseract", "tesseract-ocr tesseract-ocr-deu") and "Sprachen: " + (T._tess_lang() or "keine"))  # noqa: SLF001
-    check("pdftoppm", lambda: need("pdftoppm", "poppler-utils") and "ok")
+    check("tesseract", lambda: need("tesseract", "tesseract-ocr tesseract-ocr-deu") and "Sprachen: " + (T._tess_lang() or "keine"),  # noqa: SLF001
+          optional=WIN)
+    check("pdftoppm", lambda: need("pdftoppm", "poppler-utils") and "ok", optional=WIN)
     if shutil.which("tesseract") and "deu" not in T._tess_lang():  # noqa: SLF001
         line("warn", "Deutsch fuer OCR", fix("sudo apt install tesseract-ocr-deu", "Tesseract neu installieren und Deutsch anhaken")
              + " (Umlaute werden sonst schlechter erkannt)")
