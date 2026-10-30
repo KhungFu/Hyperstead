@@ -123,3 +123,6 @@ Tests: `python -m pytest -q tests` (mock-Anbieter, ohne Internet). UI-Prüfung w
 2. Heartbeat: Agenten wachen nach Zeitplan auf (Tabelle `schedules`, Worker prüft fällige Einträge).
 3. Agenten können Dateien lesen; optional Web-Zugriff.
 4. **Zuletzt:** Anbindung an `swarm.py` (DEXTER) als Agent, z. B. über Anbieter `webhook`/`cli`.
+
+## Pflicht bei jedem Merge
+- Nach jedem Update die README aktualisieren: Die Tabelle „Was passiert, wenn etwas fehlt“ im Abschnitt Betrieb bekommt eine Zeile für jede neue oder geänderte Datei, jeden Schlüssel oder jede Abhängigkeit. Der Besitzer verlangt das ausdrücklich.
