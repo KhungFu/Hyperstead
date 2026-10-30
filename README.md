@@ -28,7 +28,7 @@ nano .env                  # API-Keys eintragen, danach: sudo systemctl restart 
 ```
 
 Ohne Dienst: `./install.sh` und dann `./venv/bin/python app.py` → http://127.0.0.1:8787.
-Das Login-Passwort steht in `.env` (`APP_TOKEN`). Update später: `git pull && sudo systemctl restart paperclip-lite`.
+Das Login-Passwort steht in `.env` (`APP_TOKEN`). Update, Neustart, Sicherung: [Betrieb](#betrieb-wer-macht-was-wo-wann-wie).
 Mehr Funktionen (Video, OCR, Compiler, Browser): `./install.sh --all`.
 
 ### Windows
@@ -43,7 +43,7 @@ deploy\windows\paperclip-start.bat
 ```
 
 Was unter Windows fehlt, Autostart und Parallelbetrieb mit dem Pi: [docs/windows.md](docs/windows.md).
-Update später: `git pull`, dann neu starten.
+Update, Neustart, Autostart: [Betrieb](#betrieb-wer-macht-was-wo-wann-wie).
 
 ### macOS (ungetestet)
 
@@ -68,6 +68,90 @@ SDCPP_URL=http://<IP des Bildrechners>:1234    # auf dem Bildrechner selbst: htt
 ```
 
 Einrichtung: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
+
+## Betrieb: wer macht was, wo, wann, wie
+
+**Wer:** alles hier erledigt der Besitzer des Rechners (du), nicht die Agenten. Die Befehle laufen im
+PaperclipLite-Ordner: auf dem Pi im Terminal (`cd ~/paperclip-lite`), unter Windows in PowerShell
+(`cd $HOME\paperclip-lite`, oder wo du den Ordner hingelegt hast).
+
+### Kurzübersicht
+
+| Was | Wann | Raspberry Pi / Linux (mit Dienst) | Windows |
+| --- | --- | --- | --- |
+| Starten | nach der Installation, nach einem Neustart ohne Autostart | `sudo systemctl start paperclip-lite` | Doppelklick `deploy\windows\paperclip-start.bat` (Fenster offen lassen) |
+| Beenden | vor Umzug, Sicherung, Update | `sudo systemctl stop paperclip-lite` | Startfenster schließen (oder darin Strg+C) |
+| Neu starten | nach jeder Änderung an `.env`, nach einem Update | `sudo systemctl restart paperclip-lite` | Startfenster schließen, `paperclip-start.bat` neu starten |
+| Läuft es? | bei Problemen | `systemctl status paperclip-lite` | Startfenster offen? Browser: <http://127.0.0.1:8787> |
+| Protokoll ansehen | bei Fehlern | `journalctl -u paperclip-lite -f` (Strg+C beendet) | steht im Startfenster |
+| Aktualisieren | wenn es eine neue Version gibt (z. B. nach einem gemergten Pull Request) | siehe unten | siehe unten |
+| Prüfen | nach Installation, Update, neuen Keys | `./venv/bin/python selftest.py` | `venv\Scripts\python.exe selftest.py` |
+| Keys / Einstellungen | neuer Key, anderer Bildanbieter | `nano .env`, dann neu starten | `notepad .env`, dann neu starten |
+| Sichern | regelmäßig, vor Umzug und großen Updates | `data.db`, `workspace/`, `.env` kopieren (vorher beenden) | dasselbe im PaperclipLite-Ordner |
+
+### Aktualisieren (neue Version holen)
+
+**Raspberry Pi / Linux**, im Terminal:
+
+```bash
+cd ~/paperclip-lite
+git pull
+./install.sh               # nur nötig, wenn sich requirements.txt geändert hat; .env bleibt unverändert
+sudo systemctl restart paperclip-lite
+./venv/bin/python selftest.py llm     # kurz prüfen, ob die KI-Anbieter antworten
+```
+
+**Windows**, in PowerShell:
+
+1. `cd $HOME\paperclip-lite`
+2. `git pull`
+3. Nur wenn sich Pakete geändert haben (oder im Zweifel): `powershell -ExecutionPolicy Bypass -File install.ps1`
+   (die vorhandene `.env` bleibt unverändert).
+4. Das schwarze Startfenster von PaperclipLite schließen.
+5. `deploy\windows\paperclip-start.bat` wieder starten (Doppelklick oder in PowerShell eingeben).
+6. Prüfen: `venv\Scripts\python.exe selftest.py llm`
+
+Meldet `git pull` „local changes would be overwritten“, hast du eine Datei im Programm selbst geändert.
+`git stash` legt die Änderung beiseite, danach `git pull` wiederholen. Deine Daten (`data.db`, `workspace/`, `.env`)
+sind davon nie betroffen, Git kennt sie nicht.
+
+### Automatisch starten
+
+- **Pi:** `./install.sh --service` richtet den Dienst ein, er startet dann bei jedem Hochfahren von selbst.
+- **Windows:** Win+R, `shell:startup` eingeben, dort eine Verknüpfung zu `deploy\windows\paperclip-start.bat`
+  ablegen (und zu `bildrechner-start.bat`, falls genutzt). Windows muss sich dafür selbst anmelden
+  ([docs/windows.md](docs/windows.md), Abschnitt 4).
+
+### Einstellungen in `.env` ändern
+
+- Jede Einstellung steht genau einmal ohne `#` am Anfang. Zeilen mit `#` sind abgeschaltet. Bei doppelten Zeilen
+  gilt die erste.
+- Nach jeder Änderung PaperclipLite neu starten, sonst gilt noch der alte Stand.
+- Keys nie in Chats, Screenshots oder ins Repo kopieren. Ist ein Key doch irgendwo gelandet: beim Anbieter
+  widerrufen und einen neuen eintragen.
+- Danach mit `selftest.py` prüfen. Einzelne Bereiche: `selftest.py llm`, `web`, `telegram`, `media`, `ocr`, `code`.
+
+### Selbsttest lesen
+
+- **OK:** funktioniert.
+- **FEHLT:** optional, die Zeile nennt den Befehl zum Nachinstallieren (unter Windows den Windows-Befehl).
+  Nur nötig, wenn deine Agenten das brauchen (z. B. Video, Vorlesen, gescannte PDFs).
+- **FEHLER:** etwas Eingetragenes geht nicht, meistens ein ungültiger oder abgelaufener Key oder ein Dienst, der
+  nicht läuft (z. B. der Bildrechner). Die Zeile nennt den Grund.
+- Ein einzelner Zeitüberschreitungs-Fehler (Timeout) bei einem Webdienst ist oft nur vorübergehend: später wiederholen.
+
+### Bildrechner (falls genutzt)
+
+- **Wo:** auf dem Rechner, der die Bilder macht (z. B. Laptop), Ordner `C:\bildrechner`.
+- **Wann:** muss laufen, solange Agenten Bilder erzeugen sollen.
+- **Wie:** `bildrechner-start.bat` starten, Fenster offen lassen. In der `.env` von PaperclipLite
+  `IMAGE_PROVIDER=sdcpp` und `SDCPP_URL=...` ([Anleitung](docs/laptop-bildrechner.md)), danach PaperclipLite neu starten.
+
+### Umziehen (z. B. Pi → Laptop)
+
+Schritt für Schritt in [docs/windows.md](docs/windows.md), „Phase 2 – Umzug“. Kurz: beide beenden, `data.db`,
+`workspace/` und `.env` kopieren, auf dem neuen Rechner starten und prüfen, erst dann den alten abschalten.
+Telegram immer nur auf einem Rechner eintragen.
 
 ## Zugriff aus dem Internet
 
@@ -331,7 +415,7 @@ verschiedener Projekte. Ein Agent bearbeitet nie zwei Aufgaben auf einmal, und e
   (Passwort ändern macht alle Sitzungen ungültig).
 
 
-## Selbsttest auf dem Pi
+## Selbsttest
 
 Nach Installation und Eintragen der Keys prüft `./venv/bin/python selftest.py` alles Echte, was sich ohne Internet nicht testen ließ:
 Websuche, Seiten lesen, Bildsuche und Bildgenerator, SSRF-Schutz, jeder KI-Anbieter mit Mini-Anfrage (inkl. Ollama), Telegram

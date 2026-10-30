@@ -7,6 +7,7 @@
 Jede Zeile: OK / FEHLT (optional) / FEHLER, bei Problemen mit konkretem Hinweis. Es werden keine Keys ausgegeben.
 Die LLM-Tests senden je Anbieter eine winzige Anfrage (kostet praktisch nichts). Bilder werden nur im Temp-Ordner erzeugt.
 """
+import os
 import shutil
 import sys
 import tempfile
@@ -40,9 +41,22 @@ def check(name, fn, optional=False, hint=""):
     return out
 
 
+WIN = os.name == "nt"
+# Installationshinweis je System: (Linux/Pi, Windows)
+WIN_HINTS = {
+    "ffmpeg": "winget install Gyan.FFmpeg (danach neues Fenster)",
+    "tesseract-ocr tesseract-ocr-deu": "winget install UB-Mannheim.TesseractOCR (Deutsch bei der Installation anhaken), Ordner in den PATH",
+    "poppler-utils": "Poppler fuer Windows (github.com/oschwartz10612/poppler-windows), Ordner Library\\bin in den PATH",
+}
+
+
+def fix(linux, windows):
+    return windows if WIN else linux
+
+
 def need(prog, apt):
     if not shutil.which(prog):
-        raise RuntimeError(f"'{prog}' nicht installiert: sudo apt install {apt}")
+        raise RuntimeError(f"'{prog}' nicht installiert: " + fix(f"sudo apt install {apt}", WIN_HINTS.get(apt, f"{prog} installieren und in den PATH")))
     return shutil.which(prog)
 
 
@@ -86,7 +100,7 @@ def group_web():
                   hint="Laptop an? sd-server gestartet? SDCPP_URL in .env = http://<IP des Laptops>:1234, Windows-Firewall fuer privates Netz erlauben")
         check(f"Bild erzeugen ({prov})", lambda: T.image_generate(root, {"prompt": "a red apple, simple illustration", "name": "test",
                                                                           "quality": "low" if prov == "openai" else ""})[:80],
-              hint="IMAGE_PROVIDER=gemini oder openai mit Key waehlen, wenn Pollinations nicht erreichbar ist")
+              hint="Bildrechner gestartet?" if prov == "sdcpp" else "anderen IMAGE_PROVIDER mit Key waehlen, wenn dieser nicht erreichbar ist")
         ref = next(iter(sorted((root / "assets").glob("test.*"))), None) if (root / "assets").exists() else None
         pkey = prov == "pollinations" and T._env("POLLINATIONS_API_KEY").strip()  # noqa: SLF001
         if (prov in ("openai", "gemini", "openrouter", "sdcpp", "cloudflare") or pkey) and ref:
@@ -184,16 +198,17 @@ def group_media():
             out = T.speak(root, "Hallo, das ist ein Test der Sprachausgabe.", "de", "t")
             eng = "Piper" if T._piper()[0] else "espeak-ng"  # noqa: SLF001
             return f"{eng}: {out[:60]}"
-        check("Sprachausgabe", tts, hint="sudo apt install espeak-ng; besser: ./install.sh --piper")
+        check("Sprachausgabe", tts, hint=fix("sudo apt install espeak-ng; besser: ./install.sh --piper",
+                                             "venv\\Scripts\\pip install edge-tts und TTS_ENGINE=edge in .env (Online-Stimme)"))
         check("Piper (gute Stimme)", lambda: (lambda x: "Modell " + Path(x[1]).name if x[0] else (_ for _ in ()).throw(RuntimeError("nicht eingerichtet")))(T._piper()),  # noqa: SLF001
-              optional=True, hint="./install.sh --piper")
+              optional=True, hint=fix("./install.sh --piper", "optional, unter Windows von Hand (siehe docs/windows.md)"))
 
         def doc():
             r = T.make_document(root, {"title": "Test", "format": "pdf", "content": "# Kapitel\n\nUmlaute: äöüß. Türkisch: ğışçö."})
             if "WARNUNG" in r:
                 raise RuntimeError(r[r.index("WARNUNG"):][:160])
             return r[:70]
-        check("PDF erzeugen (Umlaute, Tuerkisch)", doc, hint="sudo apt install fonts-dejavu-core")
+        check("PDF erzeugen (Umlaute, Tuerkisch)", doc, hint=fix("sudo apt install fonts-dejavu-core", "Schrift Arial/Georgia in C:\\Windows\\Fonts fehlt?"))
 
 
 def group_ocr():
@@ -201,7 +216,8 @@ def group_ocr():
     check("tesseract", lambda: need("tesseract", "tesseract-ocr tesseract-ocr-deu") and "Sprachen: " + (T._tess_lang() or "keine"))  # noqa: SLF001
     check("pdftoppm", lambda: need("pdftoppm", "poppler-utils") and "ok")
     if shutil.which("tesseract") and "deu" not in T._tess_lang():  # noqa: SLF001
-        line("warn", "Deutsch fuer OCR", "sudo apt install tesseract-ocr-deu (Umlaute werden sonst schlechter erkannt)")
+        line("warn", "Deutsch fuer OCR", fix("sudo apt install tesseract-ocr-deu", "Tesseract neu installieren und Deutsch anhaken")
+             + " (Umlaute werden sonst schlechter erkannt)")
 
 
 CODE_SAMPLES = {  # Datei -> fehlerfreies Mini-Programm (wird nur geprueft, nicht ausgefuehrt)
@@ -221,7 +237,7 @@ def group_code():
             def run(fn=fn):
                 r = T.check_code(td, fn)
                 if "nicht installiert" in r:
-                    raise RuntimeError(r.split(".")[0] + "  -> ./install.sh --code")
+                    raise RuntimeError(r.split(".")[0] + fix("  -> ./install.sh --code", "  -> optional, Compiler installieren und in den PATH"))
                 if "FEHLER" in r:
                     raise RuntimeError(r[:200])
                 return "ok"
@@ -233,7 +249,7 @@ def group_code():
 def group_browser():
     print("\nEchter Browser (browse_page)")
     if not T.browser_enabled():
-        line("warn", "Browser", "aus (optional: ./install.sh --browser)")
+        line("warn", "Browser", "aus (optional: " + fix("./install.sh --browser", "venv\\Scripts\\pip install playwright; venv\\Scripts\\python -m playwright install chromium") + ")")
         return
     with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
         check("Seite im Browser oeffnen", lambda: (lambda r: f"{len(r[1])} Screenshot, " + r[0].splitlines()[1][:50])(
@@ -252,7 +268,8 @@ def group_browser():
 def group_run():
     print("\nCode ausfuehren (Recht 'Code ausfuehren', abgeschottet)")
     if not T.run_enabled():
-        line("warn", "Code ausfuehren", "aus (bubblewrap fehlt: ./install.sh --run, oder PCL_ALLOW_RUN=0)")
+        line("warn", "Code ausfuehren", fix("aus (bubblewrap fehlt: ./install.sh --run, oder PCL_ALLOW_RUN=0)",
+                                            "gibt es unter Windows nicht (braucht Linux), PCL_ALLOW_RUN=0 blendet es aus"))
         return
     with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
         def py():

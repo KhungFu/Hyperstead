@@ -39,3 +39,32 @@ def test_together_liste_als_array(monkeypatch):
 def test_gratis_modelle_kosten_nichts():
     assert A.est_cost("openrouter", "google/gemma-4-31b-it:free", 1_000_000) == 0.0
     assert A.est_cost("openrouter", "openai/gpt-4o-mini", 1_000_000) == 0.3
+
+
+def test_abgeschaltetes_standardmodell_wird_ersetzt(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    monkeypatch.setitem(A.PROVIDERS["groq"], "model", "llama-3.3-70b-versatile")
+    monkeypatch.setattr(A.requests, "get", lambda url, **kw: R({"data": [{"id": "openai/gpt-oss-120b"},
+                                                                           {"id": "qwen/qwen3-32b"}]}))
+    A._models_cache.pop("groq", None)
+    assert A.default_model("groq") == "openai/gpt-oss-120b"
+    A._models_cache.pop("groq", None)
+
+
+def test_standardmodell_bleibt_wenn_gelistet(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(A.requests, "get", lambda url, **kw: R({"data": [{"id": "models/gemini-3.1-flash-lite"}]}))
+    A._models_cache.pop("gemini", None)
+    assert A.default_model("gemini") == "gemini-3.1-flash-lite"
+    A._models_cache.pop("gemini", None)
+
+
+def test_openrouter_bezahlmodell_bekommt_max_tokens(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(A, "MAX_OUTPUT", 0)
+    monkeypatch.setattr(A.requests, "post", lambda url, **kw: sent.update(kw["json"]) or R({}))
+    A._post_openai(A.PROVIDERS["openrouter"], "k", "openai/gpt-4o-mini", [])
+    assert sent["max_tokens"] == 8192
+    sent.clear()
+    A._post_openai(A.PROVIDERS["openrouter"], "k", "openrouter/free", [])
+    assert "max_tokens" not in sent
