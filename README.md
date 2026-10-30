@@ -144,7 +144,9 @@ sind davon nie betroffen, Git kennt sie nicht.
 
 - **Wo:** auf dem Rechner, der die Bilder macht (z. B. Laptop), Ordner `C:\bildrechner`.
 - **Wann:** muss laufen, solange Agenten Bilder erzeugen sollen.
-- **Wie:** `bildrechner-start.bat` starten, Fenster offen lassen. In der `.env` von PaperclipLite
+- **Einrichten (einmal):** in PowerShell im PaperclipLite-Ordner
+  `powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1` (lädt Programm und Modelle).
+- **Wie:** `C:\bildrechner\bildrechner-start.bat` starten, Fenster offen lassen. In der `.env` von PaperclipLite
   `IMAGE_PROVIDER=sdcpp` und `SDCPP_URL=...` ([Anleitung](docs/laptop-bildrechner.md)), danach PaperclipLite neu starten.
 
 ### Umziehen (z. B. Pi → Laptop)
