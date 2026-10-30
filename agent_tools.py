@@ -779,7 +779,7 @@ def _gen_pollinations(prompt, refs, fmt, call):
     w, h = fmt[2]
     if not key:
         if refs:
-            raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai, gemini, openrouter, sdcpp "
+            raise ToolError("Referenzbilder gehen nur mit IMAGE_PROVIDER=openai, gemini, openrouter, sdcpp, cloudflare, nvidia "
                             "oder mit POLLINATIONS_API_KEY (in .env setzen)")
         params = {"width": w, "height": h, "nologo": "true", "seed": int(time.time()) % 100000}
         model = _model_env("POLLINATIONS_MODEL", "")
@@ -819,13 +819,11 @@ _sdcpp_lock = __import__("threading").Lock()  # der Bildrechner schafft nur ein 
 
 def _sdcpp_size(fmt):
     """Laengste Seite = SDCPP_SIZE (Std. 1024), beide Seiten auf Vielfache von 16 (CPU-Rechner: kleiner = schneller)."""
-    w, h = fmt[2]
     try:
         side = max(256, min(2048, int(_env("SDCPP_SIZE", "1024"))))
     except ValueError:
         side = 1024
-    k = side / max(w, h)
-    return max(16, int(w * k) // 16 * 16), max(16, int(h * k) // 16 * 16)
+    return _scaled(fmt, side)
 
 
 def _gen_sdcpp(prompt, refs, fmt, call):
@@ -859,6 +857,149 @@ def _gen_sdcpp(prompt, refs, fmt, call):
     return base64.b64decode(b64.split(",", 1)[1] if b64.startswith("data:") else b64)
 
 
+def _scaled(fmt, side=1024, step=16):
+    """Format auf laengste Seite `side` bringen, beide Seiten Vielfache von `step`."""
+    w, h = fmt[2]
+    k = side / max(w, h)
+    return max(step, int(w * k) // step * step), max(step, int(h * k) // step * step)
+
+
+def _b64_image(data):
+    """Bild aus typischen JSON-Antworten (artifacts/result/data/image) holen."""
+    if isinstance(data, dict):
+        for k in ("artifacts", "data", "images"):
+            v = data.get(k)
+            if isinstance(v, list) and v:
+                got = _b64_image(v[0])
+                if got:
+                    return got
+        if isinstance(data.get("result"), dict):
+            return _b64_image(data["result"])
+        for k in ("base64", "b64_json", "image"):
+            v = data.get(k)
+            if isinstance(v, str) and len(v) > 64:
+                return base64.b64decode(v.split(",", 1)[1] if v.startswith("data:") else v)
+    if isinstance(data, str) and len(data) > 64:
+        return base64.b64decode(data.split(",", 1)[1] if data.startswith("data:") else data)
+    return None
+
+
+def _small_ref(d, mime, side=512):
+    """Referenzbild fuer Anbieter mit Groessengrenze verkleinern (Cloudflare FLUX.2: unter 512 px)."""
+    try:
+        from PIL import Image
+        im = Image.open(io.BytesIO(d))
+        if max(im.size) < side:
+            return d, mime
+        im.thumbnail((side - 1, side - 1))
+        out = io.BytesIO()
+        im.convert("RGB").save(out, "PNG")
+        return out.getvalue(), "image/png"
+    except Exception:
+        return d, mime
+
+
+def _api_error(name, model, r, hint=""):
+    try:
+        body = r.json()
+        msg = body.get("detail") or body.get("error") or body.get("errors") or body
+    except ValueError:
+        msg = r.text
+    raise ToolError(f"{name} ({model}): HTTP {r.status_code}{hint} " + _clip(str(msg), 300))
+
+
+NVIDIA_IMAGE_MODEL = "black-forest-labs/flux.1-schnell"
+
+
+def _gen_nvidia(prompt, refs, fmt, call):
+    """NVIDIA NIM (build.nvidia.com): POST ai.api.nvidia.com/v1/genai/<modell>. Referenzbild nur bei Bearbeitungsmodellen
+    (z. B. black-forest-labs/flux.1-kontext-dev), dort genau eins."""
+    key = _env("NVIDIA_API_KEY").split(",")[0].strip()
+    if not key:
+        raise ToolError("IMAGE_PROVIDER=nvidia, aber NVIDIA_API_KEY fehlt")
+    model = _model_env("IMAGE_MODEL", NVIDIA_IMAGE_MODEL)
+    body = {"prompt": prompt[:10000], "seed": int(time.time() * 1000) % 2_000_000_000}
+    if "schnell" in model:
+        body["steps"] = 4  # schnell kann nur 1024x1024
+    else:
+        body["width"], body["height"] = _scaled(fmt, 1024, 64)
+    if refs:
+        if len(refs) > 1:
+            raise ToolError("NVIDIA-Bildmodelle nehmen hoechstens 1 Referenzbild")
+        _, d, mime = refs[0]
+        body["image"] = f"data:{mime};base64,{base64.b64encode(d).decode()}"
+    r = requests.post(f"https://ai.api.nvidia.com/v1/genai/{model}", timeout=300, json=body,
+                      headers={"Authorization": "Bearer " + key, "Accept": "application/json"})
+    if r.status_code >= 400:
+        _api_error("NVIDIA", model, r, " (Modell kann keine Referenzbilder?)" if refs and r.status_code == 422 else "")
+    img = _b64_image(r.json())
+    if not img:
+        raise ToolError(f"NVIDIA ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
+    return img
+
+
+CLOUDFLARE_IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b"
+
+
+def _gen_cloudflare(prompt, refs, fmt, call):
+    """Cloudflare Workers AI: FLUX.2-Modelle per Multipart (Referenzbilder input_image_0..3, unter 512 px),
+    aeltere Modelle (z. B. flux-1-schnell) per JSON ohne Referenzen."""
+    acc, key = _env("CF_ACCOUNT_ID").strip(), _env("CF_API_TOKEN").split(",")[0].strip()
+    if not acc or not key:
+        raise ToolError("IMAGE_PROVIDER=cloudflare, aber CF_ACCOUNT_ID oder CF_API_TOKEN fehlt")
+    model = _model_env("IMAGE_MODEL", CLOUDFLARE_IMAGE_MODEL)
+    url = f"https://api.cloudflare.com/client/v4/accounts/{acc}/ai/run/{model}"
+    w, h = _scaled(fmt, 1024)
+    headers = {"Authorization": "Bearer " + key}
+    if "flux-2" in model:
+        form = {"prompt": (None, prompt), "width": (None, str(w)), "height": (None, str(h))}
+        for i, (name, d, mime) in enumerate(refs):
+            d, mime = _small_ref(d, mime)
+            form[f"input_image_{i}"] = (name, d, mime)
+        r = requests.post(url, headers=headers, files=form, timeout=300)
+    else:
+        if refs:
+            raise ToolError(f"{model} kann keine Referenzbilder, dafuer ein FLUX.2-Modell waehlen (IMAGE_MODEL)")
+        r = requests.post(url, headers=headers, json={"prompt": prompt, "width": w, "height": h}, timeout=300)
+    if r.status_code >= 400:
+        _api_error("Cloudflare", model, r)
+    if r.headers.get("content-type", "").startswith("image/"):
+        return r.content
+    img = _b64_image(r.json())
+    if not img:
+        raise ToolError(f"Cloudflare ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
+    return img
+
+
+HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
+
+
+def _gen_hf(prompt, refs, fmt, call):
+    """Hugging Face Inference (router.huggingface.co/<anbieter>/models/<modell>), Antwort = Bilddatei. Ohne Referenzbilder."""
+    key = _env("HF_TOKEN").split(",")[0].strip()
+    if not key:
+        raise ToolError("IMAGE_PROVIDER=hf, aber HF_TOKEN fehlt")
+    if refs:
+        raise ToolError("Hugging Face (Text zu Bild) kann hier keine Referenzbilder")
+    model = _model_env("IMAGE_MODEL", HF_IMAGE_MODEL)
+    sub = _env("HF_IMAGE_PROVIDER", "hf-inference").strip().strip("/") or "hf-inference"
+    w, h = _scaled(fmt, 1024)
+    r = requests.post(f"https://router.huggingface.co/{sub}/models/{model}", timeout=300,
+                      headers={"Authorization": "Bearer " + key, "Accept": "image/png"},
+                      json={"inputs": prompt, "parameters": {"width": w, "height": h}})
+    if r.status_code >= 400:
+        _api_error("Hugging Face", model, r, " (Guthaben aufgebraucht)" if r.status_code == 402 else "")
+    if r.headers.get("content-type", "").startswith("image/"):
+        return r.content
+    try:
+        img = _b64_image(r.json())
+    except ValueError:
+        img = None
+    if not img:
+        raise ToolError(f"Hugging Face ({model}) hat kein Bild geliefert: " + _clip(r.text, 300))
+    return img
+
+
 def image_generate(root, call):
     prompt = str(call.get("prompt") or "").strip()[:4000]
     if not prompt:
@@ -872,7 +1013,8 @@ def image_generate(root, call):
     _img_target(root, call, "png")  # Pfad vor dem (kostenpflichtigen) Aufruf pruefen
     prov = _env("IMAGE_PROVIDER", "pollinations").lower()
     gen = {"gemini": _gen_gemini, "openai": _gen_openai, "openrouter": _gen_openrouter,
-           "sdcpp": _gen_sdcpp}.get(prov, _gen_pollinations)
+           "sdcpp": _gen_sdcpp, "nvidia": _gen_nvidia, "cloudflare": _gen_cloudflare, "hf": _gen_hf,
+           "huggingface": _gen_hf}.get(prov, _gen_pollinations)
     fallback = ""
     try:
         data = gen(prompt, refs, fmt, call)
