@@ -202,6 +202,9 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | Video sağlayıcısındaki bakiye | Sağlayıcı bir hatayla yanıt verir (çoğunlukla HTTP 402/429 ya da „insufficient balance“), ajan bu metni sonucunda görür. Yerine başka bir sağlayıcı devreye girmez. | Bakiye yükleyin ya da `provider` ile veya `VIDEO_PROVIDER` içinde başka bir sağlayıcı seçin. |
 | `FAL_KEY` (`VIDEO_PROVIDER=fal`, `VIDEO_AI=fal` ya da `AUDIO_PROVIDER=fal` ile) | `video_generate`, `video_ai` ya da `sound_generate` „FAL_KEY fehlt“ der ve hiçbir şey üretmez. | fal.ai anahtarını girin ya da `VIDEO_AI`/`AUDIO_PROVIDER` satırını kaldırın. |
 | Bulut sesleri için `ELEVENLABS_API_KEY` ya da `OPENAI_API_KEY` (`TTS_ENGINE=elevenlabs` veya `openai`) | `speak` eksik anahtarı bildirir. O durumda yedek ses yoktur, film de diyaloglarda durur. | Anahtarı girin ya da `TTS_ENGINE=auto` yapın. |
+| CEO'nun yeni aldığı çalışanın yapay zekâsı | Yeni çalışan oluşturulur ama görev almaz. CEO sonra yeniden plan yaparsa görev „Diesen Mitarbeitern ist noch keine KI zugewiesen: …“ (henüz yapay zekâ atanmadı) ile durur. **⚠ Modelle** menüsünde „Noch keine KI“ olarak görünür. | ⚠ Modelle menüsünde yapay zekâ atayın ve gönderide „Weiter“ yanıtını verin. |
+| CEO'nun aldığı çalışanın hakları | Sistem eksik hakları role göre ekler (yukarıdaki liste). Hiçbir anahtar kelime uymazsa yalnızca *dosya okuma* alır ve yalnızca metinle yanıt verebilir. | Ajan panelinde kutuları işaretleyin ya da CEO'ya rolü daha net verin. |
+| CEO'nun çıkarmak veya değiştirmek istediği çalışan | Ad ekibinde yoksa (yazım hatası, başka ekip, zaten çıkarılmış) talimat atlanır ve sonuçta not edilir. Çalışanın hâlâ açık görevi varsa kalır. | Hiçbir şey, ya da daha sonra yeniden görevlendirin. |
 | `video_providers.py` (program dosyası) | Video, ses ve bulut sesi araçları ajanlar için görünmez olur, geri kalan her şey çalışmaya devam eder. | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 
 ## İnternetten erişim
@@ -408,7 +411,7 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
 - **🎯 Hedefler**: proje başına hedefler ve alt hedefler. Bir görev atarken isteğe bağlı olarak hedefi seçersiniz; devredilen görevler onu devralır.
   Patronlar hedefleri ilerlemeyle birlikte istemde görür, CEO'nun kontrol turu bunu raporlar. İşaretlenmesi = ulaşıldı.
 - **Önce sorun** (✋ Freigaben penceresi, proje başına, varsayılan kapalı): *En üst patronun planını onayla* yeni bir görevi,
-  siz dağıtım planını onaylayana kadar bekletir; *Yeni çalışanları onayla* CEO'nun kendi kendine kadro kurmasını bekletir. Onaylama/reddetme Telegram düğmesiyle de yapılır.
+  siz dağıtım planını onaylayana kadar bekletir; *Ekip değişikliklerini onayla* („Teamänderungen freigeben“) CEO'nun çalışan almasını, çıkarmasını ve değiştirmesini bekletir. Onaylama/reddetme Telegram düğmesiyle de yapılır.
   Reddedilen görev gönderide ❌ olarak düşer; ona yanıtınız patronun yeniden planlamasını sağlar.
   Kabuk onayları yalnızca web'de yapılır.
 - **📊 Kullanım ve maliyetler**: proje, ajan ve model başına çağrılar, belirteçler ve tahmini maliyetler (bugün, 7, 30 gün). Sınır yoktur.
@@ -494,7 +497,16 @@ Bir patronun istediği kadar çalışanı olabilir. Patronun panelinde (Ayarlar)
 
 ## CEO ekibini kendisi kurar
 
-Palettedeki CEO, **„Darf sein Team selbst zusammenstellen“** (kendi ekibini kurabilir, `recruit`) hakkına sahiptir. Henüz çalışanı yoksa ve bir görev alırsa, görevi analiz eder ve rol, çalışma talimatı ve raporlama hatlarıyla çalışanlar oluşturur (20'ye kadar; kendi ekibi olan bölüm başkanları da dahil). Yeni çalışanların **henüz yapay zekâsı yoktur**: bunları **⚠ Modelle** menüsünde (hepsini birden) ya da ajan başına ayarlarda atarsınız; sonra görevin altındaki **Post**'a yanıt verirsiniz (ör. „Weiter“ = devam). Bundan sonra CEO işi her zamanki gibi dağıtır. CEO yeni çalışanlara yalnızca web, görseller, dosya okuma/yazma ve medya verebilir, asla kabuk vermez.
+Palettedeki CEO, **„Darf sein Team selbst zusammenstellen“** (kendi ekibini kurabilir, `recruit`) hakkına sahiptir. Henüz çalışanı yoksa ve bir görev alırsa, görevi analiz eder ve rol, çalışma talimatı ve raporlama hatlarıyla çalışanlar oluşturur (20'ye kadar; kendi ekibi olan bölüm başkanları da dahil). Yeni çalışanların **henüz yapay zekâsı yoktur**: bunları **⚠ Modelle** menüsünde (hepsini birden) ya da ajan başına ayarlarda atarsınız; sonra görevin altındaki **Post**'a yanıt verirsiniz (ör. „Weiter“ = devam). Bundan sonra CEO işi her zamanki gibi dağıtır. CEO yeni çalışanlara yalnızca web, görseller, dosya okuma/yazma, medya ve programlama verebilir, asla kabuk vermez.
+
+**Ekip zaten kurulmuş olsa bile**, bu hakka sahip bir CEO her görevde ekibini sizin görevlerinize ve koşullarınıza göre uyarlayabilir:
+- **İşe alma**: ek çalışanlar, yukarıdaki gibi yapay zekâsız. Telegram mesajı alırsınız ve onlara yapay zekâ atarsınız. İş ancak bir sonraki görevden ya da sizin „Weiter“ yanıtınızdan sonra alırlar.
+- **İşten çıkarma**: yalnızca altındaki çalışanlar; asla kendisi ya da ekibi dışındaki ajanlar değil. Çıkarılan kişinin çalışanları bir kademe yukarı çıkar. Hâlâ açık görevi olan biri çıkarılmaz.
+- **Değiştirme**: altındaki çalışanların rolü, çalışma talimatı ve hakları (yalnızca yukarıda sayılanlar).
+
+**Role uygun haklar**: CEO herkese tam olarak işinin gerektirdiği hakları vermelidir. Bazılarını unutursa sistem bunları ad, rol ve çalışma talimatına göre ekler, ör. araştırma → *web*, görsel/illüstrasyon/grafik/tasarım → *görseller* + *dosya yazma*, video/ses/seslendirme/PDF/mizanpaj → *medya* + *dosya yazma*, yazar/metin/redaksiyon → *dosya yazma*, programlama/web sitesi → *programlama* + *dosya yazma*. Bir çalışanın rolünü değiştirirse haklar yeniden role uygun ayarlanır. Kabuk, kod çalıştırma, bağlantılar ve yayınlama hakkını asla vermez; bunları yalnızca siz işaretlersiniz.
+
+Her ekip değişikliğini önceden görmek istiyorsanız **Freigaben** penceresinde *Teamänderungen freigeben* (ekip değişikliklerini onayla) kutusunu işaretleyin. CEO'da bu işaret yoksa bunların hiçbirini yapamaz. Günlük görevler (zaman planı, denetim turu) ekibi asla değiştirmez.
 
 ## Çalışma saatleri ve günlük görevler
 

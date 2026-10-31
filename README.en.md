@@ -203,6 +203,9 @@ This list is extended with every change to the program. Each row says what the s
 | Credit with the video provider | The provider answers with an error (often HTTP 402/429 or “insufficient balance”); the agent gets the text in its result. No other provider steps in. | Top up the credit, or choose another provider with `provider` or in `VIDEO_PROVIDER`. |
 | `FAL_KEY` (with `VIDEO_PROVIDER=fal`, `VIDEO_AI=fal` or `AUDIO_PROVIDER=fal`) | `video_generate`, `video_ai` or `sound_generate` reports “FAL_KEY fehlt” and creates nothing. | Enter the key from fal.ai, or remove the `VIDEO_AI`/`AUDIO_PROVIDER` line. |
 | `ELEVENLABS_API_KEY` or `OPENAI_API_KEY` for cloud voices (`TTS_ENGINE=elevenlabs` or `openai`) | `speak` reports the missing key. There is no fallback voice then; the film also stops at dialogue. | Enter the key or set `TTS_ENGINE=auto`. |
+| AI of an employee newly hired by the CEO | The new one is created but gets no tasks. If the CEO plans again afterwards, the task stops with „Diesen Mitarbeitern ist noch keine KI zugewiesen: …“ (no AI assigned yet). In the menu **⚠ Modelle** he is listed as „Noch keine KI“. | Assign an AI in the menu ⚠ Modelle and reply „Weiter“ in the post. |
+| Rights of an employee hired by the CEO | The system adds missing rights based on the role (list above). If no keyword matches, he only gets *read files* and can only answer with text. | Set the ticks in the agent panel or give the CEO the role more precisely. |
+| Employee the CEO wants to fire or change | If the name is not in his team (typo, other team, already fired), the instruction is skipped and noted in the result. If the employee still has an open task, he stays. | Nothing, or assign it again later. |
 | `video_providers.py` (program file) | The video, sound and cloud voice tools disappear for the agents; everything else keeps running. | Run `git pull` again, the file is part of the program. |
 
 ## Access from the internet
@@ -415,7 +418,7 @@ costs can arise; you see the tokens per agent on the node.
 - **🎯 Goals**: goals and sub-goals per project. When assigning a task you optionally choose the goal; delegated tasks inherit it.
   Bosses see the goals with progress in the prompt, the CEO's inspection round reports it. Tick off = reached.
 - **Ask first** (window ✋ Freigaben, per project, default off): *Approve the plan of the top boss* holds a new task
-  until you approve the distribution plan; *Approve new employees* holds the CEO's self-staffing. Approve/reject also via a
+  until you approve the distribution plan; *Approve team changes* („Teamänderungen freigeben“) holds the CEO's hiring, firing and changing of employees. Approve/reject also via a
   Telegram button. Rejected = the task lands as ❌ in the post; your reply to it makes the boss plan again.
   Shell approvals still only go through the web.
 - **📊 Usage & costs**: calls, tokens and estimated costs per project, agent and model (today, 7, 30 days). No limit.
@@ -502,7 +505,16 @@ A boss can have any number of employees. In the boss's panel (settings) you sele
 
 ## CEO assembles his team himself
 
-The CEO from the palette has the right **„Darf sein Team selbst zusammenstellen“** (may assemble his team himself, `recruit`). If he has no employees yet and gets a task, he analyses it and creates employees with role, work instruction and reporting lines (up to 20, also department heads with their own team). The new ones have **no AI yet**: you assign them in the menu **⚠ Modelle** (all at once) or per agent in the settings, and then reply in the **Post** to the task (e.g. „Weiter“ = continue). After that the CEO distributes the work as usual. The CEO can give the new ones only web, images, read/write files and media, never shell.
+The CEO from the palette has the right **„Darf sein Team selbst zusammenstellen“** (may assemble his team himself, `recruit`). If he has no employees yet and gets a task, he analyses it and creates employees with role, work instruction and reporting lines (up to 20, also department heads with their own team). The new ones have **no AI yet**: you assign them in the menu **⚠ Modelle** (all at once) or per agent in the settings, and then reply in the **Post** to the task (e.g. „Weiter“ = continue). After that the CEO distributes the work as usual. The CEO can give the new ones only web, images, read/write files, media and programming, never shell.
+
+**Even when the team already exists**, a CEO with this right may adapt his team to your tasks and conditions with every task:
+- **Hire**: more employees, as above without AI. You get a Telegram message and assign them an AI. They only get work from the next task or after your „Weiter“.
+- **Fire**: only employees below him, never himself or agents outside his team. The fired person's people move up one level. Anyone who still has an open task is not fired.
+- **Change**: role, work instruction and rights (only those named above) of employees below him.
+
+**Rights to match the role**: The CEO should give everyone exactly the rights their work needs. If he forgets some, the system adds them from name, role and work instruction, e.g. research → *web*, images/illustration/graphics/design → *images* + *write files*, video/sound/voice/PDF/layout → *media* + *write files*, author/text/proofreading → *write files*, programming/website → *programming* + *write files*. If he changes an employee's role, the rights are set again to match. Shell, running code, connections and publishing he never gives; only you tick those.
+
+If you want to see every team change beforehand, tick *Teamänderungen freigeben* (approve team changes) in the **Freigaben** window. Without the tick at the CEO he may do none of this. Daily tasks (schedule, inspection round) never change the team.
 
 ## Opening hours and daily tasks
 
