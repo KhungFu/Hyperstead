@@ -204,6 +204,7 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | `FAL_KEY` (bei `VIDEO_PROVIDER=fal`, `VIDEO_AI=fal` oder `AUDIO_PROVIDER=fal`) | `video_generate`, `video_ai` bzw. `sound_generate` meldet „FAL_KEY fehlt“ und erzeugt nichts. | Key von fal.ai eintragen oder die Zeile `VIDEO_AI`/`AUDIO_PROVIDER` entfernen. |
 | `ELEVENLABS_API_KEY` oder `OPENAI_API_KEY` für Cloud-Stimmen (`TTS_ENGINE=elevenlabs` bzw. `openai`) | `speak` meldet den fehlenden Key. Es gibt dann keine Ersatzstimme, auch der Film bricht bei Dialogen ab. | Key eintragen oder `TTS_ENGINE=auto` setzen. |
 | KI eines vom CEO neu eingestellten Mitarbeiters | Der Neue wird angelegt, bekommt aber keine Aufgaben. Plant der CEO danach wieder, bricht der Auftrag mit „Diesen Mitarbeitern ist noch keine KI zugewiesen: …“ ab. Im Menü **⚠ Modelle** steht er als „Noch keine KI“. | KI im Menü ⚠ Modelle zuweisen und in der Post „Weiter“ antworten. |
+| Rechte bei einem vom CEO eingestellten Mitarbeiter | Das System ergänzt fehlende Rechte anhand der Rolle (Tabelle oben). Passt kein Stichwort, bekommt er nur *Dateien lesen* und kann nur mit Text antworten. | Im Agenten-Panel die Häkchen setzen oder dem CEO die Rolle genauer vorgeben. |
 | Mitarbeiter, den der CEO entlassen oder ändern will | Gibt es den Namen in seinem Team nicht (Tippfehler, anderes Team, schon entlassen), wird die Anweisung übersprungen und im Ergebnis vermerkt. Hat der Mitarbeiter noch eine offene Aufgabe, bleibt er. | Nichts, oder später erneut beauftragen. |
 | `video_providers.py` (Programmdatei) | Die Video-, Ton- und Cloud-Stimmen-Werkzeuge verschwinden für die Agenten, alles andere läuft weiter. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 
@@ -507,6 +508,8 @@ Der CEO aus der Palette hat das Recht **„Darf sein Team selbst zusammenstellen
 - **Einstellen**: weitere Mitarbeiter, wie oben ohne KI. Du bekommst eine Telegram-Nachricht und weist ihnen die KI zu. Arbeit bekommen sie erst ab dem nächsten Auftrag bzw. nach deinem „Weiter“.
 - **Entlassen**: nur Mitarbeiter unter ihm, nie sich selbst oder Agenten außerhalb seines Teams. Die Leute des Entlassenen rücken eine Ebene hoch. Wer noch eine offene Aufgabe hat, wird nicht entlassen.
 - **Ändern**: Rolle, Arbeitsanweisung und Rechte (nur die oben genannten) von Mitarbeitern unter ihm.
+
+**Rechte passend zur Rolle**: Der CEO soll jedem genau die Rechte geben, die seine Arbeit braucht. Vergisst er welche, ergänzt das System sie anhand von Name, Rolle und Arbeitsanweisung, z. B. Recherche → *Web*, Bilder/Illustration/Grafik/Design → *Bilder* + *Dateien schreiben*, Video/Ton/Stimme/PDF/Layout → *Medien* + *Dateien schreiben*, Autor/Text/Lektorat → *Dateien schreiben*, Programmierung/Webseite → *Programmieren* + *Dateien schreiben*. Ändert er die Rolle eines Mitarbeiters, werden die Rechte neu passend gesetzt. Shell, Code ausführen, Verbindungen und Veröffentlichen gibt er nie, die hakst nur du an.
 
 Willst du jede Teamänderung vorher sehen, hake im Fenster **Freigaben** *Teamänderungen freigeben* an. Ohne das Häkchen beim CEO darf er nichts davon. Tägliche Aufgaben (Zeitplan, Kontrollgang) ändern das Team nie.
 

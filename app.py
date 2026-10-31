@@ -1154,7 +1154,9 @@ def build_system(agent, project, mode, final_only=False, team_change_ok=False):
         rules.append(f"Du hast noch kein Team. Analysiere den Auftrag und stelle genau die Mitarbeiter ein, die du dafuer brauchst (so wenige wie sinnvoll, "
                      f"hoechstens {RECRUIT_MAX}). Gib jedem eine klare Rolle und eine konkrete Arbeitsanweisung (Aufgabe, Qualitaetskriterien, Format). "
                      "Fuer groessere Bereiche darfst du Abteilungsleiter einstellen und ihnen weitere Mitarbeiter ueber reports_to unterstellen. "
-                     "tools ist optional; erlaubt: web, images, read_files, write_files, media, code (Programmieren). Verteile in diesem Schritt KEINE Aufgaben: "
+                     "Gib jedem in tools genau die Rechte, die seine Rolle braucht: web = Recherche im Internet, images = Bilder/Illustrationen erzeugen, "
+                     "write_files = Dateien (Texte, Webseiten) schreiben, media = Video, Ton, Stimme, PDF/DOCX/EPUB bauen, code = Programmieren, "
+                     "read_files = Dateien lesen (haben alle). Der Server ergaenzt fehlende Rechte anhand der Rolle. Verteile in diesem Schritt KEINE Aufgaben: "
                      "Der Besitzer weist den Mitarbeitern zuerst KI und Modell zu, danach startest du die Arbeit.")
     elif mode == "review":
         fields[0] = '"result": "konsolidiertes Gesamtergebnis, das an deinen Vorgesetzten bzw. als Endergebnis geht"'
@@ -1180,8 +1182,9 @@ def build_system(agent, project, mode, final_only=False, team_change_ok=False):
                       '"tools": ["web", "write_files"]}]')
         rules.append(f"Du darfst dein Team jederzeit an den Auftrag anpassen (alles optional): recruit stellt neue Mitarbeiter ein (hoechstens {RECRUIT_MAX}, "
                      "sie bekommen erst vom Besitzer eine KI und koennen in dieser Runde noch keine Aufgaben bekommen), dismiss entlaesst Mitarbeiter unter dir "
-                     "(ihre Leute ruecken eine Ebene hoch), change aendert Rolle, Arbeitsanweisung oder Rechte (tools ersetzt die Rechte; erlaubt: web, images, "
-                     "read_files, write_files, media, code). Aendere das Team nur, wenn der Auftrag oder die Vorgaben des Besitzers es verlangen.")
+                     "(ihre Leute ruecken eine Ebene hoch), change aendert Rolle, Arbeitsanweisung oder Rechte (tools ersetzt die Rechte; web = Recherche, "
+                     "images = Bilder/Illustrationen, write_files = Dateien schreiben, media = Video/Ton/PDF/DOCX/EPUB, code = Programmieren). "
+                     "Gib jedem genau die Rechte, die seine Rolle braucht; der Server ergaenzt fehlende anhand der Rolle. Aendere das Team nur, wenn der Auftrag oder die Vorgaben des Besitzers es verlangen.")
     if mode in ("work", "review"):
         if perms["write_files"]:
             fields.append('"write_file": [{"path": "relativer/pfad.txt", "content": "..."}]')
@@ -1593,6 +1596,23 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
     return text, total, made
 
 
+# Rechte passend zur Rolle: Stichwort in Name/Rolle/Arbeitsanweisung -> Rechte (nur aus RECRUIT_PERMS)
+ROLE_TOOLS = (
+    (("recherch", "research", "analys", "markt", "rechts", "jurist", "steuer", "seo", "quelle", "suche", "news", "journal"), ("web",)),
+    (("bild", "illustr", "grafik", "design", "foto", "photo", "zeichn", "logo", "cover", "image", "visual", "comic"), ("images", "write_files")),
+    (("video", "film", "animat", "schnitt", "sound", "audio", "sprecher", "stimme", "musik", "podcast", "pdf", "epub", "buchsatz",
+      "layout", "dokument", "praesentation", "präsentation"), ("media", "write_files")),
+    (("autor", "text", "schreib", "redakt", "lektor", "uebersetz", "übersetz", "content", "copywrit", "bericht", "buch"), ("write_files",)),
+    (("programm", "entwickl", "develop", "code", "coder", "software", "frontend", "backend", "webseite", "website", "webdesign", "skript", "script"),
+     ("code", "write_files")),
+)
+
+
+def tools_for_role(*texts):
+    low = " ".join(str(x or "") for x in texts).lower()
+    return {p for keys, perms in ROLE_TOOLS if any(k in low for k in keys) for p in perms}
+
+
 def recruit_team(boss, project, items, notes):
     """Legt die vom Chef vorgeschlagenen Mitarbeiter an: ohne KI (provider ''), Rechte nur aus RECRUIT_PERMS."""
     items = [i for i in (items if isinstance(items, list) else []) if isinstance(i, dict)][:RECRUIT_MAX]
@@ -1609,7 +1629,8 @@ def recruit_team(boss, project, items, notes):
         tl = it.get("tools") if isinstance(it.get("tools"), list) else []
         people.append({"name": name, "role": str(it.get("role") or "")[:100], "prompt": str(it.get("system_prompt") or "")[:3000],
                        "reports": str(it.get("reports_to") or "").strip().lower(),
-                       "tools": {str(x) for x in tl if str(x) in RECRUIT_PERMS}})
+                       "tools": {str(x) for x in tl if str(x) in RECRUIT_PERMS}
+                       | tools_for_role(name, it.get("role"), it.get("system_prompt"))})
     idx = {p["name"].lower(): i for i, p in enumerate(people)}
     for i, p in enumerate(people):  # Vorgesetzter innerhalb des neuen Teams, sonst der Chef selbst
         j = idx.get(p["reports"])
@@ -1685,9 +1706,11 @@ def change_team(boss, project, data, notes):
             sets.append("role=?"); args.append(str(it["role"])[:100]); what.append("Rolle")
         if it.get("system_prompt"):
             sets.append("system_prompt=?"); args.append(str(it["system_prompt"])[:3000]); what.append("Arbeitsanweisung")
-        if isinstance(it.get("tools"), list):
+        guessed = tools_for_role(d["name"], it.get("role"), it.get("system_prompt")) if (it.get("role") or it.get("system_prompt")) else set()
+        if isinstance(it.get("tools"), list) or guessed:
+            want = {str(x) for x in it["tools"]} | guessed if isinstance(it.get("tools"), list) else guessed
             perms = perms_of(d)
-            perms.update({k: (k in {str(x) for x in it["tools"]}) for k in RECRUIT_PERMS if k != "read_files"})
+            perms.update({k: (k in want) for k in RECRUIT_PERMS if k != "read_files"})
             sets.append("perms=?"); args.append(json.dumps(perms)); what.append("Rechte")
         if sets:
             ex(f"UPDATE agents SET {', '.join(sets)} WHERE id=?", args + [d["id"]])

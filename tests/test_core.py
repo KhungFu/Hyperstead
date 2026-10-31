@@ -282,3 +282,24 @@ def test_teamumbau_mit_freigabe(client, monkeypatch):
     client.post(f"/api/approvals/{ap['id']}", json={"decision": "approve"})
     assert task(tid)["status"] == "done"
     assert not A.q1("SELECT id FROM agents WHERE id=?", (m1,)) and A.q1("SELECT id FROM agents WHERE name='Neu'")
+
+
+def test_rechte_passend_zur_rolle():
+    assert A.tools_for_role("Rechercheur", "Marktrecherche") == {"web"}
+    assert A.tools_for_role("Mia", "Illustratorin") == {"images", "write_files"}
+    assert A.tools_for_role("Cutter", "Videoschnitt") == {"media", "write_files"}
+    assert "code" in A.tools_for_role("Dev", "Webseiten-Entwickler")
+    pid = make_project()
+    ceo = A.q1("SELECT * FROM agents WHERE id=?", (make_agent(pid, "CEO", recruit=True),))
+    A.recruit_team(ceo, {"id": pid, "name": "x"}, [{"name": "R", "role": "Recherche"}, {"name": "I", "role": "Illustrator", "tools": ["web"]}], [])
+    r, i = (A.perms_of(A.q1("SELECT * FROM agents WHERE name=?", (n,))) for n in ("R", "I"))
+    assert r["web"] and not r["images"] and not r["write_files"] and not r["shell"]
+    assert i["images"] and i["web"] and not i["media"]
+
+
+def test_rollenwechsel_passt_rechte_an(monkeypatch):
+    pid, ceo, m0, m1 = _umbau(monkeypatch, {"result": "x", "change": [{"name": "M1", "role": "Illustrator"}]})
+    make_task(pid, ceo)
+    drain()
+    p = A.perms_of(A.q1("SELECT * FROM agents WHERE id=?", (m1,)))
+    assert p["images"] and not p["web"] and not p["media"]
