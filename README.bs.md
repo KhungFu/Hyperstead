@@ -203,6 +203,9 @@ Ova lista se dopunjava pri svakoj promjeni programa. Svaki red kaže šta sistem
 | Kredit kod video provajdera | Provajder odgovara greškom (često HTTP 402/429 ili „insufficient balance“), agent dobija tekst u rezultatu. Nijedan drugi provajder ne uskače. | Dopunite kredit ili izaberite drugog provajdera preko `provider` ili u `VIDEO_PROVIDER`. |
 | `FAL_KEY` (uz `VIDEO_PROVIDER=fal`, `VIDEO_AI=fal` ili `AUDIO_PROVIDER=fal`) | `video_generate`, `video_ai` odnosno `sound_generate` javlja „FAL_KEY fehlt“ i ništa ne pravi. | Unesite ključ sa fal.ai ili uklonite red `VIDEO_AI`/`AUDIO_PROVIDER`. |
 | `ELEVENLABS_API_KEY` ili `OPENAI_API_KEY` za cloud glasove (`TTS_ENGINE=elevenlabs` ili `openai`) | `speak` javlja da ključ nedostaje. Tada nema zamjenskog glasa, i film se prekida kod dijaloga. | Unesite ključ ili postavite `TTS_ENGINE=auto`. |
+| AI saradnika kojeg je CEO tek zaposlio | Novi saradnik se pravi, ali ne dobija zadatke. Ako CEO poslije toga ponovo planira, zadatak se prekida sa „Diesen Mitarbeitern ist noch keine KI zugewiesen: …“ (još nije dodijeljen AI). U meniju **⚠ Modelle** stoji kao „Noch keine KI“. | Dodijelite AI u meniju ⚠ Modelle i odgovorite „Weiter“ u pošti. |
+| Prava saradnika kojeg je zaposlio CEO | Sistem dodaje prava koja nedostaju na osnovu uloge (lista gore). Ako se nijedna ključna riječ ne poklapa, dobija samo *čitanje fajlova* i može odgovoriti samo tekstom. | Označite prava u panelu agenta ili CEO-u preciznije zadajte ulogu. |
+| Saradnik kojeg CEO želi otpustiti ili izmijeniti | Ako tog imena nema u njegovom timu (greška u kucanju, drugi tim, već otpušten), uputstvo se preskače i bilježi u rezultatu. Ako saradnik još ima otvoren zadatak, ostaje. | Ništa, ili kasnije ponovo zadajte. |
 | `video_providers.py` (programski fajl) | Alati za video, zvuk i cloud glasove nestaju za agente, sve ostalo radi dalje. | Ponovo pokrenite `git pull`, fajl je dio programa. |
 
 ## Pristup sa interneta
@@ -414,7 +417,7 @@ mogu nastati troškovi; bilans po agentu vidite na čvoru.
 - **🎯 Ciljevi**: ciljevi i podciljevi po projektu. Pri dodjeljivanju zadatka opciono birate cilj; delegirani zadaci ga nasljeđuju.
   Šefovi vide ciljeve sa napretkom u promptu, a CEO-ov kontrolni obilazak to izvještava. Označeno = ostvareno.
 - **Prvo pitaj** (prozor ✋ Freigaben, po projektu, podrazumijevano isključeno): *Odobri plan najvišeg šefa* zadržava novi zadatak
-  dok ne odobrite plan raspodjele; *Odobri nove saradnike* zadržava CEO-ovo samostalno kadriranje. Odobravanje/odbijanje i preko
+  dok ne odobrite plan raspodjele; *Odobri izmjene tima* („Teamänderungen freigeben“) zadržava CEO-ovo zapošljavanje, otpuštanje i mijenjanje saradnika. Odobravanje/odbijanje i preko
   Telegram dugmeta. Odbijeno = zadatak završi kao ❌ u pošti; vaš odgovor na to tjera šefa da ponovo planira.
   Odobrenja za shell i dalje idu samo preko weba.
 - **📊 Upotreba i troškovi**: pozivi, tokeni i procijenjeni troškovi po projektu, agentu i modelu (danas, 7, 30 dana). Bez limita.
@@ -501,7 +504,16 @@ PaperclipLite svakih 6 sati (`PCL_MODEL_CHECK_HOURS`) provjerava da li modeli ag
 
 ## CEO sam sastavlja svoj tim
 
-CEO iz palete ima pravo **„Darf sein Team selbst zusammenstellen“** (smije sam sastaviti svoj tim, `recruit`). Ako još nema saradnike i dobije zadatak, analizira ga i pravi saradnike sa ulogom, radnim uputstvom i linijama izvještavanja (do 20, uključujući šefove odjeljenja sa vlastitim timom). Novi saradnici **još nemaju AI**: dodjeljujete ih u meniju **⚠ Modelle** (svi odjednom) ili po agentu u podešavanjima, pa odgovorite u **Pošti** na zadatak (npr. „Weiter“ = nastavi). Poslije toga CEO raspoređuje posao kao i obično. CEO novim saradnicima može dati samo web, slike, čitanje/pisanje fajlova i medije, nikada shell.
+CEO iz palete ima pravo **„Darf sein Team selbst zusammenstellen“** (smije sam sastaviti svoj tim, `recruit`). Ako još nema saradnike i dobije zadatak, analizira ga i pravi saradnike sa ulogom, radnim uputstvom i linijama izvještavanja (do 20, uključujući šefove odjeljenja sa vlastitim timom). Novi saradnici **još nemaju AI**: dodjeljujete ih u meniju **⚠ Modelle** (svi odjednom) ili po agentu u podešavanjima, pa odgovorite u **Pošti** na zadatak (npr. „Weiter“ = nastavi). Poslije toga CEO raspoređuje posao kao i obično. CEO novim saradnicima može dati samo web, slike, čitanje/pisanje fajlova, medije i programiranje, nikada shell.
+
+**I kada tim već postoji**, CEO s ovim pravom smije pri svakom zadatku prilagoditi svoj tim vašim zadacima i uslovima:
+- **Zapošljavanje**: dodatni saradnici, kao gore bez AI. Dobijate poruku na Telegramu i dodjeljujete im AI. Posao dobijaju tek od sljedećeg zadatka ili poslije vašeg „Weiter“.
+- **Otpuštanje**: samo saradnici ispod njega, nikada on sam niti agenti izvan njegovog tima. Ljudi otpuštenog se pomjeraju nivo više. Ko još ima otvoren zadatak, ne biva otpušten.
+- **Izmjena**: uloga, radno uputstvo i prava (samo gore navedena) saradnika ispod njega.
+
+**Prava prema ulozi**: CEO treba svakome dati tačno ona prava koja mu posao traži. Ako neka zaboravi, sistem ih dodaje na osnovu imena, uloge i radnog uputstva, npr. istraživanje → *web*, slike/ilustracije/grafika/dizajn → *slike* + *pisanje fajlova*, video/zvuk/glas/PDF/prijelom → *mediji* + *pisanje fajlova*, autor/tekst/lektura → *pisanje fajlova*, programiranje/web stranica → *programiranje* + *pisanje fajlova*. Ako promijeni ulogu saradnika, prava se ponovo postavljaju prema njoj. Shell, izvršavanje koda, veze i objavljivanje nikada ne daje; to označavate samo vi.
+
+Ako želite unaprijed vidjeti svaku izmjenu tima, označite u prozoru **Freigaben** *Teamänderungen freigeben* (odobri izmjene tima). Bez označene opcije kod CEO-a ne smije ništa od ovoga. Dnevni zadaci (raspored, kontrolni obilazak) nikada ne mijenjaju tim.
 
 ## Radno vrijeme i dnevni zadaci
 
