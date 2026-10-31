@@ -203,6 +203,8 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Guthaben beim Videoanbieter | Der Anbieter antwortet mit einem Fehler (oft HTTP 402/429 oder „insufficient balance“), der Agent bekommt den Text ins Ergebnis. Es springt kein anderer Anbieter ein. | Guthaben aufladen oder mit `provider` bzw. in `VIDEO_PROVIDER` einen anderen Anbieter wählen. |
 | `FAL_KEY` (bei `VIDEO_PROVIDER=fal`, `VIDEO_AI=fal` oder `AUDIO_PROVIDER=fal`) | `video_generate`, `video_ai` bzw. `sound_generate` meldet „FAL_KEY fehlt“ und erzeugt nichts. | Key von fal.ai eintragen oder die Zeile `VIDEO_AI`/`AUDIO_PROVIDER` entfernen. |
 | `ELEVENLABS_API_KEY` oder `OPENAI_API_KEY` für Cloud-Stimmen (`TTS_ENGINE=elevenlabs` bzw. `openai`) | `speak` meldet den fehlenden Key. Es gibt dann keine Ersatzstimme, auch der Film bricht bei Dialogen ab. | Key eintragen oder `TTS_ENGINE=auto` setzen. |
+| KI eines vom CEO neu eingestellten Mitarbeiters | Der Neue wird angelegt, bekommt aber keine Aufgaben. Plant der CEO danach wieder, bricht der Auftrag mit „Diesen Mitarbeitern ist noch keine KI zugewiesen: …“ ab. Im Menü **⚠ Modelle** steht er als „Noch keine KI“. | KI im Menü ⚠ Modelle zuweisen und in der Post „Weiter“ antworten. |
+| Mitarbeiter, den der CEO entlassen oder ändern will | Gibt es den Namen in seinem Team nicht (Tippfehler, anderes Team, schon entlassen), wird die Anweisung übersprungen und im Ergebnis vermerkt. Hat der Mitarbeiter noch eine offene Aufgabe, bleibt er. | Nichts, oder später erneut beauftragen. |
 | `video_providers.py` (Programmdatei) | Die Video-, Ton- und Cloud-Stimmen-Werkzeuge verschwinden für die Agenten, alles andere läuft weiter. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 
 ## Zugriff aus dem Internet
@@ -415,7 +417,7 @@ bezahlten APIs und vielen Werkzeug-Runden können Kosten entstehen, die Tokens s
 - **🎯 Ziele**: Ziele und Unterziele je Projekt. Beim Zuweisen einer Aufgabe wählst du optional das Ziel, delegierte Aufgaben erben es.
   Chefs sehen die Ziele mit Fortschritt im Prompt, der CEO-Kontrollgang berichtet ihn. Abhaken = erreicht.
 - **Vorher fragen** (Fenster ✋ Freigaben, je Projekt, Standard aus): *Plan des obersten Chefs freigeben* hält einen neuen Auftrag an,
-  bis du den Verteilungsplan freigibst; *Neue Mitarbeiter freigeben* hält das Selbst-Einstellen des CEO an. Freigeben/Ablehnen auch per
+  bis du den Verteilungsplan freigibst; *Teamänderungen freigeben* hält das Einstellen, Entlassen und Ändern von Mitarbeitern durch den CEO an. Freigeben/Ablehnen auch per
   Telegram-Knopf. Abgelehnt = der Auftrag landet als ❌ in der Post, deine Antwort darauf lässt den Chef neu planen.
   Shell-Freigaben gehen weiterhin nur im Web.
 - **📊 Nutzung & Kosten**: Aufrufe, Tokens und geschätzte Kosten je Projekt, Agent und Modell (heute, 7, 30 Tage). Kein Limit.
@@ -499,7 +501,14 @@ PaperclipLite prüft alle 6 Stunden (`PCL_MODEL_CHECK_HOURS`), ob die Modelle de
 Ein Vorgesetzter kann beliebig viele Mitarbeiter haben. Im Panel des Vorgesetzten (Einstellungen) wählst du unter **Unterstellte Mitarbeiter** per Häkchen alle aus und speicherst die Zuweisung. Alternativ: unteren Punkt des Vorgesetzten auf einen Mitarbeiter ziehen. Der Knopf **🗂 Ordnen** legt alles als Organigramm an (Gruppen ab 6 Mitarbeitern in Reihen zu je 5).
 
 ## CEO stellt sein Team selbst zusammen
-Der CEO aus der Palette hat das Recht **„Darf sein Team selbst zusammenstellen“** (`recruit`). Hat er noch keine Mitarbeiter und bekommt einen Auftrag, analysiert er ihn und legt Mitarbeiter mit Rolle, Arbeitsanweisung und Berichtslinien an (bis 20, auch Abteilungsleiter mit eigenem Team). Die Neuen haben **noch keine KI**: Du weist sie im Menü **⚠ Modelle** (alle auf einmal) oder je Agent in den Einstellungen zu und antwortest dann in der **Post** auf den Auftrag (z. B. „Weiter“). Danach verteilt der CEO die Arbeit wie gewohnt. Der CEO kann Neuen nur Web, Bilder, Dateien lesen/schreiben und Medien mitgeben, nie Shell.
+Der CEO aus der Palette hat das Recht **„Darf sein Team selbst zusammenstellen“** (`recruit`). Hat er noch keine Mitarbeiter und bekommt einen Auftrag, analysiert er ihn und legt Mitarbeiter mit Rolle, Arbeitsanweisung und Berichtslinien an (bis 20, auch Abteilungsleiter mit eigenem Team). Die Neuen haben **noch keine KI**: Du weist sie im Menü **⚠ Modelle** (alle auf einmal) oder je Agent in den Einstellungen zu und antwortest dann in der **Post** auf den Auftrag (z. B. „Weiter“). Danach verteilt der CEO die Arbeit wie gewohnt. Der CEO kann Neuen nur Web, Bilder, Dateien lesen/schreiben, Medien und Programmieren mitgeben, nie Shell.
+
+**Auch wenn das Team schon steht**, darf ein CEO mit diesem Recht sein Team bei jedem Auftrag an deine Aufgaben und Vorgaben anpassen:
+- **Einstellen**: weitere Mitarbeiter, wie oben ohne KI. Du bekommst eine Telegram-Nachricht und weist ihnen die KI zu. Arbeit bekommen sie erst ab dem nächsten Auftrag bzw. nach deinem „Weiter“.
+- **Entlassen**: nur Mitarbeiter unter ihm, nie sich selbst oder Agenten außerhalb seines Teams. Die Leute des Entlassenen rücken eine Ebene hoch. Wer noch eine offene Aufgabe hat, wird nicht entlassen.
+- **Ändern**: Rolle, Arbeitsanweisung und Rechte (nur die oben genannten) von Mitarbeitern unter ihm.
+
+Willst du jede Teamänderung vorher sehen, hake im Fenster **Freigaben** *Teamänderungen freigeben* an. Ohne das Häkchen beim CEO darf er nichts davon. Tägliche Aufgaben (Zeitplan, Kontrollgang) ändern das Team nie.
 
 ## Öffnungszeiten und tägliche Aufgaben
 Seitenleiste **🕘 Zeitplan**: Pro Projekt Arbeitsbeginn, Feierabend und Arbeitstage festlegen. Je Mitarbeiter lassen sich **tägliche Aufgaben** anlegen (feste Uhrzeit, bei Arbeitsbeginn oder bei Feierabend, an wählbaren Wochentagen), z. B. „jeden Tag um 15:00 die Website kontrollieren“. Das Ergebnis kommt wie jede Post in die Ansicht „Post“ (und per Telegram). Läuft die letzte Aufgabe eines Zeitplans noch, wird nicht doppelt gestartet; war der Pi zur Uhrzeit aus, wird bis zu 6 Stunden nachgeholt.
