@@ -208,3 +208,98 @@ def test_abo_warnung_einmal_je_fenster(monkeypatch):
     for _ in range(6):
         A.record_call(a, 100, 1.0)
     assert len(sent) == 1 and "Abo-Kontingent" in sent[0]
+
+
+# ------------------------------------------------------------ Team jederzeit aendern (Recht recruit)
+def _umbau(monkeypatch, antwort):
+    """CEO mit Team und Recht recruit; seine Planantwort ist fest vorgegeben, Mitarbeiter arbeiten wie gewohnt."""
+    orig = A.mock_llm
+
+    def fake(agent, messages):
+        if agent["name"] == "CEO" and not messages[-1]["content"].startswith(A.REVIEW_MARKER):
+            return json.dumps(antwort, ensure_ascii=False), 50
+        return orig(agent, messages)
+    monkeypatch.setattr(A, "mock_llm", fake)
+    pid = make_project()
+    ceo = make_agent(pid, "CEO", delegate=True, judge=True, recruit=True)
+    m0 = make_agent(pid, "M0", parent=ceo)
+    m1 = make_agent(pid, "M1", parent=m0)
+    return pid, ceo, m0, m1
+
+
+def test_ceo_stellt_ein_obwohl_team_steht(monkeypatch):
+    pid, ceo, m0, m1 = _umbau(monkeypatch, {"result": "Mehr Leute noetig", "recruit": [{"name": "Neu", "role": "Video"}],
+                                            "delegate": [{"to": "M0", "title": "Teil"}]})
+    tid = make_task(pid, ceo)
+    drain()
+    neu = A.q1("SELECT * FROM agents WHERE name='Neu'")
+    assert neu and neu["provider"] == "" and neu["parent_id"] == ceo
+    assert task(tid)["status"] == "done"
+    assert A.q1("SELECT COUNT(*) c FROM audit WHERE event='agent_recruited'")["c"] == 1
+    assert A.q1("SELECT COUNT(*) c FROM tasks WHERE parent_task_id=? AND agent_id=?", (tid, m0))["c"] == 1
+
+
+def test_ceo_entlaesst_und_aendert(monkeypatch):
+    pid, ceo, m0, m1 = _umbau(monkeypatch, {"result": "Umbau", "dismiss": ["M0"],
+                                            "change": [{"name": "M1", "role": "Leitung", "tools": ["write_files"]}],
+                                            "delegate": [{"to": "M0", "title": "geht nicht mehr"}]})
+    tid = make_task(pid, ceo)
+    drain()
+    assert A.q1("SELECT * FROM agents WHERE id=?", (m0,)) is None
+    m1a = A.q1("SELECT * FROM agents WHERE id=?", (m1,))
+    assert m1a["parent_id"] == ceo and m1a["role"] == "Leitung"
+    assert A.perms_of(m1a)["write_files"] and not A.perms_of(m1a)["web"] and not A.perms_of(m1a)["shell"]
+    assert A.q1("SELECT COUNT(*) c FROM tasks WHERE parent_task_id=?", (tid,))["c"] == 0
+    assert task(tid)["status"] == "done"
+
+
+def test_ceo_kann_nur_eigenes_team_entlassen(monkeypatch):
+    pid, ceo, m0, m1 = _umbau(monkeypatch, {"result": "x", "dismiss": ["Fremd", "CEO"]})
+    fremd = make_agent(pid, "Fremd")
+    make_task(pid, ceo)
+    drain()
+    assert A.q1("SELECT id FROM agents WHERE id=?", (fremd,)) and A.q1("SELECT id FROM agents WHERE id=?", (ceo,))
+
+
+def test_ohne_recht_kein_teamumbau(monkeypatch):
+    pid, ceo, m0, m1 = _umbau(monkeypatch, {"result": "x", "dismiss": ["M0"], "recruit": [{"name": "Neu"}]})
+    A.ex("UPDATE agents SET perms=? WHERE id=?", (json.dumps(dict(A.DEFAULT_PERMS, delegate=True)), ceo))
+    tid = make_task(pid, ceo)
+    drain()
+    assert A.q1("SELECT id FROM agents WHERE id=?", (m0,)) and not A.q1("SELECT id FROM agents WHERE name='Neu'")
+    assert "nicht erlaubt" in task(tid)["result"]
+
+
+def test_teamumbau_mit_freigabe(client, monkeypatch):
+    pid, ceo, m0, m1 = _umbau(monkeypatch, {"result": "Umbau", "dismiss": ["M1"], "recruit": [{"name": "Neu", "role": "Text"}]})
+    client.put(f"/api/projects/{pid}/gates", json={"recruit": True})
+    tid = make_task(pid, ceo)
+    drain()
+    assert task(tid)["status"] == "waiting_approval"
+    assert A.q1("SELECT id FROM agents WHERE id=?", (m1,))
+    ap = client.get("/api/approvals").json[0]
+    assert ap["kind"] == "recruit" and "M1 entlassen" in ap["payload"]
+    client.post(f"/api/approvals/{ap['id']}", json={"decision": "approve"})
+    assert task(tid)["status"] == "done"
+    assert not A.q1("SELECT id FROM agents WHERE id=?", (m1,)) and A.q1("SELECT id FROM agents WHERE name='Neu'")
+
+
+def test_rechte_passend_zur_rolle():
+    assert A.tools_for_role("Rechercheur", "Marktrecherche") == {"web"}
+    assert A.tools_for_role("Mia", "Illustratorin") == {"images", "write_files"}
+    assert A.tools_for_role("Cutter", "Videoschnitt") == {"media", "write_files"}
+    assert "code" in A.tools_for_role("Dev", "Webseiten-Entwickler")
+    pid = make_project()
+    ceo = A.q1("SELECT * FROM agents WHERE id=?", (make_agent(pid, "CEO", recruit=True),))
+    A.recruit_team(ceo, {"id": pid, "name": "x"}, [{"name": "R", "role": "Recherche"}, {"name": "I", "role": "Illustrator", "tools": ["web"]}], [])
+    r, i = (A.perms_of(A.q1("SELECT * FROM agents WHERE name=?", (n,))) for n in ("R", "I"))
+    assert r["web"] and not r["images"] and not r["write_files"] and not r["shell"]
+    assert i["images"] and i["web"] and not i["media"]
+
+
+def test_rollenwechsel_passt_rechte_an(monkeypatch):
+    pid, ceo, m0, m1 = _umbau(monkeypatch, {"result": "x", "change": [{"name": "M1", "role": "Illustrator"}]})
+    make_task(pid, ceo)
+    drain()
+    p = A.perms_of(A.q1("SELECT * FROM agents WHERE id=?", (m1,)))
+    assert p["images"] and not p["web"] and not p["media"]

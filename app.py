@@ -1108,7 +1108,7 @@ def knowledge_block(pid):
     return s
 
 
-def build_system(agent, project, mode, final_only=False):
+def build_system(agent, project, mode, final_only=False, team_change_ok=False):
     """mode: 'work' = selbst erledigen, 'plan' = Chef plant/verteilt, 'review' = Chef liest Berichte und beurteilt."""
     perms = perms_of(agent)
     parent = q1("SELECT name, role FROM agents WHERE id=?", (agent["parent_id"],)) if agent["parent_id"] else None
@@ -1154,7 +1154,9 @@ def build_system(agent, project, mode, final_only=False):
         rules.append(f"Du hast noch kein Team. Analysiere den Auftrag und stelle genau die Mitarbeiter ein, die du dafuer brauchst (so wenige wie sinnvoll, "
                      f"hoechstens {RECRUIT_MAX}). Gib jedem eine klare Rolle und eine konkrete Arbeitsanweisung (Aufgabe, Qualitaetskriterien, Format). "
                      "Fuer groessere Bereiche darfst du Abteilungsleiter einstellen und ihnen weitere Mitarbeiter ueber reports_to unterstellen. "
-                     "tools ist optional; erlaubt: web, images, read_files, write_files, media, code (Programmieren). Verteile in diesem Schritt KEINE Aufgaben: "
+                     "Gib jedem in tools genau die Rechte, die seine Rolle braucht: web = Recherche im Internet, images = Bilder/Illustrationen erzeugen, "
+                     "write_files = Dateien (Texte, Webseiten) schreiben, media = Video, Ton, Stimme, PDF/DOCX/EPUB bauen, code = Programmieren, "
+                     "read_files = Dateien lesen (haben alle). Der Server ergaenzt fehlende Rechte anhand der Rolle. Verteile in diesem Schritt KEINE Aufgaben: "
                      "Der Besitzer weist den Mitarbeitern zuerst KI und Modell zu, danach startest du die Arbeit.")
     elif mode == "review":
         fields[0] = '"result": "konsolidiertes Gesamtergebnis, das an deinen Vorgesetzten bzw. als Endergebnis geht"'
@@ -1172,6 +1174,17 @@ def build_system(agent, project, mode, final_only=False):
             if perms["delegate"] and kids:
                 fields.append('"delegate": [{"to": "Name", "title": "...", "description": "..."}]')
                 rules.append("delegate ist hier optional und nur fuer Folgeaufgaben gedacht.")
+    if mode in ("plan", "review") and team_change_ok and not final_only:
+        fields.append('"recruit": [{"name": "Neuer Name", "role": "Rolle", "reports_to": "Name oder leer = direkt an dich", '
+                      '"system_prompt": "Arbeitsanweisung", "tools": ["web"]}]')
+        fields.append('"dismiss": ["Name eines Mitarbeiters unter dir"]')
+        fields.append('"change": [{"name": "Name eines Mitarbeiters unter dir", "role": "neue Rolle", "system_prompt": "neue Arbeitsanweisung", '
+                      '"tools": ["web", "write_files"]}]')
+        rules.append(f"Du darfst dein Team jederzeit an den Auftrag anpassen (alles optional): recruit stellt neue Mitarbeiter ein (hoechstens {RECRUIT_MAX}, "
+                     "sie bekommen erst vom Besitzer eine KI und koennen in dieser Runde noch keine Aufgaben bekommen), dismiss entlaesst Mitarbeiter unter dir "
+                     "(ihre Leute ruecken eine Ebene hoch), change aendert Rolle, Arbeitsanweisung oder Rechte (tools ersetzt die Rechte; web = Recherche, "
+                     "images = Bilder/Illustrationen, write_files = Dateien schreiben, media = Video/Ton/PDF/DOCX/EPUB, code = Programmieren). "
+                     "Gib jedem genau die Rechte, die seine Rolle braucht; der Server ergaenzt fehlende anhand der Rolle. Aendere das Team nur, wenn der Auftrag oder die Vorgaben des Besitzers es verlangen.")
     if mode in ("work", "review"):
         if perms["write_files"]:
             fields.append('"write_file": [{"path": "relativer/pfad.txt", "content": "..."}]')
@@ -1377,6 +1390,11 @@ def decide_gate(ap, approve):
         else:
             finish(t["id"], "done", t["result"] + "\n\n✅ Plan freigegeben, aber kein Mitarbeiter mehr vorhanden.")
         return f"Plan freigegeben: {made} Aufgabe(n) verteilt."
+    if isinstance(data, dict):  # Teamumbau eines bestehenden Teams
+        change_team(a, p, data, notes)
+        finish(t["id"], "done", t["result"] + "\n\n✅ Teamänderung freigegeben:\n" + "\n".join(notes)
+               + "\n\nAntworte in der Post auf diesen Auftrag (z. B. „Weiter“), damit der Chef mit dem neuen Team weiterarbeitet.")
+        return "Teamänderung freigegeben."
     hired = recruit_team(a, p, data, notes)
     lines = [f"- {h['name']} ({h['role']})" for h in hired]
     finish(t["id"], "done", t["result"] + f"\n\n✅ Team freigegeben ({len(hired)} Mitarbeiter):\n" + "\n".join(lines + notes)
@@ -1578,6 +1596,23 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
     return text, total, made
 
 
+# Rechte passend zur Rolle: Stichwort in Name/Rolle/Arbeitsanweisung -> Rechte (nur aus RECRUIT_PERMS)
+ROLE_TOOLS = (
+    (("recherch", "research", "analys", "markt", "rechts", "jurist", "steuer", "seo", "quelle", "suche", "news", "journal"), ("web",)),
+    (("bild", "illustr", "grafik", "design", "foto", "photo", "zeichn", "logo", "cover", "image", "visual", "comic"), ("images", "write_files")),
+    (("video", "film", "animat", "schnitt", "sound", "audio", "sprecher", "stimme", "musik", "podcast", "pdf", "epub", "buchsatz",
+      "layout", "dokument", "praesentation", "präsentation"), ("media", "write_files")),
+    (("autor", "text", "schreib", "redakt", "lektor", "uebersetz", "übersetz", "content", "copywrit", "bericht", "buch"), ("write_files",)),
+    (("programm", "entwickl", "develop", "code", "coder", "software", "frontend", "backend", "webseite", "website", "webdesign", "skript", "script"),
+     ("code", "write_files")),
+)
+
+
+def tools_for_role(*texts):
+    low = " ".join(str(x or "") for x in texts).lower()
+    return {p for keys, perms in ROLE_TOOLS if any(k in low for k in keys) for p in perms}
+
+
 def recruit_team(boss, project, items, notes):
     """Legt die vom Chef vorgeschlagenen Mitarbeiter an: ohne KI (provider ''), Rechte nur aus RECRUIT_PERMS."""
     items = [i for i in (items if isinstance(items, list) else []) if isinstance(i, dict)][:RECRUIT_MAX]
@@ -1594,7 +1629,8 @@ def recruit_team(boss, project, items, notes):
         tl = it.get("tools") if isinstance(it.get("tools"), list) else []
         people.append({"name": name, "role": str(it.get("role") or "")[:100], "prompt": str(it.get("system_prompt") or "")[:3000],
                        "reports": str(it.get("reports_to") or "").strip().lower(),
-                       "tools": {str(x) for x in tl if str(x) in RECRUIT_PERMS}})
+                       "tools": {str(x) for x in tl if str(x) in RECRUIT_PERMS}
+                       | tools_for_role(name, it.get("role"), it.get("system_prompt"))})
     idx = {p["name"].lower(): i for i, p in enumerate(people)}
     for i, p in enumerate(people):  # Vorgesetzter innerhalb des neuen Teams, sonst der Chef selbst
         j = idx.get(p["reports"])
@@ -1635,6 +1671,68 @@ def recruit_team(boss, project, items, notes):
     return people
 
 
+def delete_agent(a, new_parent=None):
+    """Agent samt seinen Aufgaben loeschen; seine Mitarbeiter bekommen new_parent als Vorgesetzten."""
+    ex("UPDATE agents SET parent_id=? WHERE parent_id=?", (new_parent, a["id"]))
+    ex("DELETE FROM tasks WHERE agent_id=?", (a["id"],))
+    ex("DELETE FROM schedules WHERE agent_id=?", (a["id"],))
+    ex("DELETE FROM agents WHERE id=?", (a["id"],))
+
+
+def change_team(boss, project, data, notes):
+    """Teamumbau durch den Chef (Recht 'recruit'): entlassen/aendern nur unterhalb von ihm, einstellen per recruit_team.
+    Gibt die Liste der Neuen zurueck."""
+    def by_name():
+        return {d["name"].lower(): d for d in descendants(boss["id"])}
+    for name in (data.get("dismiss") if isinstance(data.get("dismiss"), list) else [])[:RECRUIT_MAX]:
+        d = by_name().get(str(name).strip().lower())
+        if not d:
+            notes.append(f"Entlassen: '{name}' ist nicht in deinem Team - ignoriert.")
+            continue
+        if q1("SELECT COUNT(*) c FROM tasks WHERE agent_id=? AND status IN ('queued','running','waiting_subtasks','waiting_approval')",
+              (d["id"],))["c"]:
+            notes.append(f"{d['name']} hat noch offene Aufgaben - nicht entlassen.")
+            continue
+        delete_agent(d, d["parent_id"])
+        log("agent_dismissed", f"{d['name']} von {boss['name']}", project["id"], d["id"])
+        notes.append(f"Entlassen: {d['name']} ({d['role']})")
+    for it in (data.get("change") if isinstance(data.get("change"), list) else [])[:RECRUIT_MAX]:
+        d = by_name().get(str(it.get("name", "")).strip().lower()) if isinstance(it, dict) else None
+        if not d:
+            notes.append("Aendern: unbekannter Mitarbeiter - ignoriert.")
+            continue
+        sets, args, what = [], [], []
+        if it.get("role"):
+            sets.append("role=?"); args.append(str(it["role"])[:100]); what.append("Rolle")
+        if it.get("system_prompt"):
+            sets.append("system_prompt=?"); args.append(str(it["system_prompt"])[:3000]); what.append("Arbeitsanweisung")
+        guessed = tools_for_role(d["name"], it.get("role"), it.get("system_prompt")) if (it.get("role") or it.get("system_prompt")) else set()
+        if isinstance(it.get("tools"), list) or guessed:
+            want = {str(x) for x in it["tools"]} | guessed if isinstance(it.get("tools"), list) else guessed
+            perms = perms_of(d)
+            perms.update({k: (k in want) for k in RECRUIT_PERMS if k != "read_files"})
+            sets.append("perms=?"); args.append(json.dumps(perms)); what.append("Rechte")
+        if sets:
+            ex(f"UPDATE agents SET {', '.join(sets)} WHERE id=?", args + [d["id"]])
+            log("agent_updated", f"{d['name']}: {', '.join(what)} (von {boss['name']})", project["id"], d["id"])
+            notes.append(f"Geaendert: {d['name']} ({', '.join(what)})")
+    hired = recruit_team(boss, project, data.get("recruit"), notes) if data.get("recruit") else []
+    if hired:
+        notes.append(f"Eingestellt ({len(hired)}): " + ", ".join(f"{h['name']} ({h['role']})" for h in hired)
+                     + "\nNaechster Schritt: Den Neuen KI und Modell zuweisen (Menue ⚠ Modelle), dann in der Post auf diesen Auftrag "
+                     "antworten (z. B. „Weiter“), damit der Chef auch ihnen Arbeit gibt.")
+        tg_notify(f"👥 {boss['name']} ({project['name']}) hat {len(hired)} Mitarbeiter eingestellt: "
+                  + ", ".join(h["name"] for h in hired) + ". Bitte KI zuweisen (Menü ⚠ Modelle).")
+    return hired
+
+
+def team_change_summary(data):
+    out = [f"+ {i.get('name')} ({i.get('role', '')})" for i in (data.get("recruit") or []) if isinstance(i, dict)]
+    out += [f"- {n} entlassen" for n in (data.get("dismiss") or [])]
+    out += [f"~ {i.get('name')} ändern" for i in (data.get("change") or []) if isinstance(i, dict)]
+    return "\n".join(out[:3 * RECRUIT_MAX])
+
+
 def execute_task(tid):
     t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
     if not t:
@@ -1665,6 +1763,7 @@ def execute_task(tid):
     else:
         mode = "work"
     final_only = mode == "review" and t["passes"] >= MAX_REVIEW_PASSES
+    team_change_ok = perms["recruit"] and mode in ("plan", "review") and not final_only and not t["schedule_id"]
     if mode == "plan":
         no_ai = [k["name"] for k in q("SELECT name FROM agents WHERE parent_id=? AND provider=''", (aid,))]
         if no_ai:
@@ -1676,7 +1775,7 @@ def execute_task(tid):
     set_task(tid, "running")
     log("task_start", f"{t['title']} [{mode}]", pid, aid, tid)
     user = review_prompt(t, child_tasks) if mode == "review" else work_prompt(t)
-    messages = [{"role": "system", "content": build_system(a, p, mode, final_only)},
+    messages = [{"role": "system", "content": build_system(a, p, mode, final_only, team_change_ok)},
                 {"role": "user", "content": user}]
     try:
         imgs = task_images(pid, t["description"] + "\n" + t["title"]) if perms.get("read_files") else []
@@ -1744,7 +1843,22 @@ def execute_task(tid):
 
     # --- Team einstellen (nur mit Recht 'recruit', nur im Modus recruit)
     hired = []
-    if data.get("recruit"):
+    team_data = {k: data[k] for k in ("recruit", "dismiss", "change") if isinstance(data.get(k), list) and data[k]}
+    if team_data and mode != "recruit":
+        if not team_change_ok:
+            notes.append("Team aendern nicht erlaubt - ignoriert.")
+            log("denied", "team_change", pid, aid, tid)
+        elif gates_of(pid)["recruit"]:
+            summary = team_change_summary(team_data)
+            request_gate("recruit", t, a, p, f"{a['name']} möchte das Team ändern:\n{summary}", team_data)
+            set_task(tid, "waiting_approval", result + "\n\n🖐 Wartet auf deine Freigabe der Teamänderung:\n" + summary)
+            return
+        else:
+            hired = change_team(a, p, team_data, notes)
+            log("team_changed", team_change_summary(team_data)[:300], pid, aid, tid)
+            kids = team_of(a)  # Entlassene bekommen keine Aufgaben mehr
+            can_delegate = can_delegate and bool(kids)
+    elif data.get("recruit"):
         if mode != "recruit":
             notes.append("Einstellen nur beim Aufbau eines neuen Teams moeglich - ignoriert.")
             log("denied", "recruit", pid, aid, tid)
@@ -3126,10 +3240,7 @@ def api_agent_del(aid):
     a = q1("SELECT * FROM agents WHERE id=?", (aid,))
     if not a:
         abort(404)
-    ex("UPDATE agents SET parent_id=NULL WHERE parent_id=?", (aid,))
-    ex("DELETE FROM tasks WHERE agent_id=?", (aid,))
-    ex("DELETE FROM schedules WHERE agent_id=?", (aid,))
-    ex("DELETE FROM agents WHERE id=?", (aid,))
+    delete_agent(a)
     log("agent_deleted", a["name"], a["project_id"], aid)
     return jsonify({"ok": True})
 
