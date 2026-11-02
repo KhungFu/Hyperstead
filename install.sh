@@ -43,7 +43,7 @@ fi
 
 # Programmieren (Recht "code"): Pruefer/Compiler je Sprache. Python und Bash sind immer da.
 # Befehl -> Debian-Paket (Raspberry Pi OS / Debian / Ubuntu)
-CODE_PKGS="node:nodejs tsc:node-typescript javac:default-jdk-headless rustc:rustc gofmt:golang-go gcc:gcc g++:g++ ruby:ruby php:php-cli luac:lua5.4"
+CODE_PKGS="node:nodejs tsc:node-typescript javac:default-jdk-headless rustc:rustc cargo:cargo gofmt:golang-go gcc:gcc g++:g++ ruby:ruby php:php-cli luac:lua5.4"
 CMISS=""
 for e in $CODE_PKGS; do command -v "${e%%:*}" >/dev/null || CMISS="$CMISS ${e#*:}"; done
 if [ -n "$CMISS" ]; then

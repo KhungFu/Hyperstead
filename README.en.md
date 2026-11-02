@@ -15,7 +15,7 @@ can run in parallel; each has its own companies and data.
 | System | Status | Guide |
 | --- | --- | --- |
 | Raspberry Pi / Linux (Debian, Ubuntu) | main system, full feature set | below |
-| Windows 10/11 | works, without `run_code`, some features need extra programs | [docs/windows.md](docs/windows.md) |
+| Windows 10/11 | works, without `run_code`, building Rust only without isolation via a switch, some features need extra programs | [docs/windows.md](docs/windows.md) |
 | macOS | untested, basic functions should work | below (by hand) |
 | Own image computer (e.g. an old laptop without a graphics card) | free images with reference images for PaperclipLite | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
 
@@ -197,6 +197,13 @@ This list is extended with every change to the program. Each row says what the s
 | Image, music or `.blend` file named in the script | The check names scene, character and path, nothing is rendered. | Put the file into `assets/` or `input/` or fix the path in the script. |
 | Clip of a scene (`film/clips/`) | `assemble` names the missing scenes and cuts nothing. If `render` stops (time limit), the finished frames are kept and the next call continues there. | Nothing, the agents call `render` again. |
 | Speech output for the film | `voices`/`render` stop with „Keine Sprachausgabe verfügbar“ (no speech output). Scenes without any dialogue still work. | As for „speech output“ above (on Windows `edge-tts` + `TTS_ENGINE=edge`). |
+| `cargo` (Rust, tool `rust_project`) | The tool is not shown to the agents; `check_code` keeps checking `.rs` files if `rustc` is there. The self-test (`selftest.py rust`) shows FEHLT with the install command. | Install Rust: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Then restart PaperclipLite. |
+| bubblewrap when building Rust (Pi/Linux) | `rust_project` stays hidden, just like `run_code`. | `./install.sh --run` |
+| `PCL_CARGO_UNSAFE=1` (Windows) | Windows has no isolation, so `rust_project` stays hidden without the switch. With the switch the laptop builds without isolation. | Only set it if you know the risk ([Rust programs](#-building-complete-rust-programs)), then restart. |
+| `Cargo.toml` in the Rust folder | `rust_project` reports "In … fehlt Cargo.toml" and names the files the agent has to create first. | Nothing, the agent creates them with `write_code`. |
+| Internet for Rust dependencies (crates.io) | `cargo fetch` fails, nothing is built, the agent gets the error message. Dependencies already downloaded are kept in `.rust/cargo-home` and keep working. | Check the internet connection and start the task again. |
+| Passing tests for the Rust package | **No** package is created ("KEIN PAKET"); the agent gets the errors with line numbers and has to fix them. Without tests the package is created with a WARNUNG in the result. | Nothing, the agent fixes and builds again. Send it back via the boss if it gives up. |
+| Folder `.rust/` in the project (build folder) | Recreated on the next build, which then takes longer (everything is downloaded and compiled again). It is hidden and not part of the ZIP download. | Nothing. You may delete it if space runs out. |
 | Telegram token or chat ID | Telegram stays off, everything else runs. The self-test shows FEHLT. | Only needed if you want messages on your phone. |
 | A folder or file in the project (`wissen/`, `input/`) | Folders that do not exist count as empty. The agents keep working without company knowledge. | Create or upload the file or folder in the project. |
 | Key of a video provider (e.g. `KLING_SECRET_KEY`, `HIGGSFIELD_API_KEY_SECRET`) | `video_generate` reports “VIDEO_PROVIDER=…, aber … fehlt” and creates nothing; the other providers in the list keep working. The self-test shows the provider as FEHLT. | Enter the key ([docs/videodienste.md](docs/videodienste.md)) or remove the provider from `VIDEO_PROVIDER`, restart. |
@@ -365,6 +372,7 @@ The app only polls Telegram outwards, no port is opened (works behind CGNAT too)
 - **Read**: bosses always see the reports of their employees; no separate right is needed for this.
 - **Write files**: only in `workspace/<project-id>/`; paths outside are refused.
 - **Run code** (default off): `run_code` starts Python, JavaScript, Bash, Ruby, PHP or Lua in a sandbox, see below.
+  This includes `rust_project`: build and test Rust programs and deliver a finished package ([Rust programs](#-building-complete-rust-programs)).
 - **Suggest shell**: only if the server has `PCL_ALLOW_SHELL=1`, and then always only after approval.
 - **Pause**: blocks all new tasks of the agent.
 
@@ -457,6 +465,33 @@ Runs without internet and without keys (provider `mock`, own database).
   so only packages installed via apt (e.g. `sudo apt install python3-pandas python3-matplotlib`). Off globally: `PCL_ALLOW_RUN=0`.
   Check: `./venv/bin/python selftest.py run browser`.
 
+## 🦀 Building complete Rust programs
+
+Give an agent with the rights **„Darf programmieren“**, **„Darf Dateien schreiben“** and **„Darf Code ausführen“** (may program, write files, run code) a task like
+"Write me a Rust program that …, with tests, and deliver the finished package". The agent then works from A to Z:
+
+1. With `write_code` it creates a Cargo project, e.g. `rust/rechner/Cargo.toml` and `rust/rechner/src/main.rs` with tests (`#[test]`).
+2. `rust_project` with `op=test` downloads the dependencies from crates.io, builds the program and runs the tests.
+   Errors come back with file and line, the agent fixes them and tests again.
+3. `op=package` tests once more, builds the release version and stores **`output/<name>.zip`**. Inside: `programm/` (the finished
+   program), `quelle/` (source code with `Cargo.lock`), `TESTBERICHT.txt` and `LIESMICH.txt`. A package is only created if all tests pass.
+
+You get the package in the inbox or under **📁 Dateien** (single file or in the project ZIP). More commands: `op=build`, `op=run` (with `args`, `stdin`).
+
+- **For which system?** The program in `programm/` fits the computer PaperclipLite runs on: from the Pi a Linux program (ARM),
+  from the Windows laptop an `.exe`. For another system run `cargo build --release` yourself in the `quelle/` folder.
+- **Isolation (Pi/Linux):** Building, testing and running happen in bubblewrap like `run_code`: no internet, no `.env`, no home,
+  only the project's build folder `.rust/` is writable. Only `cargo fetch` (downloads dependencies, runs nothing) has internet.
+  Cargo settings (`.cargo/`) and `rust-toolchain` files from the project are not used.
+- **Windows:** Without bubblewrap the tool stays off. With `PCL_CARGO_UNSAFE=1` in `.env` the laptop builds **without isolation**: the agents'
+  code (tests, `build.rs`) then runs with your rights and could read or change files on the laptop. It does not get API keys in its
+  environment. Only switch it on if you trust the agents and their models.
+- **Installing Rust:** Pi `curl https://sh.rustup.rs -sSf | sh` (newer than `apt install cargo`), Windows `winget install Rustlang.Rustup`
+  and include the "Visual Studio Build Tools (C++)" in the installer. Then restart PaperclipLite and run `selftest.py rust`.
+- **Limits:** `PCL_CARGO_TIMEOUT` (900 s per step), `PCL_CARGO_MEM_MB` (3072, Linux only), `PCL_CARGO_JOBS` (2), only one Rust build
+  at a time. The first build on the Pi takes long, after that cargo only rebuilds what changed. An agent has `PCL_MAX_TOOL_STEPS`
+  (default 6) tool rounds per run; for bigger programs a higher value helps, e.g. 12. Off: `PCL_CARGO=0`.
+
 ## Parallel work
 
 Up to `PCL_WORKERS` tasks run at the same time (default 2, at most 6), e.g. several employees of one boss or tasks
@@ -478,7 +513,7 @@ of different projects. An agent never works on two tasks at once, and at most on
 After installation and entering the keys, `./venv/bin/python selftest.py` checks everything real that could not be tested without internet:
 web search, reading pages, image search and image generator, SSRF protection, every AI provider with a mini request (incl. Ollama), Telegram
 (bot token and test message to your chat ID), ffmpeg, speech output, PDF with umlauts, OCR. Single groups:
-`selftest.py web | llm | telegram | media | ocr | film`. Each line shows OK, FEHLT (optional) or FEHLER with a concrete note.
+`selftest.py web | llm | telegram | media | ocr | rust | film`. Each line shows OK, FEHLT (optional) or FEHLER with a concrete note.
 
 ## Ollama (local models)
 

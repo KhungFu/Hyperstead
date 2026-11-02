@@ -15,7 +15,7 @@ može raditi paralelno; svaka ima svoje firme i podatke.
 | Sistem | Stanje | Uputstvo |
 | --- | --- | --- |
 | Raspberry Pi / Linux (Debian, Ubuntu) | glavni sistem, pun obim funkcija | dole |
-| Windows 10/11 | radi, bez `run_code`, neke funkcije traže dodatne programe | [docs/windows.md](docs/windows.md) |
+| Windows 10/11 | radi, bez `run_code`, izrada Rust programa samo bez izolacije preko prekidača, neke funkcije traže dodatne programe | [docs/windows.md](docs/windows.md) |
 | macOS | nije testirano, osnovne funkcije bi trebalo da rade | dole (ručno) |
 | Sopstveni računar za slike (npr. stari laptop bez grafičke kartice) | besplatne slike sa referentnim slikama za PaperclipLite | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
 
@@ -197,6 +197,13 @@ Ova lista se dopunjuje pri svakoj promeni programa. Svaki red kaže šta sistem 
 | Slika, muzika ili `.blend` fajl naveden u scenariju | Provera navodi scenu, lik i putanju, ništa se ne renderuje. | Stavite fajl u `assets/` ili `input/` ili ispravite putanju u scenariju. |
 | Klip scene (`film/clips/`) | `assemble` navodi scene koje nedostaju i ništa ne montira. Ako se `render` prekine (vremensko ograničenje), gotove sličice ostaju sačuvane i sledeći poziv nastavlja odatle. | Ništa, agenti ponovo pozivaju `render`. |
 | Govor za film | `voices`/`render` se prekidaju porukom „Keine Sprachausgabe verfügbar“ (nema govora). Scene bez dijaloga i dalje rade. | Kao kod „govora“ iznad (na Windowsu `edge-tts` + `TTS_ENGINE=edge`). |
+| `cargo` (Rust, alat `rust_project`) | Alat se agentima ne prikazuje; `check_code` i dalje proverava `.rs` fajlove ako postoji `rustc`. Samoprovera (`selftest.py rust`) prikazuje FEHLT s naredbom za instalaciju. | Instalirajte Rust: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Zatim ponovo pokrenite PaperclipLite. |
+| bubblewrap pri izradi Rust programa (Pi/Linux) | `rust_project` ostaje skriven, isto kao `run_code`. | `./install.sh --run` |
+| `PCL_CARGO_UNSAFE=1` (Windows) | Windows nema izolaciju, zato `rust_project` bez prekidača ostaje skriven. S prekidačem laptop gradi bez izolacije. | Postavite ga samo ako znate rizik ([Rust programi](#-kompletna-izrada-rust-programa)), zatim ponovo pokrenite. |
+| `Cargo.toml` u Rust folderu | `rust_project` javlja „In … fehlt Cargo.toml“ i navodi fajlove koje agent prvo mora napraviti. | Ništa, agent ih pravi pomoću `write_code`. |
+| Internet za Rust zavisnosti (crates.io) | `cargo fetch` ne uspeva, ništa se ne gradi, agent dobija poruku o grešci. Već preuzete zavisnosti ostaju u `.rust/cargo-home` i rade dalje. | Proverite internet i ponovo pokrenite zadatak. |
+| Položeni testovi za Rust paket | Paket se **ne** pravi („KEIN PAKET“); agent dobija greške s brojem reda i mora ih ispraviti. Bez testova paket nastaje s upozorenjem WARNUNG u rezultatu. | Ništa, agent ispravlja i ponovo gradi. Ako odustane, vratite zadatak preko šefa. |
+| Folder `.rust/` u projektu (folder za izradu) | Pri sledećoj izradi pravi se ponovo, što tada traje duže (sve se ponovo preuzima i kompajlira). Skriven je i nije deo ZIP preuzimanja. | Ništa. Smete ga obrisati ako ponestane mesta. |
 | Telegram token ili ID čata | Telegram ostaje isključen, sve ostalo radi. Samoprovera prikazuje FEHLT. | Potrebno samo ako želite poruke na telefonu. |
 | Folder ili fajl u projektu (`wissen/`, `input/`) | Folderi koji ne postoje smatraju se praznim. Agenti rade dalje bez znanja o firmi. | Napravite ili otpremite fajl ili folder u projektu. |
 | Ključ video provajdera (npr. `KLING_SECRET_KEY`, `HIGGSFIELD_API_KEY_SECRET`) | `video_generate` javlja „VIDEO_PROVIDER=…, aber … fehlt“ i ništa ne pravi; ostali provajderi sa liste rade dalje. Samoprovera prikazuje provajdera kao FEHLT. | Unesite ključ ([docs/videodienste.md](docs/videodienste.md)) ili uklonite provajdera iz `VIDEO_PROVIDER`, ponovo pokrenite. |
@@ -365,6 +372,7 @@ Aplikacija Telegram samo pita spolja, ne otvara se nijedan port (radi i iza CGNA
 - **Čitanje**: šefovi uvek vide izveštaje svojih saradnika; za to nije potrebno posebno pravo.
 - **Pisanje fajlova**: samo u `workspace/<id-projekta>/`; putanje van toga se odbijaju.
 - **Pokretanje koda** (podrazumevano isključeno): `run_code` pokreće Python, JavaScript, Bash, Ruby, PHP ili Lua u sandbox-u, vidi dole.
+  Tu spada i `rust_project`: gradi i testira Rust programe i isporučuje gotov paket ([Rust programi](#-kompletna-izrada-rust-programa)).
 - **Predlaganje shell-a**: samo ako server ima `PCL_ALLOW_SHELL=1`, i tada uvek tek posle odobrenja.
 - **Pauza**: blokira sve nove zadatke agenta.
 
@@ -456,6 +464,33 @@ Radi bez interneta i bez ključeva (dobavljač `mock`, sopstvena baza).
   dakle samo pakete instalirane preko apt-a (npr. `sudo apt install python3-pandas python3-matplotlib`). Globalno isključeno: `PCL_ALLOW_RUN=0`.
   Provera: `./venv/bin/python selftest.py run browser`.
 
+## 🦀 Kompletna izrada Rust programa
+
+Agentu sa pravima **„Darf programmieren“**, **„Darf Dateien schreiben“** i **„Darf Code ausführen“** (sme da programira, piše fajlove, pokreće kod) dajte zadatak kao
+„Napiši mi Rust program koji …, sa testovima, i isporuči gotov paket“. Agent tada radi od A do Ž:
+
+1. Pomoću `write_code` pravi Cargo projekat, npr. `rust/rechner/Cargo.toml` i `rust/rechner/src/main.rs` sa testovima (`#[test]`).
+2. `rust_project` s `op=test` preuzima zavisnosti s crates.io, gradi program i pokreće testove.
+   Greške se vraćaju s fajlom i redom, agent ih ispravlja i ponovo testira.
+3. `op=package` još jednom testira, gradi release verziju i sprema **`output/<ime>.zip`**. Unutra: `programm/` (gotov
+   program), `quelle/` (izvorni kod s `Cargo.lock`), `TESTBERICHT.txt` i `LIESMICH.txt`. Paket nastaje samo ako svi testovi prođu.
+
+Paket dobijate u pošti ili pod **📁 Dateien** (pojedinačno ili u ZIP-u projekta). Ostale naredbe: `op=build`, `op=run` (s `args`, `stdin`).
+
+- **Za koji sistem?** Program u `programm/` odgovara računaru na kojem radi PaperclipLite: s Pi-ja Linux program (ARM),
+  s Windows laptopa `.exe`. Za drugi sistem sami pokrenite `cargo build --release` u folderu `quelle/`.
+- **Izolacija (Pi/Linux):** Izrada, testiranje i pokretanje idu u bubblewrapu kao `run_code`: bez interneta, bez `.env`, bez home foldera,
+  upisiv je samo folder za izradu `.rust/` projekta. Internet ima samo `cargo fetch` (preuzima zavisnosti, ništa ne pokreće).
+  Cargo postavke (`.cargo/`) i `rust-toolchain` fajlovi iz projekta se ne koriste.
+- **Windows:** Bez bubblewrapa alat ostaje isključen. S `PCL_CARGO_UNSAFE=1` u `.env` laptop gradi **bez izolacije**: kod agenata
+  (testovi, `build.rs`) tada radi sa vašim pravima i mogao bi čitati ili menjati fajlove na laptopu. API ključeve ne dobija u
+  okruženju. Uključite samo ako verujete agentima i njihovim modelima.
+- **Instalacija Rusta:** Pi `curl https://sh.rustup.rs -sSf | sh` (novije od `apt install cargo`), Windows `winget install Rustlang.Rustup`
+  i u instalaciji uzmite i „Visual Studio Build Tools (C++)“. Zatim ponovo pokrenite PaperclipLite i izvršite `selftest.py rust`.
+- **Granice:** `PCL_CARGO_TIMEOUT` (900 s po koraku), `PCL_CARGO_MEM_MB` (3072, samo Linux), `PCL_CARGO_JOBS` (2), uvek samo jedna
+  Rust izrada istovremeno. Prva izrada na Pi-ju traje dugo, nakon toga cargo ponovo gradi samo ono što se promenilo. Agent ima
+  `PCL_MAX_TOOL_STEPS` (podrazumevano 6) krugova alata po pokretanju; za veće programe pomaže veća vrednost, npr. 12. Isključeno: `PCL_CARGO=0`.
+
 ## Paralelni rad
 
 Istovremeno može da radi do `PCL_WORKERS` zadataka (podrazumevano 2, najviše 6), npr. više saradnika jednog šefa ili zadaci
@@ -477,7 +512,7 @@ različitih projekata. Agent nikada ne radi na dva zadatka odjednom, a istovreme
 Posle instalacije i unosa ključeva `./venv/bin/python selftest.py` proverava sve stvarne stvari koje se bez interneta nisu mogle testirati:
 web pretragu, čitanje stranica, pretragu slika i generator slika, SSRF zaštitu, svakog AI provajdera mini zahtevom (uključujući Ollama),
 Telegram (token bota i probna poruka na vaš ID čata), ffmpeg, glasovni izlaz, PDF sa dijakriticima, OCR. Pojedinačne grupe:
-`selftest.py web | llm | telegram | media | ocr | film`. Svaki red prikazuje OK, FEHLT (opciono) ili FEHLER sa konkretnom napomenom.
+`selftest.py web | llm | telegram | media | ocr | rust | film`. Svaki red prikazuje OK, FEHLT (opciono) ili FEHLER sa konkretnom napomenom.
 
 ## Ollama (lokalni modeli)
 

@@ -114,6 +114,7 @@ dem Laptop passt nicht mehr.
 | Funktion | Unter Windows | Was tun |
 | --- | --- | --- |
 | Code ausführen (`run_code`) | geht nicht | braucht Linux-Sandbox (bubblewrap), das Werkzeug wird automatisch ausgeblendet |
+| Rust-Programme bauen (`rust_project`) | nur mit Schalter, ohne Abschottung | `winget install Rustlang.Rustup` (mit „Visual Studio Build Tools (C++)“), in `.env` `PCL_CARGO_UNSAFE=1`, neu starten, `venv\Scripts\python.exe selftest.py rust`. Der Code der Agenten läuft dann mit deinen Rechten (siehe README, Abschnitt Rust-Programme) |
 | Code prüfen (`check_code`) | Python und JSON gehen | andere Sprachen nur, wenn der Compiler im PATH ist |
 | Shell-Freigaben (`PCL_ALLOW_SHELL`) | laufen in `cmd.exe` | Linux-Befehle (`ls`, `grep`) gehen dort nicht |
 | HTML → PDF (`make_document` mit html) | meist nicht | WeasyPrint braucht GTK unter Windows; PDF aus Text/Markdown geht trotzdem |
