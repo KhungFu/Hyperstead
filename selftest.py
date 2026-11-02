@@ -308,6 +308,35 @@ def group_run():
         check("Sandbox ohne Netz", nonet)
 
 
+def group_rust():
+    print("\nRust-Programme bauen (Werkzeug rust_project, Recht 'Code ausfuehren')")
+    import rust_builder as R
+    if not R.cargo_path():
+        line("warn", "cargo", fix("nicht gefunden: curl https://sh.rustup.rs -sSf | sh (danach PaperclipLite neu starten)",
+                                  "nicht gefunden: winget install Rustlang.Rustup (mit Visual Studio Build Tools C++), dann neu starten"))
+        return
+    line("ok", "cargo", R.cargo_path())
+    mode = R.sandbox_mode()
+    if not mode:
+        line("warn", "Rust bauen", fix("aus (bubblewrap fehlt: ./install.sh --run, oder PCL_CARGO=0/PCL_ALLOW_RUN=0)",
+                                       "aus: unter Windows ohne Sandbox nur mit PCL_CARGO_UNSAFE=1 in .env"))
+        return
+    line("ok" if mode == "bwrap" else "warn", "Abschottung", "bubblewrap" if mode == "bwrap" else "KEINE (PCL_CARGO_UNSAFE=1)")
+    with tempfile.TemporaryDirectory(prefix="pcl-selftest-") as td:
+        d = Path(td) / "rust" / "probe"
+        (d / "src").mkdir(parents=True)
+        (d / "Cargo.toml").write_text('[package]\nname = "probe"\nversion = "0.1.0"\nedition = "2021"\n', encoding="utf-8")
+        (d / "src" / "main.rs").write_text('fn main() { println!("ok"); }\n#[cfg(test)]\nmod t { #[test] fn a() { assert_eq!(1 + 1, 2); } }\n',
+                                           encoding="utf-8")
+
+        def pkg():
+            r = R.rust_project(td, {"op": "package", "dir": "rust/probe"})
+            if "PAKET FERTIG" not in r:
+                raise RuntimeError(r[-300:] + fix("", "  -> Visual Studio Build Tools (C++) installiert?"))
+            return "gebaut, getestet, output/probe.zip"
+        check("Probeprogramm bauen + testen", pkg)
+
+
 def group_film():
     print("\nFilmstudio (Blender, Werkzeug film)")
     import film_studio as F
@@ -332,7 +361,7 @@ def group_film():
               hint="ffmpeg und Sprachausgabe noetig (Gruppe media)")
 
 
-GROUPS = {"web": group_web, "browser": group_browser, "run": group_run, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr, "code": group_code, "film": group_film}
+GROUPS = {"web": group_web, "browser": group_browser, "run": group_run, "llm": group_llm, "telegram": group_telegram, "media": group_media, "ocr": group_ocr, "code": group_code, "rust": group_rust, "film": group_film}
 
 if __name__ == "__main__":
     wanted = [a for a in sys.argv[1:] if a in GROUPS] or list(GROUPS)

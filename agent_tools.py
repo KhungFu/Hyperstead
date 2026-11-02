@@ -105,6 +105,12 @@ TOOLS = {
                              'in einer abgeschotteten Umgebung: KEIN Internet, Zeit-/RAM-Limit, Projektdateien nur lesbar unter /projekt (z. B. /projekt/input/daten.csv). '
                              'Was das Skript in sein aktuelles Verzeichnis schreibt, landet danach in output/run/<zeit>/. '
                              'Statt path auch "code": "print(1+1)", "lang": "python". Optional args [..], stdin. Nur Standardbibliothek/Systempakete'),
+    "rust_project": ("run_code", '{"tool": "rust_project", "op": "test", "dir": "rust/rechner"}  RUST-PROGRAMM FERTIG BAUEN: dir = Ordner mit '
+                                 'Cargo.toml (vorher mit write_code anlegen: Cargo.toml, src/main.rs, Tests als #[test] unter #[cfg(test)]). '
+                                 'Laedt Abhaengigkeiten aus crates.io, baut und testet abgeschottet (beim Bauen/Testen kein Internet). '
+                                 'op=test (cargo test) | build | run (args [..], stdin) | package = Tests + Release-Build + output/<name>.zip '
+                                 'mit Quelltext, Programm, Testbericht und LIESMICH.txt. Ablauf: schreiben -> test -> Fehler beheben -> '
+                                 'erneut test -> package. Ein Paket entsteht nur, wenn alle Tests bestehen. Optional name (Dateiname des Pakets)'),
     "media_info": ("media", '{"tool": "media_info", "path": "input/video.mp4"}  Dauer, Aufloesung, Codecs einer Video-/Audio-/Bilddatei'),
     "video_edit": ("media", """{"tool": "video_edit", "op": "...", ...}  Video/Audio bearbeiten (ffmpeg). Pfade relativ zum Projektordner, Ergebnis landet in output/.
      op=trim: input, start, end (Sekunden oder MM:SS)
@@ -161,7 +167,8 @@ def available(perms):
             and (n != "video_ai" or _vp_on("video_ai_enabled"))
             and (n != "sound_generate" or _vp_on("audio_provider"))
             and (n != "browse_page" or browser_enabled())
-            and (n != "run_code" or run_enabled())]
+            and (n != "run_code" or run_enabled())
+            and (n != "rust_project" or cargo_enabled())]
 
 
 def describe(names):
@@ -1219,6 +1226,12 @@ RUNNERS = {
 }
 _LANG_EXT = {"python": ".py", "py": ".py", "javascript": ".js", "js": ".js", "node": ".js", "bash": ".sh", "sh": ".sh",
              "shell": ".sh", "ruby": ".rb", "php": ".php", "lua": ".lua"}
+
+
+def cargo_enabled():
+    """rust_project: cargo vorhanden und abschottbar (bubblewrap) oder PCL_CARGO_UNSAFE=1 (z. B. Windows)."""
+    import rust_builder
+    return rust_builder.cargo_enabled()
 
 
 def run_enabled():
@@ -2497,6 +2510,9 @@ def run_tool(call, root, perms):
             out = browse_page(root, call.get("url"), call.get("screenshot"), call.get("wait"), call.get("save"))[0]
         elif name == "run_code":
             out = run_code(root, call.get("path"), call.get("code"), call.get("lang"), call.get("args"), call.get("stdin"))
+        elif name == "rust_project":
+            import rust_builder  # erst hier: rust_builder importiert dieses Modul
+            out = rust_builder.rust_project(root, call)
         elif name == "media_info":
             out = media_info(root, call.get("path"))
         elif name == "video_edit":
@@ -2513,7 +2529,7 @@ def run_tool(call, root, perms):
         made = None
         m = re.search(r"((?:assets|downloads|output|karten|film)/[\w./-]+?)(?:\s|\(|$|\.\s|,)", out) if name in (
             "image_save", "image_generate", "video_generate", "video_ai", "sound_generate", "download_file", "video_edit", "speak", "make_document", "run_code", "browse_page",
-            "film") else None
+            "film", "rust_project") else None
         if m:
             made = m.group(1)
         return out, made

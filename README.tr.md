@@ -15,7 +15,7 @@ paralel çalışabilir; her birinin kendi şirketleri ve verileri vardır.
 | Sistem | Durum | Kılavuz |
 | --- | --- | --- |
 | Raspberry Pi / Linux (Debian, Ubuntu) | ana sistem, tam özellik kapsamı | aşağıda |
-| Windows 10/11 | çalışır, `run_code` olmadan, bazı özellikler ek programlar gerektirir | [docs/windows.md](docs/windows.md) |
+| Windows 10/11 | çalışır, `run_code` olmadan, Rust derleme yalnızca bir anahtarla yalıtımsız, bazı özellikler ek programlar gerektirir | [docs/windows.md](docs/windows.md) |
 | macOS | test edilmedi, temel işlevler çalışmalı | aşağıda (elle) |
 | Kendi görüntü bilgisayarı (ör. ekran kartı olmayan eski bir dizüstü) | referans görselleriyle ücretsiz görseller | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
 
@@ -196,6 +196,13 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | Senaryoda adı geçen görsel, müzik ya da `.blend` dosyası | Kontrol sahneyi, karakteri ve yolu bildirir, hiçbir şey render edilmez. | Dosyayı `assets/` ya da `input/` klasörüne koyun veya senaryodaki yolu düzeltin. |
 | Bir sahnenin klibi (`film/clips/`) | `assemble` eksik sahneleri bildirir ve kurgu yapmaz. `render` yarıda kalırsa (zaman sınırı), biten kareler korunur ve sonraki çağrı oradan devam eder. | Hiçbir şey, ajanlar `render` komutunu yeniden çağırır. |
 | Film için sesli okuma | `voices`/`render`, „Keine Sprachausgabe verfügbar“ (sesli okuma yok) ile durur. Hiç diyaloğu olmayan sahneler yine çalışır. | Yukarıdaki „sesli okuma“ satırındaki gibi (Windows'ta `edge-tts` + `TTS_ENGINE=edge`). |
+| `cargo` (Rust, `rust_project` aracı) | Araç ajanlara gösterilmez; `rustc` varsa `check_code` `.rs` dosyalarını denetlemeye devam eder. Selbsttest (`selftest.py rust`) kurulum komutuyla FEHLT gösterir. | Rust kurun: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Ardından PaperclipLite'ı yeniden başlatın. |
+| Rust derlerken bubblewrap (Pi/Linux) | `rust_project`, tıpkı `run_code` gibi gizli kalır. | `./install.sh --run` |
+| `PCL_CARGO_UNSAFE=1` (Windows) | Windows'ta yalıtım yoktur, bu yüzden anahtar olmadan `rust_project` gizli kalır. Anahtarla dizüstü bilgisayar yalıtımsız derler. | Yalnızca riski biliyorsanız ayarlayın ([Rust programları](#-rust-programlarını-eksiksiz-derleme)), sonra yeniden başlatın. |
+| Rust klasöründe `Cargo.toml` | `rust_project` "In … fehlt Cargo.toml" bildirir ve ajanın önce oluşturması gereken dosyaları adlandırır. | Hiçbir şey, ajan bunları `write_code` ile oluşturur. |
+| Rust bağımlılıkları için internet (crates.io) | `cargo fetch` başarısız olur, hiçbir şey derlenmez, ajan hata mesajını alır. Daha önce indirilen bağımlılıklar `.rust/cargo-home` içinde kalır ve çalışmaya devam eder. | İnternet bağlantısını kontrol edin ve görevi yeniden başlatın. |
+| Rust paketi için geçen testler | Paket **oluşturulmaz** ("KEIN PAKET"); ajan hataları satır numarasıyla alır ve düzeltmek zorundadır. Test yoksa paket, sonuçta bir WARNUNG ile oluşturulur. | Hiçbir şey, ajan düzeltir ve yeniden derler. Vazgeçerse şef üzerinden geri gönderin. |
+| Projede `.rust/` klasörü (derleme klasörü) | Bir sonraki derlemede yeniden oluşturulur, o zaman daha uzun sürer (her şey yeniden indirilir ve derlenir). Gizlidir ve ZIP indirmesine dahil değildir. | Hiçbir şey. Yer kalmazsa silebilirsiniz. |
 | Telegram belirteci ya da sohbet kimliği | Telegram kapalı kalır, diğer her şey çalışır. Selbsttest FEHLT gösterir. | Yalnızca mesajları telefonunuza almak istiyorsanız gerekir. |
 | Projede bir klasör ya da dosya (`wissen/`, `input/`) | Var olmayan klasörler boş sayılır. Ajanlar şirket bilgisi olmadan çalışmaya devam eder. | Projede dosyayı ya da klasörü oluşturun veya yükleyin. |
 | Bir video sağlayıcısının anahtarı (ör. `KLING_SECRET_KEY`, `HIGGSFIELD_API_KEY_SECRET`) | `video_generate` „VIDEO_PROVIDER=…, aber … fehlt“ (eksik) der ve hiçbir şey üretmez; listedeki diğer sağlayıcılar çalışmaya devam eder. Öz test sağlayıcıyı FEHLT olarak gösterir. | Anahtarı girin ([docs/videodienste.md](docs/videodienste.md)) ya da sağlayıcıyı `VIDEO_PROVIDER` satırından silin, yeniden başlatın. |
@@ -359,6 +366,7 @@ Telegram üzerinden **geçmez**; orada yalnızca bir uyarı gelir.
 - **Okuma**: patronlar çalışanlarının raporlarını her zaman görür; bunun için ayrı bir hak gerekmez.
 - **Dosya yazma**: yalnızca `workspace/<proje-kimliği>/` içinde; dışarıdaki yollar reddedilir.
 - **Kod çalıştırma** (varsayılan kapalı): `run_code` bir sandbox'ta Python, JavaScript, Bash, Ruby, PHP ya da Lua başlatır, aşağıya bakın.
+  Buna `rust_project` de dahildir: Rust programlarını derler, test eder ve bitmiş paket olarak teslim eder ([Rust programları](#-rust-programlarını-eksiksiz-derleme)).
 - **Kabuk önerme**: yalnızca sunucuda `PCL_ALLOW_SHELL=1` varsa ve ancak onaydan sonra.
 - **Duraklatma**: ajanın tüm yeni görevlerini engeller.
 
@@ -449,6 +457,33 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
   yani yalnızca apt ile kurulmuş paketler (ör. `sudo apt install python3-pandas python3-matplotlib`). Genel olarak kapatmak: `PCL_ALLOW_RUN=0`.
   Kontrol: `./venv/bin/python selftest.py run browser`.
 
+## 🦀 Rust programlarını eksiksiz derleme
+
+**„Darf programmieren“**, **„Darf Dateien schreiben“** ve **„Darf Code ausführen“** (programlama yapabilir, dosya yazabilir, kod çalıştırabilir) haklarına sahip bir ajana
+"Bana …, testleriyle birlikte bir Rust programı yaz ve bitmiş paketi teslim et" gibi bir görev verin. Ajan işi baştan sona yapar:
+
+1. `write_code` ile bir Cargo projesi oluşturur, ör. testleriyle (`#[test]`) `rust/rechner/Cargo.toml` ve `rust/rechner/src/main.rs`.
+2. `op=test` ile `rust_project` bağımlılıkları crates.io'dan indirir, programı derler ve testleri çalıştırır.
+   Hatalar dosya ve satırla geri gelir, ajan düzeltir ve yeniden test eder.
+3. `op=package` bir kez daha test eder, sürüm (release) hâlini derler ve **`output/<ad>.zip`** dosyasını kaydeder. İçinde: `programm/` (bitmiş
+   program), `quelle/` (`Cargo.lock` ile kaynak kod), `TESTBERICHT.txt` ve `LIESMICH.txt`. Paket yalnızca tüm testler geçerse oluşturulur.
+
+Paketi gelen kutusunda ya da **📁 Dateien** altında (tek dosya ya da proje ZIP'inde) alırsınız. Diğer komutlar: `op=build`, `op=run` (`args`, `stdin` ile).
+
+- **Hangi sistem için?** `programm/` içindeki program, PaperclipLite'ın çalıştığı bilgisayara uyar: Pi'den bir Linux programı (ARM),
+  Windows dizüstünden bir `.exe`. Başka bir sistem için `quelle/` klasöründe kendiniz `cargo build --release` çalıştırın.
+- **Yalıtım (Pi/Linux):** Derleme, test ve çalıştırma `run_code` gibi bubblewrap içinde olur: internet yok, `.env` yok, ev klasörü yok,
+  yalnızca projenin derleme klasörü `.rust/` yazılabilir. Yalnızca `cargo fetch` (bağımlılıkları indirir, hiçbir şey çalıştırmaz) internete erişir.
+  Projedeki Cargo ayarları (`.cargo/`) ve `rust-toolchain` dosyaları kullanılmaz.
+- **Windows:** bubblewrap olmadan araç kapalı kalır. `.env` içinde `PCL_CARGO_UNSAFE=1` ile dizüstü **yalıtımsız** derler: Ajanların
+  kodu (testler, `build.rs`) o zaman sizin haklarınızla çalışır ve dizüstündeki dosyaları okuyabilir ya da değiştirebilir. Ortamında API anahtarlarını
+  almaz. Yalnızca ajanlara ve modellerine güveniyorsanız açın.
+- **Rust kurulumu:** Pi `curl https://sh.rustup.rs -sSf | sh` (`apt install cargo`'dan daha yeni), Windows `winget install Rustlang.Rustup`
+  ve kurulumda "Visual Studio Build Tools (C++)" seçeneğini de alın. Ardından PaperclipLite'ı yeniden başlatın ve `selftest.py rust` çalıştırın.
+- **Sınırlar:** `PCL_CARGO_TIMEOUT` (adım başına 900 sn), `PCL_CARGO_MEM_MB` (3072, yalnızca Linux), `PCL_CARGO_JOBS` (2), aynı anda yalnızca
+  bir Rust derlemesi. Pi'deki ilk derleme uzun sürer, sonra cargo yalnızca değişenleri yeniden derler. Bir ajanın çalışma başına `PCL_MAX_TOOL_STEPS`
+  (varsayılan 6) araç turu vardır; büyük programlar için daha yüksek bir değer, ör. 12, yardımcı olur. Kapatmak: `PCL_CARGO=0`.
+
 ## Paralel çalışma
 
 Aynı anda en fazla `PCL_WORKERS` görev çalışır (varsayılan 2, en fazla 6); örneğin bir patronun birden çok çalışanı ya da
@@ -470,7 +505,7 @@ farklı projelerin görevleri. Bir ajan asla aynı anda iki görev üzerinde ça
 Kurulum ve anahtarların girilmesinden sonra `./venv/bin/python selftest.py` internet olmadan test edilemeyen her gerçek şeyi kontrol eder:
 web araması, sayfa okuma, görsel araması ve görsel üretici, SSRF koruması, her yapay zekâ sağlayıcısı mini bir istekle (Ollama dahil),
 Telegram (bot belirteci ve sohbet kimliğinize test mesajı), ffmpeg, sesli çıktı, Almanca karakterli PDF, OCR. Tek tek gruplar:
-`selftest.py web | llm | telegram | media | ocr | film`. Her satır OK, FEHLT (isteğe bağlı) ya da somut bir notla FEHLER gösterir.
+`selftest.py web | llm | telegram | media | ocr | rust | film`. Her satır OK, FEHLT (isteğe bağlı) ya da somut bir notla FEHLER gösterir.
 
 ## Ollama (yerel modeller)
 

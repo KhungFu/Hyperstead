@@ -35,6 +35,13 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 - Ausführen (Recht `run_code`, Standard aus, nur mit `bwrap`, `PCL_ALLOW_RUN=0` sperrt): `tools.run_code` startet `RUNNERS` (py/js/sh/rb/php/lua)
   per `_sandbox_cmd` (bubblewrap: `--unshare-all` = kein Netz, nur `/usr` + Teile von `/etc`, Projekt ro unter `/projekt`, Temp-Arbeitsordner
   `/arbeit`, `--clearenv`) mit rlimits (`PCL_RUN_MEM_MB`, CPU, Dateigröße) und `PCL_RUN_TIMEOUT` (killpg). Neue Dateien → `output/run/<zeit>/`.
+- Rust komplett (`rust_builder.py`, Werkzeug `rust_project`, Recht `run_code`, sichtbar nur mit `cargo_enabled`): Crate (Ordner mit Cargo.toml) wird
+  ohne Dotdateien/`target`/`rust-toolchain*` nach `.rust/<name>/crate` kopiert (copy2 = Zeitstempel bleiben, inkrementell), `cargo fetch` OHNE Sandbox
+  (Netz, fuehrt nichts aus, CARGO_HOME `.rust/cargo-home`), dann build/test/run `--release --offline` in bubblewrap (`T._sandbox_cmd` + Toolchain-sysroot ro,
+  `/cargo` rw, `CARGO_TARGET_DIR=/arbeit/target`, rlimits `PCL_CARGO_MEM_MB`). Toolchain-Programme direkt aus `rustc --print sysroot` (nicht rustup-Huelle).
+  Ohne bwrap (Windows) nur mit `PCL_CARGO_UNSAFE=1` direkt mit Minimal-Umgebung (ABI hat das am 2026-11-02 so gewaehlt). `op=package` nur bei gruenen
+  Tests -> `output/<name>.zip` (LIESMICH, TESTBERICHT, quelle/, programm/). `_lock` = ein Bau gleichzeitig. Projekt-ZIP (`_projekt.zip`) laesst Dotordner aus.
+  `/api/info` liefert `rust` = Modus, `allow_run` = run_code ODER rust. Tests `tests/test_rust.py` (echtes cargo), `selftest.py rust`. Auf Pi/Windows ungetestet.
 - Echter Browser: `browse_page` (Recht `web`, nur wenn Playwright importierbar und `PCL_BROWSER`≠0): Chromium je Aufruf, `_browser_lock` (1 Instanz),
   `ctx.route` + `route_web_socket` prüfen JEDE Anfrage mit `check_public` (Restrisiko DNS-Rebinding), WebRTC/Downloads/Service Worker aus.
   Screenshot fängt `run_with_tools` ab wie `view_image` (geht in `seen`). `install.sh --browser|--run`, `selftest.py browser|run`.

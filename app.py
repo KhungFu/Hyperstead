@@ -3008,7 +3008,8 @@ def index():
 
 @app.get("/api/info")
 def api_info():
-    return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI, "allow_run": tools.run_enabled(), "browser": tools.browser_enabled(),
+    return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI, "allow_run": tools.run_enabled() or tools.cargo_enabled(), "run_code": tools.run_enabled(),
+                    "rust": __import__("rust_builder").sandbox_mode(), "browser": tools.browser_enabled(),
                     "telegram": bool(TG_TOKEN and TG_CHATS), "workers": WORKERS})
 
 
@@ -3842,7 +3843,7 @@ def serve_file(pid, tok, rel):
         buf, total = io.BytesIO(), 0
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             for f in root.rglob("*") if root.exists() else []:
-                if f.is_file():
+                if f.is_file() and not any(x.startswith(".") for x in f.relative_to(root).parts):  # .rust/, .tmp-* bleiben intern
                     total += f.stat().st_size
                     if total > 100_000_000:
                         abort(400, "Projektordner ist fuer den ZIP-Download zu gross (100 MB).")
