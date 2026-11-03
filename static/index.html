@@ -205,6 +205,7 @@ a.btn.pri{color:#fff}
       <button class="side-btn" id="btnGoals" title="Ziele und Unterziele des Projekts mit Fortschritt">🎯 Ziele</button>
       <button class="side-btn" id="btnUsage" title="Aufrufe, Tokens und geschätzte Kosten je Projekt, Agent und Modell">📊 Nutzung &amp; Kosten</button>
       <button class="side-btn" id="btnConn" title="Webhooks: Agenten rufen deine Dienste auf, Aufträge kommen von außen">🔌 Verbindungen</button>
+      <button class="side-btn" id="btnCloud" title="GitHub, Google Drive, OneDrive und Telegram: wohin Dateien hochgeladen werden">☁️ Cloud</button>
       <button class="side-btn" id="btnKnow" title="Was alle Agenten dieses Projekts immer wissen sollen">🧠 Firmenwissen</button>
       <button class="side-btn" id="btnAudit">📜 Verlauf (Audit-Log)</button>
       <button class="side-btn" id="btnLogout" style="display:none" onclick="location.href='/logout'">🚪 Abmelden</button>
@@ -587,6 +588,7 @@ function drawSettings(a){
     <div class="chk"><input type="checkbox" id="p_recruit" ${pm.recruit?'checked':''}><div>Darf sein Team selbst zusammenstellen<small>Jederzeit je nach Auftrag: baut sein Team auf, stellt weitere Mitarbeiter ein, entlässt oder ändert Rollen (Neue ohne KI – die weist du zu)</small></div></div>
     <div class="chk"><input type="checkbox" id="p_publish" ${pm.publish?'checked':''}><div>Darf die Webseite zur Veröffentlichung vorschlagen<small>„veröffentlichen“ legt dir eine Freigabe vor; erst nach deinem Klick geht der Ordner www/ des Projekts online</small></div></div>
     <div class="chk"><input type="checkbox" id="p_connect" ${pm.connect?'checked':''}><div>Darf Verbindungen nutzen<small>Webhooks aus 🔌 Verbindungen aufrufen (n8n, Zapier, eigene Dienste); Verbindungen mit Freigabe laufen erst nach deinem Klick</small></div></div>
+    <div class="chk"><input type="checkbox" id="p_upload" ${pm.upload?'checked':''}><div>Darf in die Cloud hochladen<small>Fertige Dateien zu GitHub, Google Drive, OneDrive oder per Telegram an dich (eingerichtet unter ☁️ Cloud). Jeder Upload wartet auf deine Freigabe</small></div></div>
     <div class="chk"><input type="checkbox" id="p_shell" ${pm.shell?'checked':''} ${S.info.allow_shell?'':'disabled'}><div>Darf Shell-Befehle vorschlagen<small>${S.info.allow_shell?'läuft erst nach deiner Freigabe (Sidebar „Freigaben“)':'auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env)'}</small></div></div>
     <small style="color:var(--mute)">${(a.used_tokens||0).toLocaleString('de-AT')} Tokens diesen Monat verbraucht (nur zur Info, kein Limit).</small>
     <div class="chk" style="margin-top:12px"><input type="checkbox" id="f_pause" ${a.paused?'checked':''}><div>Agent pausiert</div></div>
@@ -629,7 +631,7 @@ function drawSettings(a){
   $('#saveAg').onclick=async()=>{
     const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,...($('#f_prov').value?{provider:$('#f_prov').value}:{}),model:$('#f_model').value.trim(),
       system_prompt:$('#f_sys').value,...($('#f_mem').value!==(a.memory||'')?{memory:$('#f_mem').value}:{}),paused:$('#f_pause').checked,
-      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,publish:$('#p_publish').checked,code:$('#p_code').checked,run_code:$('#p_run_code').checked,connect:$('#p_connect').checked,shell:$('#p_shell').checked}};
+      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,publish:$('#p_publish').checked,code:$('#p_code').checked,run_code:$('#p_run_code').checked,connect:$('#p_connect').checked,upload:$('#p_upload').checked,shell:$('#p_shell').checked}};
     if($('#cliwrap').style.display!=='none') body.cli_command=$('#f_cli').value;
     const np=$('#f_parent').value; body.parent_id=np?+np:null;
     await api('/agents/'+a.id,'PUT',body); toast('Gespeichert'); $('#toast').style.borderColor='var(--green)';
@@ -811,12 +813,14 @@ $('#btnApprovals').onclick=async()=>{
         <pre style="white-space:pre-wrap">${esc(r.payload)}</pre>`
         :r.kind==='connect'?`<div><b>${esc(r.agent_name||'?')}</b> möchte eine <b>Verbindung aufrufen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Daten gehen an deinen Dienst; prüfe, ob das so raus soll.</div>`
+        :r.kind==='upload'?`<div><b>${esc(r.agent_name||'?')}</b> möchte eine <b>Datei hochladen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
+        <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Datei verlässt PaperclipLite. Prüfe Datei und Ziel.</div>`
         :r.kind==='publish'?`<div><b>${esc(r.agent_name||'?')}</b> möchte die <b>Webseite veröffentlichen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">Der Projektordner (ohne <code>input/</code>) wird als Webseite ausgeliefert, standardmäßig nur auf dem Pi selbst (localhost).</div>`
         :`<div><b>${esc(r.agent_name||'?')}</b> will einen <b>${esc(r.kind)}</b>-Befehl ausführen <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre>$ ${esc(r.payload)}</pre>
         <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der PaperclipLite startet — Befehl genau prüfen!</div>`}
-        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':r.kind==='connect'?'Freigeben & senden':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
+        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':r.kind==='connect'?'Freigeben & senden':r.kind==='upload'?'Freigeben & hochladen':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
       </div>`).join(''):'<div style="color:var(--mute)">Keine offenen Freigaben.</div>');
     if(gates) ['plan','recruit'].forEach(k=>$('#g_'+k).onchange=async e=>{ await api('/projects/'+S.pid+'/gates','PUT',{[k]:e.target.checked}); toast('Gespeichert'); });
     body.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await api('/approvals/'+b.dataset.ok,'POST',{decision:'approve'}); await load(); refresh(true); });
@@ -990,6 +994,7 @@ async function showFiles(){
         ${isImg(f.path)?`<img src="${f.url}" style="width:44px;height:44px;object-fit:cover;border-radius:6px">`:`<span style="width:44px;text-align:center;font-size:22px">${icon(f.path)}</span>`}
         <a href="${f.url}" target="_blank" rel="noopener" style="flex:1;color:var(--text);word-break:break-all">${esc(f.path)}</a>
         <span style="color:var(--mute);font-size:12px;white-space:nowrap">${kb(f.size)}</span>
+        <button class="icon-btn" title="Hochladen (GitHub, Google Drive, OneDrive) oder an Telegram schicken" data-cup="${esc(f.path)}">☁️</button>
         <button class="icon-btn" title="Datei löschen" data-delf="${esc(f.path)}">🗑</button></div>`).join('')
       : '<div style="color:var(--mute)">Noch keine Dateien. Was das Team erzeugt (Webseiten, Bilder, Videos, Dokumente), erscheint hier.</div>');
   $('#sitebtn').onclick=async()=>{ try{ await api('/projects/'+S.pid+'/site','POST',{enabled:!st.running}); }catch(_){} showFiles(); };
@@ -1002,6 +1007,7 @@ async function showFiles(){
     showFiles();
   };
   body.querySelectorAll('[data-delf]').forEach(b=>b.onclick=async()=>{ if(confirm('„'+b.dataset.delf+'“ löschen?')){ await fetch('/api/projects/'+S.pid+'/files?path='+encodeURIComponent(b.dataset.delf),{method:'DELETE',headers:{'X-PCL':'1'}}); showFiles(); } });
+  body.querySelectorAll('[data-cup]').forEach(b=>b.onclick=()=>cloudUpload(b.dataset.cup));
 }
 $('#btnFiles').onclick=showFiles;
 
@@ -1047,6 +1053,68 @@ async function showConn(){
     $('#cn_back').onclick=showConn; });
 }
 $('#btnConn').onclick=showConn;
+
+/* ---------- Cloud (GitHub, Google Drive, OneDrive, Telegram) ---------- */
+async function showCloud(){
+  if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+  openOv('☁️ Cloud'); const body=$('#ovbody');
+  const r=await api('/projects/'+S.pid+'/cloud');
+  const help={github:'Token und Repo in .env (GITHUB_UPLOAD_TOKEN, GITHUB_UPLOAD_REPO). Dateien über 50 MB gehen als Release-Anhang.',
+    gdrive:'PaperclipLite sieht nur Dateien und Ordner, die es selbst angelegt hat. Fehlende Ordner legt es an.',
+    onedrive:'Ordner im ganzen OneDrive möglich, fehlende Ordner legt OneDrive an.',
+    telegram:'Schickt Dateien bis 50 MB an deinen Chat. Am Handy: /datei'};
+  body.innerHTML=`<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Hier richtest du ein, wohin Dateien hochgeladen werden. Hochladen kannst du jede Datei unter 📁 Dateien (Knopf ☁️). Agenten mit dem Recht „Darf in die Cloud hochladen“ fragen dich vorher immer unter ✋ Freigaben. Anleitung: <code>docs/cloud.md</code></div>`
+    + Object.entries(r.services).map(([k,s])=>`<div class="task" style="padding:10px;margin-bottom:10px">
+      <div style="display:flex;gap:8px;align-items:center"><b style="flex:1">${esc(s.label)}</b><span style="font-size:12px">${!s.configured?'⚪ nicht eingerichtet':s.logged_in?'🟢 bereit':'🟡 nicht angemeldet'}</span></div>
+      <div style="color:var(--mute);font-size:12px;margin:3px 0 6px">${esc(s.configured?help[k]:s.hint)}</div>
+      ${k in r.folders?`<label>Zielordner für dieses Projekt (leer = oberste Ebene)</label><div class="row"><input type="text" data-cf="${k}" value="${esc(r.folders[k])}" style="flex:1"><button class="btn sm" data-cfsave="${k}">Speichern</button></div>`:''}
+      ${s.login&&s.configured?`<div class="row" style="margin-top:6px">${s.logged_in?`<button class="btn sm" data-clogout="${k}">Abmelden</button>`:''}<button class="btn ${s.logged_in?'':'pri'} sm" data-clogin="${k}">${s.logged_in?'Neu anmelden':'Anmelden'}</button></div>
+        <div id="cl_${k}" style="font-size:13px;margin-top:6px">${s.pending&&s.pending.state==='pending'?loginHtml(s.pending):''}</div>`:''}
+    </div>`).join('');
+  function loginHtml(p){ return `Öffne <a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(p.url)}</a> (am Handy oder PC) und gib diesen Code ein:<div style="font-size:24px;font-weight:700;letter-spacing:2px;margin:6px 0">${esc(p.user_code)}</div><button class="btn sm" onclick="copyText('${esc(p.user_code)}')">📋 Code kopieren</button> <span style="color:var(--mute)">Ich warte auf die Bestätigung …</span>`; }
+  async function watch(k){
+    for(let i=0;i<200;i++){
+      await new Promise(res=>setTimeout(res,3000));
+      if(!$('#cl_'+k)) return;
+      const x=(await api('/projects/'+S.pid+'/cloud')).services[k];
+      const p=x.pending||{};
+      if(p.state==='ok'){ toast(x.label+': angemeldet'); showCloud(); return; }
+      if(p.state==='error'){ $('#cl_'+k).textContent='❌ '+p.message; return; }
+    }
+  }
+  body.querySelectorAll('[data-cfsave]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.cfsave;
+    const x=await api('/projects/'+S.pid+'/cloud','PUT',{folders:{[k]:body.querySelector(`[data-cf="${k}"]`).value}});
+    body.querySelector(`[data-cf="${k}"]`).value=x.folders[k]; toast('Gespeichert'); });
+  body.querySelectorAll('[data-clogin]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.clogin;
+    try{ const p=await api('/cloud/'+k+'/login','POST',{}); $('#cl_'+k).innerHTML=loginHtml(p); watch(k); }catch(_){} });
+  body.querySelectorAll('[data-clogout]').forEach(b=>b.onclick=async()=>{ if(confirm('Abmelden? Danach kann PaperclipLite dort nichts mehr hochladen.')){ await api('/cloud/'+b.dataset.clogout+'/logout','POST',{}); showCloud(); } });
+  Object.entries(r.services).forEach(([k,s])=>{ if(s.pending&&s.pending.state==='pending') watch(k); });
+}
+$('#btnCloud').onclick=showCloud;
+
+async function cloudUpload(path){
+  const r=await api('/projects/'+S.pid+'/cloud');
+  const ready=Object.entries(r.services).filter(([k,s])=>s.configured&&s.logged_in);
+  openOv('☁️ Hochladen'); const body=$('#ovbody');
+  if(!ready.length){ body.innerHTML='<div style="color:var(--mute)">Noch kein Dienst eingerichtet. Siehe ☁️ Cloud in der Seitenleiste.</div><div class="row" style="margin-top:8px"><button class="btn sm" id="cu_back">Zurück</button></div>'; $('#cu_back').onclick=showFiles; return; }
+  body.innerHTML=`<div style="word-break:break-all;margin-bottom:8px"><b>${esc(path)}</b></div>
+    <label>Wohin?</label><select id="cu_to">${ready.map(([k,s])=>`<option value="${k}">${esc(s.label)}</option>`).join('')}</select>
+    <div id="cu_fwrap"><label>Ordner (leer = oberste Ebene)</label><input type="text" id="cu_folder"></div>
+    <div class="row" style="margin-top:10px"><button class="btn pri sm" id="cu_go">Hochladen</button><button class="btn sm" id="cu_back">Zurück</button></div>
+    <div id="cu_st" style="margin-top:10px;font-size:13px;word-break:break-all"></div>`;
+  const setF=()=>{ const k=$('#cu_to').value; $('#cu_fwrap').style.display=k in r.folders?'':'none'; $('#cu_folder').value=r.folders[k]||''; };
+  $('#cu_to').onchange=setF; setF(); $('#cu_back').onclick=showFiles;
+  $('#cu_go').onclick=async()=>{ const k=$('#cu_to').value; $('#cu_go').disabled=true; $('#cu_st').textContent='Lade hoch … (große Dateien dauern)';
+    try{
+      const j=await api('/projects/'+S.pid+'/cloud/upload','POST',k in r.folders?{to:k,path,folder:$('#cu_folder').value}:{to:k,path});
+      for(;;){ await new Promise(res=>setTimeout(res,2000)); const x=await api('/cloud/jobs/'+j.job);
+        if(x.state==='running') continue;
+        const link=(x.message.match(/https:\/\/\S+/)||[])[0];
+        $('#cu_st').innerHTML=(x.state==='done'?'✅ ':'❌ ')+esc(x.message)+(link?`<div class="row" style="margin-top:6px"><a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">Öffnen</a><button class="btn sm" onclick="copyText('${esc(link)}')">📋 Link kopieren</button></div>`:'');
+        break; }
+    }catch(e){ $('#cu_st').textContent='❌ '+e.message; }
+    $('#cu_go').disabled=false; };
+}
 
 /* ---------- Ziele ---------- */
 async function showGoals(){

@@ -213,6 +213,11 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | CEO'nun aldığı çalışanın hakları | Sistem eksik hakları role göre ekler (yukarıdaki liste). Hiçbir anahtar kelime uymazsa yalnızca *dosya okuma* alır ve yalnızca metinle yanıt verebilir. | Ajan panelinde kutuları işaretleyin ya da CEO'ya rolü daha net verin. |
 | CEO'nun çıkarmak veya değiştirmek istediği çalışan | Ad ekibinde yoksa (yazım hatası, başka ekip, zaten çıkarılmış) talimat atlanır ve sonuçta not edilir. Çalışanın hâlâ açık görevi varsa kalır. | Hiçbir şey, ya da daha sonra yeniden görevlendirin. |
 | `video_providers.py` (program dosyası) | Video, ses ve bulut sesi araçları ajanlar için görünmez olur, geri kalan her şey çalışmaya devam eder. | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| `GITHUB_UPLOAD_TOKEN` veya `GITHUB_UPLOAD_REPO` | GitHub, ☁️ Cloud altında "kurulmamış" görünür, ajanlara hedef olarak sunulmaz. Geri kalan her şey çalışır. | Token ve repoyu girin ([docs/cloud.md](docs/cloud.md), Almanca), yeniden başlatın. |
+| `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET` veya `ONEDRIVE_CLIENT_ID` | Hizmet "kurulmamış" kalır, "Oturum aç" düğmesi görünmez. | Uygulamayı kaydedin ve satırları girin ([docs/cloud.md](docs/cloud.md)), yeniden başlatın. |
+| Google/Microsoft oturumu (`tokens/` klasörü) | Hizmet "oturum açılmamış" görünür. Yükleme "henüz oturum açılmadı" ya da "oturumun süresi doldu" der ve hiçbir şey yüklemez. | ☁️ Cloud → Oturum aç. Pi'den dizüstüne taşırken dizüstünde yeniden oturum açın. |
+| Telegram için 50 MB üstü dosya | Telegram kabul etmez. `/datei` dosyayı ⚠️ ile işaretler ve göndermez, ajan bir uyarı alır. | Hedef olarak Google Drive, OneDrive veya GitHub seçin. |
+| `cloud_upload.py` (program dosyası) | PaperclipLite başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 
 ## İnternetten erişim
 
@@ -353,6 +358,7 @@ tür, görev, ekip rakamları ve sonuçla. Altındaki hak ve rapor zinciri eskis
 | ✅ düğmesi ya da „ok“ yanıtı | görev tamamlandı olarak işaretlenir |
 | Dosya, fotoğraf, albüm, video ya da sesli mesaj gönderin | seçilen projenin `input/` klasörüne düşer; resim altyazısı görev olur (bir gönderiye yanıt olarak: düzeltme için), metin yoksa dosya bir sonraki göreviniz için beklenir. Telegram botları yalnızca 20 MB'a kadar dosya indirebilir; daha büyüklerini web'den yükleyin |
 | `/post`, `/status`, `/ok <No>`, `/neu <Metin>`, `/projekt [No]` | genel bakış ya da kısa komutlar |
+| `/datei [arama kelimesi]` | seçili projeden size bir dosya gönderir (en yeniler düğme olarak, tek eşleşme hemen gelir; 50 MB'a kadar) |
 
 Uygulama Telegram'ı yalnızca dışarıdan yoklar; hiçbir port açılmaz (CGNAT arkasında da çalışır). Yalnızca
 `.env` içindeki sohbet kimliği komut verebilir; özel bir sohbet kullanın, grup değil. Kabuk komutları için onaylar bilerek
@@ -367,6 +373,7 @@ Telegram üzerinden **geçmez**; orada yalnızca bir uyarı gelir.
 - **Dosya yazma**: yalnızca `workspace/<proje-kimliği>/` içinde; dışarıdaki yollar reddedilir.
 - **Kod çalıştırma** (varsayılan kapalı): `run_code` bir sandbox'ta Python, JavaScript, Bash, Ruby, PHP ya da Lua başlatır, aşağıya bakın.
   Buna `rust_project` de dahildir: Rust programlarını derler, test eder ve bitmiş paket olarak teslim eder ([Rust programları](#-rust-programlarını-eksiksiz-derleme)).
+- **Buluta yükleme** (varsayılan kapalı): bitmiş dosyaları GitHub, Google Drive, OneDrive'a ya da Telegram ile size gönderir, her zaman ancak sizin onayınızdan sonra ([☁️ Bulut yükleme](#️-bulut-yükleme-github-google-drive-onedrive-telegram)).
 - **Kabuk önerme**: yalnızca sunucuda `PCL_ALLOW_SHELL=1` varsa ve ancak onaydan sonra.
 - **Duraklatma**: ajanın tüm yeni görevlerini engeller.
 
@@ -443,6 +450,21 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
 - **Giriş:** „Aufträge von außen“ (dışarıdan görevler) açılırsa `POST /hook/<proje>/<anahtar>` ile `{"text": "…", "agent": "isteğe bağlı"}` gönderilerek
   patron için bir görev kabul edilir (ör. n8n, iOS kısayollarından ya da DEXTER'dan). Giriş gerektirmez; yalnızca adresteki anahtarla korunur.
   „Neuen Schlüssel“ (yeni anahtar) eski adresi geçersiz kılar. Adrese yalnızca PaperclipLite'in kendisi kadar erişilebilir (ör. yalnızca tailnet içinde).
+
+## ☁️ Bulut yükleme (GitHub, Google Drive, OneDrive, Telegram)
+
+- **Kurulum:** erişim bilgileri `.env` içinde (`GITHUB_UPLOAD_TOKEN` + `GITHUB_UPLOAD_REPO`, `GDRIVE_CLIENT_ID` + `GDRIVE_CLIENT_SECRET`,
+  `ONEDRIVE_CLIENT_ID`), adım adım [docs/cloud.md](docs/cloud.md) içinde (Almanca). Google ve Microsoft için ardından **☁️ Cloud**
+  penceresinde oturum açarsınız: bir kod gösterir, bu kodu telefonunuzda Google ya da Microsoft sayfasına girersiniz (HTTPS olmadan çalışır).
+  Oturum `.env` dosyasının yanındaki `tokens/` klasöründe durur, asla veritabanında değil.
+- **Hedef klasör:** ☁️ Cloud penceresinde proje ve hizmet başına (varsayılan `PaperclipLite/<proje adı>`). Ajanlar yalnızca bunun altında
+  bir alt klasör seçebilir, örneğin siz görevde bir klasör adı verdiğinizde.
+- **Kendiniz yükleme:** 📁 Dosyalar → dosyanın yanındaki ☁️ → hedef ve klasör seçin. Bağlantıyı alırsınız.
+- **Ajanlar:** **"Buluta yükleyebilir"** yetkisi (yalnızca siz verirsiniz). Araç `cloud_upload`; her yükleme ✋ Onaylar altında bekler,
+  ayrıca bir Telegram mesajı gelir. Yüklemeden sonra bağlantı görevde yer alır.
+- **Telegram:** `/datei` 50 MB'a kadar dosyaları telefonunuza gönderir, yalnızca siz tıkladığınızda ya da onayladığınızda.
+- GitHub: 50 MB'a kadar repoda dosya olarak, daha büyükler `paperclip-ablage` sürümüne ek olarak (2 GB'a kadar). Google Drive: yalnızca
+  PaperclipLite'ın kendisinin oluşturduğu klasör ve dosyalar (`drive.file` yetkisi). OneDrive: her klasör. Yalnızca taklit hizmetlere karşı test edildi.
 
 ## 🌐 Gerçek tarayıcı ve ▶ kod çalıştırma
 

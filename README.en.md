@@ -214,6 +214,11 @@ This list is extended with every change to the program. Each row says what the s
 | Rights of an employee hired by the CEO | The system adds missing rights based on the role (list above). If no keyword matches, he only gets *read files* and can only answer with text. | Set the ticks in the agent panel or give the CEO the role more precisely. |
 | Employee the CEO wants to fire or change | If the name is not in his team (typo, other team, already fired), the instruction is skipped and noted in the result. If the employee still has an open task, he stays. | Nothing, or assign it again later. |
 | `video_providers.py` (program file) | The video, sound and cloud voice tools disappear for the agents; everything else keeps running. | Run `git pull` again, the file is part of the program. |
+| `GITHUB_UPLOAD_TOKEN` or `GITHUB_UPLOAD_REPO` | GitHub shows as "not set up" under ☁️ Cloud and agents are not offered it as a target. Everything else keeps running. | Enter token and repo ([docs/cloud.md](docs/cloud.md), German), restart. |
+| `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET` or `ONEDRIVE_CLIENT_ID` | The service stays "not set up", the "Sign in" button is missing. | Register the app and enter the lines ([docs/cloud.md](docs/cloud.md)), restart. |
+| Sign-in at Google/Microsoft (folder `tokens/`) | The service shows "not signed in". An upload reports "not signed in yet" or "sign-in expired" and uploads nothing. | ☁️ Cloud → Sign in. When moving from Pi to laptop, simply sign in again on the laptop. |
+| File over 50 MB for Telegram | Telegram does not accept it. `/datei` marks it with ⚠️ and does not send it, the agent gets a notice. | Choose Google Drive, OneDrive or GitHub as the target. |
+| `cloud_upload.py` (program file) | PaperclipLite does not start (import error). | Run `git pull` again, the file is part of the program. |
 
 ## Access from the internet
 
@@ -359,6 +364,7 @@ type, the task, team figures and the result. The chain of rights and reports und
 | Button ✅ or reply „ok“ | task marked as done |
 | Send a file, photo, album, video or voice message | lands in `input/` of the chosen project; the caption becomes the task (when replying to a post: for revision); without text the file goes to your next task. Telegram bots may only download files up to 20 MB, larger ones: upload on the web |
 | `/post`, `/status`, `/ok <no.>`, `/neu <Text>`, `/projekt [no.]` | overview or short commands |
+| `/datei [search word]` | sends you a file from the selected project (newest as buttons, a single match comes right away; up to 50 MB) |
 
 The app only polls Telegram outwards, no port is opened (works behind CGNAT too). Only the chat ID from
 `.env` may give commands; use a private chat, not a group. Approvals for shell commands deliberately do
@@ -373,6 +379,7 @@ The app only polls Telegram outwards, no port is opened (works behind CGNAT too)
 - **Write files**: only in `workspace/<project-id>/`; paths outside are refused.
 - **Run code** (default off): `run_code` starts Python, JavaScript, Bash, Ruby, PHP or Lua in a sandbox, see below.
   This includes `rust_project`: build and test Rust programs and deliver a finished package ([Rust programs](#-building-complete-rust-programs)).
+- **Upload to the cloud** (off by default): finished files to GitHub, Google Drive, OneDrive or to you via Telegram, always only after your approval ([☁️ Cloud upload](#️-cloud-upload-github-google-drive-onedrive-telegram)).
 - **Suggest shell**: only if the server has `PCL_ALLOW_SHELL=1`, and then always only after approval.
 - **Pause**: blocks all new tasks of the agent.
 
@@ -450,6 +457,21 @@ Runs without internet and without keys (provider `mock`, own database).
 - **Incoming:** switch on „Aufträge von außen“ (tasks from outside); then `POST /hook/<project>/<key>` with `{"text": "…", "agent": "optional"}`
   accepts a task for the boss (e.g. from n8n, iOS shortcuts or DEXTER). No login; protected only by the key in the address.
   „Neuen Schlüssel“ (new key) invalidates the old address. It is only reachable as far as PaperclipLite itself is (e.g. only in the tailnet).
+
+## ☁️ Cloud upload (GitHub, Google Drive, OneDrive, Telegram)
+
+- **Setup:** credentials in `.env` (`GITHUB_UPLOAD_TOKEN` + `GITHUB_UPLOAD_REPO`, `GDRIVE_CLIENT_ID` + `GDRIVE_CLIENT_SECRET`,
+  `ONEDRIVE_CLIENT_ID`), step by step in [docs/cloud.md](docs/cloud.md) (German). For Google and Microsoft you then sign in in the
+  **☁️ Cloud** window: it shows a code that you enter on your phone on the Google or Microsoft page (works without HTTPS).
+  The sign-in is stored in `tokens/` next to `.env`, never in the database.
+- **Target folder:** per project and service in the ☁️ Cloud window (default `PaperclipLite/<project name>`). Agents may only choose a
+  subfolder below it, e.g. when you name one in the task.
+- **Upload yourself:** 📁 Files → ☁️ next to the file → choose target and folder. You get the link.
+- **Agents:** permission **"May upload to the cloud"** (only you set it). Tool `cloud_upload`; every upload waits under ✋ Approvals,
+  plus a Telegram message. After the upload the link is in the task.
+- **Telegram:** `/datei` sends you files up to 50 MB on your phone, only when you click or approve it.
+- GitHub: up to 50 MB as a file in the repo, larger ones as an attachment to the release `paperclip-ablage` (up to 2 GB). Google Drive: only
+  folders and files that PaperclipLite created itself (scope `drive.file`). OneDrive: any folder. Only tested against simulated services.
 
 ## 🌐 Real browser and ▶ run code
 

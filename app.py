@@ -29,6 +29,7 @@ from urllib.parse import quote
 
 import requests
 import agent_tools as tools
+import cloud_upload as cloud
 import company_templates
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
 
@@ -212,8 +213,9 @@ PROVIDERS = {
 # web        = Websuche + Webseiten lesen   images = Bilder suchen/speichern/erzeugen   read_files = Projektdateien lesen
 # recruit    = stellt anhand des Auftrags selbst ein Team zusammen (legt Mitarbeiter ohne KI an; der Besitzer weist KI/Modell zu)
 DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False,
-                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False, "connect": False, "run_code": False}
+                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False, "connect": False, "run_code": False, "upload": False}
 # code       = Programmieren: Quellcode jeder Sprache schreiben und pruefen/kompilieren (ohne Ausfuehrung)
+# upload     = darf Dateien in die Cloud des Besitzers / per Telegram schicken (immer mit Freigabe)
 # publish    = darf die Webseite (index.html im Projektordner) zur Veroeffentlichung vorschlagen; der Besitzer gibt frei
 RECRUIT_MAX = 20                                                    # Mitarbeiter je Einstellungsrunde
 RECRUIT_PERMS = ("web", "images", "read_files", "write_files", "media", "code")  # mehr darf der Chef Neuen nie mitgeben
@@ -960,6 +962,149 @@ def call_connection(call, pid, aid, tid):
     return out
 
 
+# --------------------------------------------------- Cloud-Upload (GitHub, Google Drive, OneDrive, Telegram)
+CLOUD_LABELS = {**cloud.LABELS, "telegram": "Telegram"}
+TG_FILE_MAX = 50 * 1024 * 1024  # Grenze der Bot-API fuer sendDocument
+_cloud_jobs = {}                # Upload-Auftraege aus dem Web (id -> Status), nur im Speicher
+_cloud_logins = {}              # laufende Anmeldungen per Geraete-Code (Dienst -> Status)
+
+
+def cloud_ready():
+    """Dienste, an die gerade hochgeladen werden kann."""
+    out = [s for s in cloud.LABELS if cloud.ready(s)]
+    return out + (["telegram"] if TG_TOKEN and TG_CHATS else [])
+
+
+def cloud_folders(pid):
+    """Zielordner je Dienst fuer dieses Projekt (legt nur der Besitzer fest). Standard: PaperclipLite/<Projekt>."""
+    try:
+        f = json.loads(get_setting(f"cloud:{pid}", "") or "{}")
+    except ValueError:
+        f = {}
+    p = q1("SELECT name, folder FROM projects WHERE id=?", (pid,)) or {"name": str(pid), "folder": ""}
+    dflt = {"gdrive": f"PaperclipLite/{p['name']}", "onedrive": f"PaperclipLite/{p['name']}", "github": p["folder"] or str(pid)}
+    return {s: cloud.clean_folder(f[s]) if isinstance(f.get(s), str) else cloud.clean_folder(dflt[s]) for s in cloud.LABELS}
+
+
+def project_file(pid, rel):
+    """Datei im Projektordner (ohne Dotpfade, nie ausserhalb) oder ValueError."""
+    root = proj_dir(pid).resolve()
+    rel = str(rel or "").replace("\\", "/").strip().lstrip("/")
+    f = (root / rel).resolve()
+    f.relative_to(root)
+    if not rel or any(x.startswith(".") for x in f.relative_to(root).parts) or not f.is_file():
+        raise ValueError(f"Datei '{rel}' gibt es im Projektordner nicht.")
+    return f
+
+
+def tg_send_file(chat, path, caption=""):
+    with open(path, "rb") as fh:
+        r = requests.post(f"{TG_API}/bot{TG_TOKEN}/sendDocument", data={"chat_id": chat, "caption": caption[:1000]},
+                          files={"document": (Path(path).name, fh)}, timeout=(10, 600))
+    d = r.json()
+    if not d.get("ok"):
+        raise RuntimeError(d.get("description", "Telegram-Fehler"))
+    return d["result"]
+
+
+def cloud_target(pid, svc, sub=""):
+    return "" if svc == "telegram" else cloud.join_folder(cloud_folders(pid).get(svc, ""), sub)
+
+
+def do_upload(pid, svc, rel, sub="", folder=None):
+    """Laedt eine Projektdatei hoch (blockiert). folder = fester Zielordner (sonst Projektordner des Dienstes + sub).
+    Gibt (ok, Meldung mit Link) zurueck."""
+    try:
+        f = project_file(pid, rel)
+    except ValueError as e:
+        return False, str(e)
+    label = CLOUD_LABELS.get(svc, svc)
+    if svc == "telegram":
+        if not (TG_TOKEN and TG_CHATS):
+            return False, "Telegram ist nicht eingerichtet (TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID in .env)."
+        if f.stat().st_size > TG_FILE_MAX:
+            return False, f"{f.name} ist groesser als 50 MB, Telegram nimmt das nicht. Nimm Google Drive, OneDrive oder GitHub."
+        try:
+            for chat in TG_CHATS:
+                tg_send_file(chat, f, f"📎 {f.relative_to(proj_dir(pid).resolve()).as_posix()}")
+        except (requests.RequestException, RuntimeError, ValueError) as e:
+            log("cloud_upload", f"telegram {rel}: Fehler", pid)
+            return False, f"Telegram: {type(e).__name__}: {_safe(str(e))[:200]}"
+        log("cloud_upload", f"telegram {rel}", pid)
+        return True, f"📲 {f.name} an Telegram geschickt."
+    try:
+        link = cloud.upload(svc, f, cloud_target(pid, svc, sub) if folder is None else folder)
+    except cloud.CloudError as e:
+        log("cloud_upload", f"{svc} {rel}: Fehler", pid)
+        return False, str(e)
+    log("cloud_upload", f"{svc} {rel} -> {link}", pid)
+    return True, f"☁️ {f.name} → {label}: {link}"
+
+
+def start_upload_job(pid, svc, rel, sub="", done=None, folder=None):
+    """Upload im Hintergrund (grosse Dateien dauern). done(ok, msg) wird danach aufgerufen."""
+    jid = secrets.token_hex(6)
+    _cloud_jobs[jid] = {"state": "running", "message": f"Lade {rel} zu {CLOUD_LABELS.get(svc, svc)} …", "started": time.time()}
+
+    def run():
+        try:
+            ok, msg = do_upload(pid, svc, rel, sub, folder)
+        except Exception as e:  # nie haengen bleiben
+            ok, msg = False, f"Fehler: {type(e).__name__}"
+        _cloud_jobs[jid] = {"state": "done" if ok else "error", "message": msg, "started": _cloud_jobs[jid]["started"]}
+        if done:
+            done(ok, msg)
+        for k in [k for k, v in _cloud_jobs.items() if time.time() - v["started"] > 86400]:
+            _cloud_jobs.pop(k, None)
+    threading.Thread(target=run, daemon=True).start()
+    return jid
+
+
+def cloud_doc(pid, perms):
+    """Werkzeugbeschreibung fuer Agenten mit Recht 'upload'; leer, wenn kein Dienst eingerichtet ist."""
+    if not perms.get("upload"):
+        return ""
+    svcs = cloud_ready()
+    if not svcs:
+        return ""
+    fold = cloud_folders(pid)
+    where = ", ".join(f"{s} ({CLOUD_LABELS[s]}" + (f", Ordner {fold[s] or 'oberste Ebene'}" if s in fold else ", an den Besitzer") + ")"
+                      for s in svcs)
+    return ('  {"tool": "cloud_upload", "path": "output/datei.pdf", "to": "' + svcs[0] + '", "folder": "optional Unterordner"}  '
+            "Fertige Datei aus dem Projektordner in die Cloud des Besitzers hochladen oder ihm per Telegram schicken. Laeuft erst, wenn der "
+            "Besitzer zustimmt (der Link steht dann im Auftrag). Nur nutzen, wenn der Auftrag das verlangt. folder = Unterordner unter dem "
+            f"festen Zielordner (z. B. wenn der Besitzer im Auftrag einen Ordner nennt). Telegram nur bis 50 MB. Ziele: {where}")
+
+
+def request_upload(call, pid, aid, tid):
+    """Werkzeug cloud_upload: legt immer eine Freigabe an (Wunsch des Besitzers)."""
+    svc = str(call.get("to") or "").strip().lower()
+    alias = {"google": "gdrive", "drive": "gdrive", "googledrive": "gdrive", "google drive": "gdrive", "one drive": "onedrive", "tg": "telegram"}
+    svc = alias.get(svc, svc)
+    ready = cloud_ready()
+    if svc not in ready:
+        return f"FEHLER: Ziel '{svc}' nicht verfuegbar. Moeglich: {', '.join(ready) or 'keins'}"
+    try:
+        f = project_file(pid, call.get("path"))
+    except ValueError as e:
+        return f"FEHLER: {e}"
+    rel = f.relative_to(proj_dir(pid).resolve()).as_posix()
+    sub = cloud.clean_folder(call.get("folder"))
+    target = cloud_target(pid, svc, sub)
+    if q1("SELECT 1 FROM approvals WHERE task_id=? AND kind='upload' AND status='pending' AND data=?",
+          (tid, json.dumps({"to": svc, "path": rel, "folder": sub}))):
+        return "Diese Datei wartet schon auf Freigabe fuer dieses Ziel. Nicht noch einmal anfragen."
+    size = f.stat().st_size
+    payload = (f"{CLOUD_LABELS[svc]}: {rel} ({size / 1048576:.1f} MB)" + (f"\nZiel: {target or 'oberste Ebene'}" if svc != "telegram" else ""))
+    apid = ex("INSERT INTO approvals(project_id,task_id,agent_id,kind,payload,created,data) VALUES(?,?,?,?,?,?,?)",
+              (pid, tid, aid, "upload", payload, time.time(), json.dumps({"to": svc, "path": rel, "folder": sub})))
+    log("approval_requested", f"upload {svc} {rel}", pid, aid, tid)
+    a = q1("SELECT name FROM agents WHERE id=?", (aid,)) or {"name": "?"}
+    tg_notify(f"☁️ Freigabe nötig · {a['name']}\nHochladen (Auftrag #{tid})\n{payload}\n\nBitte im Web unter „Freigaben“ entscheiden.")
+    return (f"Angefragt (Freigabe #{apid}): Der Besitzer muss das Hochladen erst freigeben, der Link erscheint dann im Auftrag. "
+            "Frag dieselbe Datei nicht noch einmal an, mach mit dem Rest weiter.")
+
+
 def notify_connections_post(t):
     """Fertige Post zusaetzlich an Verbindungen mit 'Bei Post benachrichtigen' schicken (im Hintergrund)."""
     cs = [c for c in project_connections(t["project_id"]) if c["on_post"]]
@@ -1198,7 +1343,7 @@ def build_system(agent, project, mode, final_only=False, team_change_ok=False):
                      "Veroeffentlicht wird NUR der Ordner www/ des Projekts: lege die fertige Seite dort ab (www/index.html, dazu CSS, Bilder und Skripte "
                      "in www/ mit relativen Pfaden). Nur setzen, wenn die Seite fertig ist und www/index.html existiert. Ist sie schon online, aktualisieren sich Aenderungen automatisch.")
     tool_names = tools.available(perms)  # auch in der letzten Runde: dort darf der Chef das Produkt noch selbst bauen
-    conn_doc = connections_doc(project["id"], perms)
+    conn_doc = "\n".join(x for x in (connections_doc(project["id"], perms), cloud_doc(project["id"], perms)) if x)
     if tool_names or conn_doc:
         s.append(
             "\nWERKZEUGE (du darfst sie nutzen):\n" + "\n".join(x for x in (tools.describe(tool_names), conn_doc) if x) + "\n"
@@ -1472,7 +1617,8 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
     want: (Endungen, seit, zurueckgebbare Kind-IDs, darf delegieren) = Produkt, das der Auftrag verlangt; fehlt es bei der Endantwort, fordert der Server es einmal ein.
     Gibt (endgueltiger_text, tokens, erzeugte_dateien) zurueck."""
     pid, aid, tid = ids
-    allowed = tools.available(perms) + (["call_connection"] if connections_doc(pid, perms) else [])
+    allowed = (tools.available(perms) + (["call_connection"] if connections_doc(pid, perms) else [])
+               + (["cloud_upload"] if cloud_doc(pid, perms) else []))
     seen = list(images or [])[:RUN_MAX_IMAGES]  # Bilder dieses Laufs gehen in jeder Runde mit (Nr. = Position)
     text, total, hint = call_llm_img(a, messages, seen)
     if hint:
@@ -1516,6 +1662,9 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
                     made_file = None
                 elif c.get("tool") == "call_connection":
                     out = call_connection(c, pid, aid, tid) if "call_connection" in allowed else "FEHLER: Verbindungen nicht erlaubt"
+                    made_file = None
+                elif c.get("tool") == "cloud_upload":
+                    out = request_upload(c, pid, aid, tid) if "cloud_upload" in allowed else "FEHLER: Hochladen nicht erlaubt"
                     made_file = None
                 else:
                     out, made_file = tools.run_tool(c, root, perms)
@@ -1968,7 +2117,7 @@ def execute_task(tid):
             tg_notify(f"🌐 Freigabe nötig · {a['name']} ({p['name']})\nWebseite veröffentlichen (Auftrag #{tid}: {t['title']})\n\nBitte im Web unter „Freigaben“ entscheiden.")
 
     final = result + ("\n\n" + "\n".join(notes) if notes else "")
-    pending += q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending' AND kind='connect'", (tid,))["c"]
+    pending += q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending' AND kind IN ('connect','upload')", (tid,))["c"]
     if pending:
         set_task(tid, "waiting_approval", final)
     else:
@@ -2221,7 +2370,49 @@ HELP_DE = ("PaperclipLite – so geht's:\n"
            "• Antwort „ok“ oder Button ✅ = als erledigt markieren\n"
            "• Datei/Foto senden = landet in input/ (Bildunterschrift = Auftrag dazu, sonst geht sie an den nächsten Auftrag)\n"
            "/post – offene Post anzeigen\n/status – was läuft gerade\n/ok <Nr> – Auftrag erledigt\n"
-           "/neu <Text> – neuer Auftrag\n/projekt [Nr] – Projekt anzeigen/wechseln")
+           "/neu <Text> – neuer Auftrag\n/projekt [Nr] – Projekt anzeigen/wechseln\n"
+           "/datei [Suchwort] – Datei aus dem Projekt aufs Handy holen (bis 50 MB)")
+
+
+_tg_filelist = {}  # chat -> [(projekt, pfad)] der zuletzt gezeigten Dateiliste (Knopf = Nummer darin)
+
+
+def tg_files(chat, query=""):
+    """/datei: neueste Ergebnisse des aktiven Projekts als Knoepfe; ein einziger Treffer kommt sofort."""
+    p = active_project()
+    if not p:
+        return tg_send_now(chat, "Es gibt noch kein Projekt.")
+    fs = sorted((f for f in project_files(p["id"]) if not f["path"].startswith("input/")), key=lambda f: -f["mtime"])
+    words = query.lower().split()
+    if words:
+        fs = [f for f in fs if all(w in f["path"].lower() for w in words)]
+    if not fs:
+        return tg_send_now(chat, f"Keine passende Datei in „{p['name']}“." + (" Ohne Suchwort zeige ich die neuesten." if words else ""))
+    if words and len(fs) == 1:
+        return tg_send_project_file(chat, p["id"], fs[0]["path"])
+    fs = fs[:10]
+    _tg_filelist[chat] = [(p["id"], f["path"]) for f in fs]
+    kb = lambda n: f"{n / 1024:.0f} KB" if n < 1048576 else f"{n / 1048576:.1f} MB"
+    buttons = [[{"text": f"{'⚠️ ' if f['size'] > TG_FILE_MAX else ''}{f['path'][-48:]} · {kb(f['size'])}", "callback_data": f"sf:{i}"}]
+               for i, f in enumerate(fs)]
+    return tg_send_now(chat, f"📁 {p['name']}: Welche Datei soll ich schicken?", buttons=buttons)
+
+
+def tg_send_project_file(chat, pid, rel):
+    try:
+        f = project_file(pid, rel)
+    except ValueError as e:
+        return tg_send_now(chat, str(e))
+    if f.stat().st_size > TG_FILE_MAX:
+        return tg_send_now(chat, f"{f.name} ist größer als 50 MB, das nimmt Telegram nicht. Im Web unter 📁 Dateien gibt es ☁️ Hochladen.")
+
+    def send():
+        try:
+            tg_send_file(chat, f, f"📎 {rel}")
+            log("cloud_upload", f"telegram {rel} (/datei)", pid)
+        except (requests.RequestException, RuntimeError, ValueError) as e:
+            tg_notify(f"Senden von {f.name} fehlgeschlagen: {_safe(e)[:200]}", chats=[chat])
+    threading.Thread(target=send, daemon=True).start()
 
 
 def tg_unbutton(cb):
@@ -2246,6 +2437,12 @@ def tg_callback(cb):
         msg = decide_gate(ap, action == "ga") if ap and ap["kind"] in ("plan", "recruit") else "Unbekannte Freigabe."
         tg("answerCallbackQuery", callback_query_id=cb["id"], text=msg[:190])
         tg_unbutton(cb)
+        return
+    if action == "sf":  # Datei aus der zuletzt gezeigten Liste schicken
+        lst = _tg_filelist.get(chat) or []
+        tg("answerCallbackQuery", callback_query_id=cb["id"], text="Kommt gleich …" if tid < len(lst) else "Liste veraltet, bitte /datei neu.")
+        if tid < len(lst):
+            tg_send_project_file(chat, *lst[tid])
         return
     if action == "ok":
         ok, msg = inbox_close(tid)
@@ -2428,6 +2625,8 @@ def tg_handle(u):
         if len(rows) == 1:
             return tg_send_now(chat, inbox_close(rows[0]["id"])[1])
         return tg_send_now(chat, "Welcher Auftrag? /ok <Nr> (offene Post: /post)")
+    if cmd in ("/datei", "/dateien"):
+        return tg_files(chat, rest)
     if cmd == "/neu":
         return tg_new_order(chat, rest) if rest else tg_send_now(chat, "Wie lautet der Auftrag? /neu <Text>")
     if cmd:
@@ -3010,7 +3209,7 @@ def index():
 def api_info():
     return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI, "allow_run": tools.run_enabled() or tools.cargo_enabled(), "run_code": tools.run_enabled(),
                     "rust": __import__("rust_builder").sandbox_mode(), "browser": tools.browser_enabled(),
-                    "telegram": bool(TG_TOKEN and TG_CHATS), "workers": WORKERS})
+                    "telegram": bool(TG_TOKEN and TG_CHATS), "workers": WORKERS, "cloud": cloud_ready()})
 
 
 @app.get("/api/providers")
@@ -3466,6 +3665,101 @@ def _conn_in(d, old=None):
             1 if d.get("enabled", old.get("enabled", 1)) else 0)
 
 
+@app.get("/api/projects/<int:pid>/cloud")
+def api_cloud(pid):
+    out = {}
+    for s, label in CLOUD_LABELS.items():
+        if s == "telegram":
+            ok = bool(TG_TOKEN and TG_CHATS)
+            out[s] = {"label": label, "configured": ok, "logged_in": ok, "login": False,
+                      "hint": "" if ok else "TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID in .env"}
+            continue
+        ok, logged, hint = cloud.status(s)
+        lg = _cloud_logins.get(s) or {}
+        out[s] = {"label": label, "configured": ok, "logged_in": logged, "login": s != "github", "hint": hint,
+                  "pending": {k: lg[k] for k in ("user_code", "url", "state", "message") if k in lg} if lg else None}
+    return jsonify({"services": out, "folders": cloud_folders(pid)})
+
+
+@app.put("/api/projects/<int:pid>/cloud")
+def api_cloud_put(pid):
+    d = request.get_json(force=True) or {}
+    f = d.get("folders") or {}
+    cur = cloud_folders(pid)
+    for s in cloud.LABELS:
+        if isinstance(f.get(s), str):
+            cur[s] = cloud.clean_folder(f[s])
+    set_setting(f"cloud:{pid}", json.dumps(cur, ensure_ascii=False))
+    log("cloud_folders", json.dumps(cur, ensure_ascii=False)[:300], pid)
+    return jsonify({"ok": True, "folders": cur})
+
+
+@app.post("/api/cloud/<svc>/login")
+def api_cloud_login(svc):
+    if svc not in ("gdrive", "onedrive"):
+        abort(404)
+    try:
+        dc = cloud.device_start(svc)
+    except (cloud.CloudError, requests.RequestException, KeyError, ValueError) as e:
+        abort(400, f"{CLOUD_LABELS[svc]}: {e if isinstance(e, cloud.CloudError) else type(e).__name__}")
+    st = {"user_code": dc["user_code"], "url": dc["url"], "state": "pending", "message": ""}
+    _cloud_logins[svc] = st
+
+    def poll():
+        wait = dc["interval"]
+        while time.time() < dc["expires"] and _cloud_logins.get(svc) is st:
+            time.sleep(wait)
+            try:
+                r = cloud.device_poll(svc, dc)
+            except (cloud.CloudError, requests.RequestException) as e:
+                st.update(state="error", message=str(e) if isinstance(e, cloud.CloudError) else type(e).__name__)
+                return
+            if r == "slow_down":
+                wait += 5
+            elif r == "ok":
+                st.update(state="ok", message="Angemeldet.")
+                log("cloud_login", svc)
+                return
+        if st["state"] == "pending":
+            st.update(state="error", message="Der Code ist abgelaufen. Bitte neu anmelden.")
+    threading.Thread(target=poll, daemon=True).start()
+    return jsonify(st)
+
+
+@app.post("/api/cloud/<svc>/logout")
+def api_cloud_logout(svc):
+    if svc not in ("gdrive", "onedrive"):
+        abort(404)
+    _cloud_logins.pop(svc, None)
+    cloud.logout(svc)
+    log("cloud_logout", svc)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/projects/<int:pid>/cloud/upload")
+def api_cloud_upload(pid):
+    d = request.get_json(force=True) or {}
+    svc = str(d.get("to") or "")
+    if svc not in cloud_ready():
+        abort(400, f"{CLOUD_LABELS.get(svc, svc)} ist nicht eingerichtet oder nicht angemeldet (Fenster ☁️ Cloud).")
+    try:
+        project_file(pid, d.get("path"))
+    except ValueError as e:
+        abort(400, str(e))
+    # Ordner aus dem Dialog gilt so, wie der Besitzer ihn eintippt (nicht unter dem Standardordner)
+    folder = cloud.clean_folder(d["folder"]) if isinstance(d.get("folder"), str) else None
+    jid = start_upload_job(pid, svc, d.get("path"), folder=folder)
+    return jsonify({"job": jid})
+
+
+@app.get("/api/cloud/jobs/<jid>")
+def api_cloud_job(jid):
+    j = _cloud_jobs.get(jid)
+    if not j:
+        abort(404)
+    return jsonify(j)
+
+
 @app.get("/api/projects/<int:pid>/connections")
 def api_connections(pid):
     if not q1("SELECT 1 FROM projects WHERE id=?", (pid,)):
@@ -3627,6 +3921,20 @@ def api_approval_decide(aid):
         ex("UPDATE approvals SET status='approved', output=? WHERE id=?", (out[:4000], aid))
         log("approval_granted", f"connect: {out.splitlines()[0] if out else ''}", pid, ap["agent_id"], ap["task_id"])
         add = f"\n\n🔌 {(c or {}).get('name', 'Verbindung')}: {clip(out, 3000)}"
+    elif decision == "approve" and ap["kind"] == "upload":
+        try:
+            d = json.loads(ap.get("data") or "{}")
+        except ValueError:
+            d = {}
+        ex("UPDATE approvals SET status='approved', output=? WHERE id=?", ("läuft …", aid))
+        log("approval_granted", f"upload {d.get('to')} {d.get('path')}", pid, ap["agent_id"], ap["task_id"])
+
+        def done(ok, msg, aid=aid, ap=ap):
+            ex("UPDATE approvals SET output=? WHERE id=?", (msg[:4000], aid))
+            tg_notify(("" if ok else "❌ Hochladen fehlgeschlagen\n") + msg)
+            approval_add_result(ap["task_id"], "\n\n" + msg)
+        start_upload_job(pid, d.get("to"), d.get("path"), d.get("folder", ""), done)
+        return jsonify({"ok": True, "message": "Upload läuft, der Link erscheint im Auftrag."})
     elif decision == "approve" and ap["kind"] == "publish":
         ok, info = site_start(pid)
         out = info if ok else "Fehler: " + info
@@ -3650,12 +3958,26 @@ def api_approval_decide(aid):
         add = f"\n\n$ {ap['payload']}\n{out}"
     else:
         abort(400)
-    if t:
-        set_task(t["id"], result=(t["result"] + add)[:20000])
-        left = q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending'", (t["id"],))["c"]
+    approval_add_result(t["id"] if t else None, add)
+    return jsonify({"ok": True})
+
+
+_approval_lock = threading.Lock()
+
+
+def approval_add_result(tid, add):
+    """Ergebnis einer Freigabe an den Auftrag haengen; ist nichts mehr offen, gilt der Auftrag als erledigt."""
+    if not tid:
+        return
+    with _approval_lock:  # Uploads melden sich aus eigenen Threads
+        t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
+        if not t:
+            return
+        set_task(t["id"], result=((t["result"] or "") + add)[:20000])
+        left = q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND (status='pending' OR (kind='upload' AND output='läuft …'))",
+                  (t["id"],))["c"]
         if left == 0 and t["status"] == "waiting_approval":  # wartet der Chef aufs Team, bleibt er dabei
             finish(t["id"], "done")  # meldet das Ergebnis weiter: weckt den Chef, falls er wartet
-    return jsonify({"ok": True})
 
 
 @app.get("/api/inbox")

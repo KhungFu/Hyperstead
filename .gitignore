@@ -1,6 +1,7 @@
 # Geheimnisse und lokale Daten - niemals committen
 .env
 .session_secret
+tokens/
 data.db
 data.db-*
 workspace/
