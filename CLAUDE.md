@@ -133,6 +133,18 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   `notify_connections_post` aus `inbox_arrived` (Thread). Eingang `POST /hook/<pid>/<hook_token>` (guard-Ausnahme, `settings hook:<pid>`,
   Schluessel per `hook_nonce:<pid>` erneuerbar) -> `inbox_new_order`. Generische Freigabe beendet nur Aufgaben in `waiting_approval`.
 
+## Cloud-Upload (`cloud_upload.py`, Recht `upload`, Standard aus, nicht in `RECRUIT_PERMS`)
+- Dienste github (Contents-API bis `GITHUB_CONTENTS_MAX` 50 MB, sonst Release-Asset `GITHUB_UPLOAD_RELEASE`), gdrive (Scope `drive.file`, Ordner
+  per Name suchen/anlegen, resumable in `DRIVE_CHUNK`), onedrive (Graph `Files.ReadWrite`, bis 4 MB PUT, sonst Upload-Session). Google/Microsoft per
+  Geraete-Code (`device_start`/`device_poll`, Poll-Thread in `api_cloud_login`, Status in `_cloud_logins`), Refresh-Token in `tokens/<dienst>.json`
+  (`PCL_TOKENS_DIR`, gitignored, chmod 600; Microsoft rotiert das Token bei jedem Refresh).
+- app.py: `cloud_ready()` (+ telegram), `cloud_folders(pid)` = Zielordner je Projekt (`settings cloud:<pid>`, Std. `PaperclipLite/<Projekt>`),
+  `project_file` (keine Dotpfade), `do_upload`/`start_upload_job` (Thread, `_cloud_jobs`). Werkzeug `cloud_upload` (`cloud_doc`, `request_upload`)
+  legt IMMER `approvals.kind='upload'` an (Wunsch ABI), Agent waehlt nur Unterordner. Freigabe startet den Upload im Thread, `approval_add_result`
+  haengt den Link an und beendet die Aufgabe erst, wenn kein Upload mehr laeuft. Web: Fenster ☁️ Cloud, Knopf ☁️ je Datei (Ordner aus dem Dialog
+  gilt absolut). Telegram `/datei [suche]` + Knoepfe `sf:<n>` (`_tg_filelist`), `tg_send_file` (sendDocument, max. 50 MB).
+- Tests `tests/test_cloud.py` nur gegen Mocks, Anleitung `docs/cloud.md`.
+
 ## Post / Telegram
 - `tasks.inbox`: `''` / `new` / `closed`, nur für oberste Aufgaben. `finish()` → `inbox_arrived()` → Telegram-Nachricht.
 - `inbox_close`, `inbox_rework` (setzt feedback/prev_result, passes=0), `inbox_new_order` werden von Web-API und Telegram geteilt.

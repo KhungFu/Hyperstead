@@ -214,6 +214,11 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Rechte bei einem vom CEO eingestellten Mitarbeiter | Das System ergänzt fehlende Rechte anhand der Rolle (Tabelle oben). Passt kein Stichwort, bekommt er nur *Dateien lesen* und kann nur mit Text antworten. | Im Agenten-Panel die Häkchen setzen oder dem CEO die Rolle genauer vorgeben. |
 | Mitarbeiter, den der CEO entlassen oder ändern will | Gibt es den Namen in seinem Team nicht (Tippfehler, anderes Team, schon entlassen), wird die Anweisung übersprungen und im Ergebnis vermerkt. Hat der Mitarbeiter noch eine offene Aufgabe, bleibt er. | Nichts, oder später erneut beauftragen. |
 | `video_providers.py` (Programmdatei) | Die Video-, Ton- und Cloud-Stimmen-Werkzeuge verschwinden für die Agenten, alles andere läuft weiter. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
+| `GITHUB_UPLOAD_TOKEN` oder `GITHUB_UPLOAD_REPO` | GitHub erscheint unter ☁️ Cloud als „nicht eingerichtet“, Agenten bekommen es nicht als Ziel angeboten. Alles andere läuft. | Token und Repo eintragen ([docs/cloud.md](docs/cloud.md)), neu starten. |
+| `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET` oder `ONEDRIVE_CLIENT_ID` | Der Dienst bleibt „nicht eingerichtet“, der Knopf „Anmelden“ fehlt. | App registrieren und die Zeilen eintragen ([docs/cloud.md](docs/cloud.md)), neu starten. |
+| Anmeldung bei Google/Microsoft (Ordner `tokens/`) | Der Dienst steht auf „nicht angemeldet“. Ein Upload meldet „noch nicht angemeldet“ bzw. „Anmeldung abgelaufen“ und lädt nichts hoch. | ☁️ Cloud → Anmelden. Beim Umzug Pi → Laptop einfach auf dem Laptop neu anmelden. |
+| Datei über 50 MB für Telegram | Telegram nimmt sie nicht. `/datei` markiert sie mit ⚠️ und schickt sie nicht, der Agent bekommt den Hinweis. | Google Drive, OneDrive oder GitHub als Ziel nehmen. |
+| `cloud_upload.py` (Programmdatei) | PaperclipLite startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 
 ## Zugriff aus dem Internet
 
@@ -359,6 +364,7 @@ Art, Auftrag, Team-Kennzahlen und dem Ergebnis. Die Rechte-/Berichtskette darunt
 | Button ✅ oder Antwort „ok“ | Auftrag als erledigt markiert |
 | Datei, Foto, Album, Video oder Sprachnachricht senden | landet in `input/` des gewählten Projekts; die Bildunterschrift wird zum Auftrag (als Antwort auf Post: zur Überarbeitung), ohne Text geht die Datei an deinen nächsten Auftrag. Telegram-Bots dürfen nur Dateien bis 20 MB laden, größere im Web hochladen |
 | `/post`, `/status`, `/ok <Nr>`, `/neu <Text>`, `/projekt [Nr]` | Übersicht bzw. Kurzbefehle |
+| `/datei [Suchwort]` | schickt dir eine Datei aus dem gewählten Projekt (die neuesten als Knöpfe, ein einziger Treffer kommt sofort; bis 50 MB) |
 
 Die App fragt Telegram nur nach außen ab, es wird kein Port geöffnet (geht auch hinter CGNAT). Nur die Chat-ID aus
 `.env` darf Befehle geben, nimm einen privaten Chat, keine Gruppe. Freigaben für Shell-Befehle laufen bewusst
@@ -373,6 +379,7 @@ Die App fragt Telegram nur nach außen ab, es wird kein Port geöffnet (geht auc
 - **Dateien schreiben**: nur in `workspace/<projekt-id>/`, Pfade außerhalb werden abgelehnt.
 - **Code ausführen** (Standard aus): `run_code` startet Python, JavaScript, Bash, Ruby, PHP oder Lua in einer Sandbox, siehe unten.
   Dazu gehört `rust_project`: Rust-Programme bauen, testen und als fertiges Paket abliefern ([Rust-Programme](#-rust-programme-komplett-bauen)).
+- **In die Cloud hochladen** (Standard aus): fertige Dateien zu GitHub, Google Drive, OneDrive oder per Telegram an dich, immer erst nach deiner Freigabe ([☁️ Cloud-Upload](#️-cloud-upload-github-google-drive-onedrive-telegram)).
 - **Shell vorschlagen**: nur wenn der Server `PCL_ALLOW_SHELL=1` hat, und dann immer erst nach Freigabe.
 - **Pause**: blockiert alle neuen Aufgaben des Agenten.
 
@@ -450,6 +457,21 @@ Läuft ohne Internet und ohne Keys (Anbieter `mock`, eigene Datenbank).
 - **Eingang:** „Aufträge von außen“ einschalten, dann nimmt `POST /hook/<projekt>/<schlüssel>` mit `{"text": "…", "agent": "optional"}`
   einen Auftrag an den Chef an (z. B. aus n8n, iOS-Kurzbefehlen oder DEXTER). Ohne Login, geschützt nur durch den Schlüssel in der Adresse:
   „Neuen Schlüssel“ macht die alte Adresse ungültig. Erreichbar ist sie nur so weit wie PaperclipLite selbst (z. B. nur im Tailnet).
+
+## ☁️ Cloud-Upload (GitHub, Google Drive, OneDrive, Telegram)
+
+- **Einrichten:** Zugangsdaten in `.env` (`GITHUB_UPLOAD_TOKEN` + `GITHUB_UPLOAD_REPO`, `GDRIVE_CLIENT_ID` + `GDRIVE_CLIENT_SECRET`,
+  `ONEDRIVE_CLIENT_ID`), Schritt für Schritt in [docs/cloud.md](docs/cloud.md). Bei Google und Microsoft meldest du dich danach im Fenster
+  **☁️ Cloud** an: Es zeigt einen Code, den du am Handy auf der Seite von Google bzw. Microsoft eingibst (klappt ohne HTTPS).
+  Die Anmeldung liegt in `tokens/` neben `.env`, nie in der Datenbank.
+- **Zielordner:** je Projekt und Dienst im Fenster ☁️ Cloud (Standard `PaperclipLite/<Projektname>`). Agenten dürfen nur einen
+  Unterordner darunter wählen, z. B. wenn du ihn im Auftrag nennst.
+- **Selbst hochladen:** 📁 Dateien → ☁️ neben der Datei → Ziel und Ordner wählen. Du bekommst den Link.
+- **Agenten:** Recht **„Darf in die Cloud hochladen“** (setzt nur du). Werkzeug `cloud_upload`; jeder Upload wartet unter ✋ Freigaben,
+  dazu kommt eine Telegram-Nachricht. Nach dem Upload steht der Link im Auftrag.
+- **Telegram:** `/datei` schickt dir Dateien bis 50 MB aufs Handy, nur wenn du es anklickst oder freigibst.
+- GitHub: bis 50 MB als Datei im Repo, größere als Anhang an das Release `paperclip-ablage` (bis 2 GB). Google Drive: nur Ordner und
+  Dateien, die PaperclipLite selbst angelegt hat (Recht `drive.file`). OneDrive: jeder Ordner. Nur gegen simulierte Dienste getestet.
 
 ## 🌐 Echter Browser und ▶ Code ausführen
 

@@ -214,6 +214,11 @@ Ova lista se dopunjuje pri svakoj promeni programa. Svaki red kaže šta sistem 
 | Prava saradnika kog je zaposlio CEO | Sistem dodaje prava koja nedostaju na osnovu uloge (lista gore). Ako se nijedna ključna reč ne poklapa, dobija samo *čitanje fajlova* i može da odgovori samo tekstom. | Štiklirajte prava u panelu agenta ili CEO-u preciznije zadajte ulogu. |
 | Saradnik kog CEO želi da otpusti ili izmeni | Ako tog imena nema u njegovom timu (greška u kucanju, drugi tim, već otpušten), uputstvo se preskače i beleži u rezultatu. Ako saradnik još ima otvoren zadatak, ostaje. | Ništa, ili kasnije ponovo zadajte. |
 | `video_providers.py` (programski fajl) | Alati za video, zvuk i cloud glasove nestaju za agente, sve ostalo radi dalje. | Ponovo pokrenite `git pull`, fajl je deo programa. |
+| `GITHUB_UPLOAD_TOKEN` ili `GITHUB_UPLOAD_REPO` | GitHub se pod ☁️ Cloud prikazuje kao „nije podešeno”, agentima se ne nudi kao cilj. Sve ostalo radi. | Unesite token i repo ([docs/cloud.md](docs/cloud.md), na nemačkom), ponovo pokrenite. |
+| `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET` ili `ONEDRIVE_CLIENT_ID` | Servis ostaje „nije podešeno”, dugme „Prijava” ne postoji. | Registrujte aplikaciju i unesite redove ([docs/cloud.md](docs/cloud.md)), ponovo pokrenite. |
+| Prijava kod Google-a/Microsoft-a (folder `tokens/`) | Servis stoji na „nije prijavljeno”. Otpremanje javlja „još niste prijavljeni” odnosno „prijava je istekla” i ništa ne otprema. | ☁️ Cloud → Prijava. Pri selidbi sa Pi-ja na laptop jednostavno se ponovo prijavite na laptopu. |
+| Fajl veći od 50 MB za Telegram | Telegram ga ne prima. `/datei` ga označava sa ⚠️ i ne šalje ga, agent dobija napomenu. | Kao cilj izaberite Google Drive, OneDrive ili GitHub. |
+| `cloud_upload.py` (programski fajl) | PaperclipLite se ne pokreće (greška pri uvozu). | Ponovo pokrenite `git pull`, fajl je deo programa. |
 
 ## Pristup sa interneta
 
@@ -359,6 +364,7 @@ vrstom, zadatkom, brojevima tima i rezultatom. Lanac prava i izveštaja ispod ra
 | Dugme ✅ ili odgovor „ok“ | zadatak se označava kao završen |
 | Pošaljete fajl, fotografiju, album, video ili glasovnu poruku | završi u `input/` izabranog projekta; natpis postaje zadatak (kao odgovor na objavu: za doradu), bez teksta fajl ide vašem sledećem zadatku. Telegram botovi smeju da preuzmu fajlove do 20 MB, veće otpremite preko weba |
 | `/post`, `/status`, `/ok <Br.>`, `/neu <Tekst>`, `/projekt [Br.]` | pregled odnosno kratke komande |
+| `/datei [reč za pretragu]` | šalje vam fajl iz izabranog projekta (najnoviji kao dugmad, jedini pogodak stiže odmah; do 50 MB) |
 
 Aplikacija Telegram samo pita spolja, ne otvara se nijedan port (radi i iza CGNAT-a). Samo ID čata iz
 `.env` sme da daje komande; koristite privatan čet, ne grupu. Odobrenja za shell komande namerno
@@ -373,6 +379,7 @@ Aplikacija Telegram samo pita spolja, ne otvara se nijedan port (radi i iza CGNA
 - **Pisanje fajlova**: samo u `workspace/<id-projekta>/`; putanje van toga se odbijaju.
 - **Pokretanje koda** (podrazumevano isključeno): `run_code` pokreće Python, JavaScript, Bash, Ruby, PHP ili Lua u sandbox-u, vidi dole.
   Tu spada i `rust_project`: gradi i testira Rust programe i isporučuje gotov paket ([Rust programi](#-kompletna-izrada-rust-programa)).
+- **Otpremanje u cloud** (podrazumevano isključeno): gotove fajlove na GitHub, Google Drive, OneDrive ili vama preko Telegrama, uvek tek posle vašeg odobrenja ([☁️ Otpremanje u cloud](#️-otpremanje-u-cloud-github-google-drive-onedrive-telegram)).
 - **Predlaganje shell-a**: samo ako server ima `PCL_ALLOW_SHELL=1`, i tada uvek tek posle odobrenja.
 - **Pauza**: blokira sve nove zadatke agenta.
 
@@ -449,6 +456,21 @@ Radi bez interneta i bez ključeva (dobavljač `mock`, sopstvena baza).
 - **Ulaz:** uključite „Aufträge von außen“ (zadaci spolja), zatim `POST /hook/<projekat>/<ključ>` sa `{"text": "…", "agent": "opciono"}`
   prima zadatak za šefa (npr. iz n8n, iOS prečica ili DEXTER-a). Bez prijave; štiti ga samo ključ u adresi.
   „Neuen Schlüssel“ (novi ključ) poništava staru adresu. Dostupna je samo onoliko koliko je dostupan i sam PaperclipLite (npr. samo u tailnet-u).
+
+## ☁️ Otpremanje u cloud (GitHub, Google Drive, OneDrive, Telegram)
+
+- **Podešavanje:** pristupni podaci u `.env` (`GITHUB_UPLOAD_TOKEN` + `GITHUB_UPLOAD_REPO`, `GDRIVE_CLIENT_ID` + `GDRIVE_CLIENT_SECRET`,
+  `ONEDRIVE_CLIENT_ID`), korak po korak u [docs/cloud.md](docs/cloud.md) (na nemačkom). Kod Google-a i Microsoft-a se zatim prijavljujete u prozoru
+  **☁️ Cloud**: prikazuje kod koji na telefonu unesete na stranici Google-a odnosno Microsoft-a (radi bez HTTPS-a).
+  Prijava se čuva u `tokens/` pored `.env`, nikad u bazi podataka.
+- **Ciljni folder:** po projektu i servisu u prozoru ☁️ Cloud (podrazumevano `PaperclipLite/<ime projekta>`). Agenti smeju da izaberu samo
+  podfolder ispod njega, npr. kada ga navedete u zadatku.
+- **Sami otpremite:** 📁 Fajlovi → ☁️ pored fajla → izaberite cilj i folder. Dobijate link.
+- **Agenti:** pravo **„Sme da otprema u cloud”** (postavljate samo vi). Alat `cloud_upload`; svako otpremanje čeka pod ✋ Odobrenja,
+  uz to stiže Telegram poruka. Posle otpremanja link stoji u zadatku.
+- **Telegram:** `/datei` vam šalje fajlove do 50 MB na telefon, samo kada kliknete ili odobrite.
+- GitHub: do 50 MB kao fajl u repou, veći kao prilog izdanju `paperclip-ablage` (do 2 GB). Google Drive: samo folderi i fajlovi koje je
+  PaperclipLite sam napravio (pravo `drive.file`). OneDrive: bilo koji folder. Testirano samo na simuliranim servisima.
 
 ## 🌐 Pravi pregledač i ▶ pokretanje koda
 
