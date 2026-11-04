@@ -295,6 +295,22 @@ a.btn.pri{color:#fff}
 /* Barrierefreiheit: sichtbarer Tastatur-Fokus */
 button:focus-visible,a:focus-visible,[tabindex]:focus-visible,select:focus-visible,input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #map .bld:focus-visible,#map .fig:focus-visible{outline:none;filter:drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 6px var(--accent))}
+
+/* Anleitung + Hinweise */
+.help-search{width:100%;margin-bottom:10px}
+.help-sec{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel2)}
+.help-sec summary{cursor:pointer;padding:10px 12px;font-weight:600;list-style:none}
+.help-sec summary::-webkit-details-marker{display:none}
+.help-sec summary::before{content:'▸ ';color:var(--accent)}
+.help-sec[open] summary::before{content:'▾ '}
+.help-sec .hb{padding:0 12px 10px;font-size:14px;line-height:1.5}
+.help-sec .hb p{margin:6px 0}.help-sec .hb ul{margin:6px 0;padding-left:20px}
+.help-sec .hb code{background:var(--chip);padding:0 4px;border-radius:4px}
+.help-sec mark{background:var(--accent);color:#fff;border-radius:3px}
+#tipbox{position:fixed;z-index:95;display:none;max-width:min(300px,calc(100vw - 24px));background:#1b1f27;color:#fff;border:1px solid var(--accent);border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.4;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#tipbox.on{display:block}
+#helpbar{position:fixed;z-index:94;left:50%;bottom:12px;transform:translateX(-50%);display:none;gap:8px;align-items:center;width:min(420px,calc(100vw - 24px));background:var(--panel);border:2px solid var(--accent);border-radius:12px;padding:6px 10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+:root[data-helpmode="on"] #helpbar{display:flex}
 </style>
 </head>
 <body>
@@ -302,6 +318,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,select:focus-visib
   <aside id="side">
     <div class="brand"><div class="logo">H</div><b>Hyperstead</b></div>
     <div class="side-sec">
+      <button class="side-btn" id="btnHelp" title="Anleitung: wie Hyperstead funktioniert, Kapitel mit Suche, dazu der Hilfe-Modus fürs Handy">📖 Anleitung</button>
       <button class="side-btn" id="btnOps" title="Was gerade läuft, wartet, schiefging und was es heute kostet">🛰 Betriebszentrale</button>
       <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
@@ -336,7 +353,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,select:focus-visib
       <div class="g-tools">
         <button class="btn sm vbtn" id="gView" title="Zwischen Welt-Karte und Bauplan (Knoten-Editor) wechseln">🗺 Welt</button>
         <select id="gWorld" title="Welt dieses Projekts (ändert nur das Aussehen)"></select>
-        <button class="icon-btn" id="gTheme" title="Hell / Dunkel">🌓</button>
+        <button class="icon-btn" id="gTheme" title="Wechselt zwischen hellem und dunklem Aussehen (gilt für dieses Gerät)">🌓</button>
         <button class="icon-btn" id="gInfo" title="Wie das Wachstum funktioniert">ⓘ</button>
       </div>
     </div>
@@ -364,8 +381,10 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,select:focus-visib
   </aside>
 </div>
 
-<div id="ov"><div id="ovbox" role="dialog" aria-modal="true" aria-labelledby="ovtitle"><header><b id="ovtitle"></b><button class="icon-btn" id="ovclose" title="Schließen" aria-label="Schließen">✕</button></header><div id="ovbody"></div></div></div>
+<div id="ov"><div id="ovbox" role="dialog" aria-modal="true" aria-labelledby="ovtitle"><header><b id="ovtitle"></b><button class="icon-btn" id="ovhelp" title="Passendes Kapitel der Anleitung zu diesem Fenster öffnen" aria-label="Hilfe zu diesem Fenster" style="display:none">ⓘ</button><button class="icon-btn" id="ovclose" title="Schließen" aria-label="Schließen">✕</button></header><div id="ovbody"></div></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="tipbox" role="tooltip"></div>
+<div id="helpbar">❓ Hilfe-Modus: tippe auf einen Knopf für die Erklärung, nochmal tippen führt ihn aus. <button class="btn sm" id="helpoff" title="Hilfe-Modus ausschalten">Aus</button></div>
 <div id="party" role="alert" aria-live="assertive"></div>
 
 <script>
@@ -627,7 +646,7 @@ window.addEventListener('pointerup',async e=>{
 (function(){
   const pal=$('#palette');
   PAL.forEach(([k,label])=>{
-    const b=document.createElement('div'); b.className='pal'; b.textContent=label; b.draggable=true;
+    const b=document.createElement('div'); b.className='pal'; b.textContent=label; b.draggable=true; b.title='Neuen Agenten „'+label.replace(/^\S+\s/,'')+'“ anlegen: antippen oder auf die Fläche ziehen';
     b.addEventListener('dragstart',e=>e.dataTransfer.setData('text/tpl',k));
     b.onclick=()=>{ const r=$('#vp').getBoundingClientRect(); const w=toWorld(r.left+r.width/2-W/2*V.s, r.top+r.height/3); addAgent(k,w.x,w.y); };
     pal.appendChild(b);
@@ -927,7 +946,7 @@ async function drawLog(a){
 
 /* ---------- Overlays: Freigaben + Audit ---------- */
 let ovBack=null;
-function openOv(title){ if(!$('#ov').classList.contains('on')) ovBack=document.activeElement; $('#ovtitle').textContent=title; $('#ov').classList.add('on'); setTimeout(()=>{ const c=$('#ovclose'); if(c && !$('#ovbox').contains(document.activeElement)) c.focus({preventScroll:true}); },0); }
+function openOv(title){ if(!$('#ov').classList.contains('on')) ovBack=document.activeElement; $('#ovtitle').textContent=title; const hc=helpFor(title); $('#ovhelp').style.display=hc?'':'none'; $('#ovhelp').onclick=()=>showHelp(hc); $('#ov').classList.add('on'); setTimeout(()=>{ const c=$('#ovclose'); if(c && !$('#ovbox').contains(document.activeElement)) c.focus({preventScroll:true}); },0); }
 function closeOv(){ $('#ov').classList.remove('on'); if(ovBack && document.contains(ovBack)) try{ ovBack.focus({preventScroll:true}); }catch(e){} ovBack=null; }
 document.addEventListener('keydown', e=>{
   if(e.key!=='Escape') return;
@@ -1435,6 +1454,188 @@ async function showOps(){
   on('ops_usage',()=>showUsage(1)); on('ops_appr',()=>$('#btnApprovals').click()); on('ops_audit',()=>$('#btnAudit').click());
 }
 $('#btnOps').onclick=showOps;
+
+/* ---------- Anleitung (im Dashboard, offline) ---------- */
+const HELP=[
+ {id:'start',t:'🚀 Erste Schritte',h:`<p>Hyperstead ist deine eigene KI-Firma. Du legst ein <b>Projekt</b> an, darin arbeiten <b>Agenten</b> (KI-Mitarbeiter) in einem Team: ein Chef oben, darunter Leitungen und Mitarbeiter.</p>
+<ul><li><b>Projekt anlegen:</b> In der Seitenleiste bei „Projekte“ auf ＋ (leer) oder 🏢 (fertige Firmenvorlage, z. B. Webagentur).</li>
+<li><b>Agent anlegen:</b> In der Bauplan-Ansicht (📐) oben einen Baustein wie „👑 CEO“ oder „</> Entwickler“ antippen oder auf die Fläche ziehen. Jeder Agent braucht eine KI (Anbieter + Modell) in den Einstellungen.</li>
+<li><b>Auftrag geben:</b> Agent antippen → Reiter „Aufgaben“ → Auftrag beschreiben → „Aufgabe zuweisen“. Der Chef verteilt die Arbeit an sein Team, prüft die Berichte und liefert das Ergebnis in die 📬 Post.</li>
+<li><b>Ergebnis abholen:</b> 📬 Post öffnen. „✅ Erledigt“ schließt den Auftrag, „🔁 Überarbeiten…“ schickt ihn mit deinem Hinweis zurück.</li></ul>
+<p>Auf dem Handy öffnet ☰ oben links die Seitenleiste.</p>`},
+ {id:'welt',t:'🗺 Welt und Wachstum',h:`<p>Jedes Projekt ist eine kleine Welt, die mit ihren Erfolgen wächst. Oben in der Leiste siehst du Stufe, Punkte und den Fortschritt bis zur nächsten Stufe.</p>
+<ul><li><b>Welten:</b> Gilde (Mittelalter), Tycoon (Firma) und Gizmo-Stadt. Die Welt wählst du oben rechts in der Leiste. Sie ändert nur Aussehen und Begriffe, nie die Arbeit der Agenten.</li>
+<li><b>Punkte:</b> Lieferung beim ersten Mal abgenommen +10, nach Überarbeitung +5, Auftrag in der Post erledigt +20, fehlgeschlagen −3, Nacharbeit angefordert −5.</li>
+<li><b>Stufen:</b> ab 0, 100, 300, 700 und 1500 Punkten. Die Stufe begrenzt nur, wie viele Agenten die Führung <i>selbst</i> anwirbt. Du kannst immer alles von Hand anlegen. Abschalten unter ⓘ in der Leiste.</li>
+<li><b>Ränge:</b> Agenten steigen nach ihren eigenen abgenommenen Lieferungen auf (ab 5, 20, 60).</li>
+<li><b>Welt-Karte / Bauplan:</b> 🗺 zeigt Gebäude je Team mit Figuren, 📐 den Bauplan zum genauen Bearbeiten. Rauch = arbeitet, 📦 geliefert, 🔧 Fehler, ⏳ wartet auf Team, ✋ wartet auf dich.</li>
+<li><b>🌓</b> wechselt Hell/Dunkel. Unter ⓘ lassen sich Bewegung und Feier-Effekte abschalten.</li></ul>`},
+ {id:'agenten',t:'🤖 Agenten, KI und Rechte',h:`<p>Agent antippen öffnet das Seitenfenster mit den Reitern Einstellungen, 💬 Chat, Aufgaben und Verlauf.</p>
+<ul><li><b>KI wählen:</b> Anbieter und Modell. „▶ Testen“ prüft, ob die KI antwortet. Keys stehen in der Datei <code>.env</code>, nie in der Oberfläche.</li>
+<li><b>Rechte:</b> Häkchen bestimmen, was der Agent darf (delegieren, Dateien schreiben, Web, Bilder, Medien, Programmieren, Anwerben, Veröffentlichen, Cloud …). Der Server prüft jedes Recht selbst.</li>
+<li><b>Team:</b> Im Bauplan den unteren Punkt eines Agenten auf einen anderen Agenten ziehen: der zweite wird dem ersten unterstellt. Eine Linie antippen trennt die Verbindung. „🗂 Ordnen“ stellt alles als Organigramm auf. Der Chef verteilt Aufträge nur an sein Team.</li>
+<li><b>🔀 KI für Gruppe:</b> mehrere Agenten auf einmal auf eine andere KI umstellen.</li>
+<li><b>⚠ Modelle:</b> zeigt Agenten, deren Modell beim Anbieter nicht mehr existiert, und stellt sie gesammelt um.</li>
+<li><b>🧠 Firmenwissen:</b> Text, den alle Agenten des Projekts immer kennen (Firma, Kunden, Stil, Preise). Unterlagen landen im Ordner <code>wissen/</code>.</li>
+<li><b>Gedächtnis:</b> Jeder Agent merkt sich Wichtiges aus seiner Arbeit selbst (unten in den Einstellungen sichtbar und änderbar).</li></ul>`},
+ {id:'auftraege',t:'📬 Aufträge, Post und Freigaben',h:`<ul><li><b>Aufgaben:</b> Im Reiter „Aufgaben“ eines Agenten siehst du alle Aufträge mit Status (Wartet, Läuft, Wartet auf Team, Freigabe nötig, Fertig, Fehler). „▶ Starten/Nochmal“ startet neu, „Löschen“ entfernt die Aufgabe samt Teilaufgaben.</li>
+<li><b>📬 Post:</b> Fertige Ergebnisse der obersten Aufträge. Von hier kannst du auch einen neuen Auftrag an den Chef schicken.</li>
+<li><b>✋ Freigaben:</b> Hier warten Dinge auf dein OK: Befehle, Veröffentlichen, Cloud-Uploads, Verbindungen, Werkstatt-Installationen und (wenn eingeschaltet) Pläne und Teamänderungen des Chefs. Ablehnen beendet die Aufgabe.</li>
+<li><b>🎯 Ziele:</b> Ziele und Unterziele des Projekts. Aufgaben können einem Ziel zugeordnet werden, der Fortschritt rechnet sich daraus.</li>
+<li><b>💬 Chat:</b> direkt mit einem Agenten reden, Dateien anhängen (📎). Aus dem Chat lässt sich ein Auftrag machen.</li></ul>`},
+ {id:'zeitplan',t:'🕘 Zeitplan und Öffnungszeiten',h:`<ul><li><b>Öffnungszeiten:</b> Außerhalb davon wartet die Warteschlange, nichts läuft. Liegengebliebenes wird bei Arbeitsbeginn wieder aufgenommen.</li>
+<li><b>Tägliche Aufgaben:</b> Uhrzeit, „bei Öffnung“ oder „bei Schluss“ und Wochentage wählen. „▶ Jetzt ausführen“ startet sofort, „⏸ Ausschalten“ pausiert.</li>
+<li><b>👑 CEO-Kontrollgang:</b> Der Chef prüft bei Feierabend, ob alles fertig ist, und berichtet dir.</li></ul>`},
+ {id:'betrieb',t:'🛰 Betriebszentrale und Kosten',h:`<ul><li><b>🛰 Betriebszentrale:</b> was gerade läuft und wartet, offene Freigaben, Fehler der letzten 7 Tage (↻ Neu startet sie neu), Zeitpläne (▶ Jetzt) und die letzten Ereignisse. Auch ein Tipp auf die Zahlen in der Leiste öffnet sie.</li>
+<li><b>💶 Kosten:</b> geschätzte KI-Kosten von heute und 7 Tagen. Abo (Claude-/Codex-CLI) und Ollama zählen als 0 $. <b>📊 Nutzung &amp; Kosten</b> zeigt alles nach Projekt, Agent und Modell.</li>
+<li><b>📜 Verlauf:</b> jedes Ereignis wird protokolliert und nie gelöscht.</li></ul>`},
+ {id:'dateien',t:'📁 Dateien, Cloud und Verbindungen',h:`<ul><li><b>📁 Dateien:</b> alles, was die Agenten erzeugt haben. Antippen öffnet, „⬇ Alles als ZIP“ lädt das Projekt herunter. Hochgeladene Dateien landen in <code>input/</code>.</li>
+<li><b>Webseite veröffentlichen:</b> Liegt <code>www/index.html</code> im Projekt, kann Hyperstead sie als Webseite ausliefern („Veröffentlichen“).</li>
+<li><b>☁️ Cloud:</b> GitHub, Google Drive, OneDrive und Telegram einrichten. Jeder Upload eines Agenten wartet auf deine Freigabe. ☁️ neben einer Datei lädt sie selbst hoch.</li>
+<li><b>🔌 Verbindungen:</b> Webhooks. Agenten mit dem Recht „Verbindungen“ dürfen deine eingetragenen Adressen aufrufen (z. B. Zapier, Home Assistant), Hyperstead meldet neue Post an einen Dienst, oder andere Programme schicken über eine geheime Eingangsadresse Aufträge herein. Ohne Eintrag passiert nichts.</li></ul>`},
+ {id:'telegram',t:'📱 Telegram',h:`<p>Mit <code>TELEGRAM_BOT_TOKEN</code> und <code>TELEGRAM_CHAT_ID</code> in der <code>.env</code> steuerst du Hyperstead vom Handy. Nur deine Chat-ID darf steuern.</p>
+<ul><li>Einfach Text schreiben = neuer Auftrag an den Chef des gewählten Projekts. Fotos/Dateien mit Bildunterschrift = Auftrag mit Anhang.</li>
+<li><code>/post</code> offene Ergebnisse, <code>/ok &lt;Nr&gt;</code> erledigt, Antwort auf eine Ergebnis-Nachricht = Überarbeitung.</li>
+<li><code>/status</code> Überblick, <code>/projekt &lt;Nr&gt;</code> Projekt wechseln, <code>/neu &lt;Text&gt;</code> neuer Auftrag, <code>/datei [suche]</code> Datei schicken lassen, <code>/hilfe</code> alle Befehle.</li>
+<li>Freigaben kommen mit Knöpfen ✅/❌, ebenso Stufenaufstiege 🎉.</li></ul>`},
+ {id:'probleme',t:'🧯 Was tun, wenn …',h:`<ul><li><b>… ein Agent nichts tut:</b> Hat er eine KI? (Einstellungen, „▶ Testen“). Sind Öffnungszeiten aktiv? Wartet etwas unter ✋ Freigaben?</li>
+<li><b>… eine Aufgabe „Fehler“ zeigt:</b> In der 🛰 Betriebszentrale steht die Meldung. Häufig: Key fehlt oder Guthaben leer. Nach dem Beheben „↻ Neu“.</li>
+<li><b>… ⚠ Modelle eine Zahl zeigt:</b> Ein Modell gibt es beim Anbieter nicht mehr. Dort gesammelt umstellen.</li>
+<li><b>… der Chef nur plant und nichts liefert:</b> Rechte prüfen (Dateien schreiben, Medien), im Auftrag genau sagen, welche Datei am Ende da sein soll.</li>
+<li><b>… Telegram schweigt:</b> Token und Chat-ID in <code>.env</code> prüfen, Hyperstead neu starten, dem Bot <code>/start</code> schreiben.</li>
+<li><b>… nach einem Update etwas fehlt:</b> Die README hat die Tabelle „Was passiert, wenn etwas fehlt“ mit der Lösung für jede Datei und jeden Schlüssel.</li></ul>`},
+ {id:'hilfe',t:'❓ Hilfe-Modus und Hinweise',h:`<p>Fast jeder Knopf hat eine kurze Erklärung. Am PC erscheint sie, wenn du mit der Maus darauf zeigst.</p>
+<p>Auf dem Handy gibt es kein Draufzeigen. Schalte dafür hier den <b>Hilfe-Modus</b> ein: Dann zeigt das erste Tippen auf einen Knopf die Erklärung, erst das zweite Tippen führt ihn aus. Unten erscheint eine Leiste, mit „Aus“ beendest du ihn.</p>
+<p>ⓘ oben in einem Fenster springt direkt zum passenden Kapitel dieser Anleitung.</p>`},
+];
+const HELP_MAP=[['Freigaben','auftraege'],['Post','auftraege'],['Ziele','auftraege'],['Zeitplan','zeitplan'],['Cloud','dateien'],['Hochladen','dateien'],['Dateien','dateien'],['🔌','dateien'],['Betriebszentrale','betrieb'],['Nutzung','betrieb'],['Verlauf','betrieb'],['Wachstum','welt'],['Modelle','agenten'],['KI für','agenten'],['Firmenwissen','agenten'],['Vorlage','start']];
+function helpFor(title){ if(String(title).startsWith('📖')) return null; const m=HELP_MAP.find(([k])=>String(title).includes(k)); return m?m[1]:null; }
+function showHelp(chapter){
+  openOv('📖 Anleitung'); const body=$('#ovbody');
+  body.innerHTML=`<input type="search" class="help-search" id="hsearch" placeholder="Suchen, z. B. Telegram, Kosten, Freigabe …" aria-label="Anleitung durchsuchen">
+    <div class="chk" style="margin-bottom:10px"><input type="checkbox" id="hmode" ${helpModeOn()?'checked':''}><div>Hilfe-Modus (fürs Handy)<small>Erstes Tippen auf einen Knopf erklärt ihn, das zweite führt ihn aus.</small></div></div>
+    <div id="hlist">${HELP.map(c=>`<details class="help-sec" id="help_${c.id}" ${c.id===chapter?'open':''}><summary>${c.t}</summary><div class="hb">${c.h}</div></details>`).join('')}</div>
+    <div class="ops-empty" id="hnone" style="display:none">Nichts gefunden.</div>`;
+  $('#hmode').onchange=e=>setHelpMode(e.target.checked);
+  const orig={}; HELP.forEach(c=>orig[c.id]=c.h);
+  $('#hsearch').oninput=e=>{
+    const q=e.target.value.trim().toLowerCase(); let n=0;
+    HELP.forEach(c=>{ const d=$('#help_'+c.id), hb=d.querySelector('.hb');
+      const hit=!q || (c.t+' '+c.h.replace(/<[^>]+>/g,' ')).toLowerCase().includes(q);
+      d.style.display=hit?'':'none'; if(hit) n++;
+      d.open = q ? hit : c.id===chapter;
+      hb.innerHTML = q&&hit ? markHits(orig[c.id], q) : orig[c.id]; });
+    $('#hnone').style.display=n?'none':'';
+  };
+  if(chapter) setTimeout(()=>{ const d=$('#help_'+chapter); if(d) d.scrollIntoView({block:'start'}); },30);
+}
+function markHits(html,q){ const re=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'); return html.replace(/>([^<]+)</g,(m,t)=>'>'+t.replace(re,'<mark>$1</mark>')+'<'); }
+$('#btnHelp').onclick=()=>showHelp('start');
+
+/* ---------- Hinweise an Knöpfen + Hilfe-Modus ---------- */
+const ovIs=w=>($('#ovtitle').textContent||'').includes(w);
+const TIPS={
+ '#btnInbox':'Post: fertige Ergebnisse deiner Aufträge abholen, abnehmen oder zur Überarbeitung zurückgeben',
+ '#btnApprovals':'Freigaben: Dinge, die auf dein OK warten (Befehle, Veröffentlichen, Uploads, Pläne des Chefs)',
+ '#btnFiles':'Alle Dateien dieses Projekts ansehen, öffnen, hochladen oder als ZIP herunterladen',
+ '#btnAudit':'Verlauf: jedes Ereignis im Projekt mit Uhrzeit (wird nie gelöscht)',
+ '#btnLogout':'Abmelden (beim nächsten Öffnen ist das Passwort nötig)',
+ '#btnDelProj':'Löscht das Projekt mit allen Agenten und Aufgaben. Der Ordner mit den Dateien bleibt stehen',
+ '#pclose':'Seitenfenster schließen',
+ '#chatsend':'Nachricht an den Agenten senden (Enter geht auch)',
+ '#chatclear':'Chatverlauf mit diesem Agenten löschen',
+ '#chatorder':'Aus dem bisherigen Chat einen Auftrag für diesen Agenten machen',
+ '#kidsave':'Speichert, welche Agenten diesem Agenten unterstellt sind',
+ '#mtest':'Schickt eine kurze Testfrage an die gewählte KI und zeigt, ob sie antwortet',
+ '#mrefresh':'Lädt die Modell-Liste des Anbieters neu',
+ '#saveAg':'Einstellungen dieses Agenten speichern',
+ '#delAg':'Diesen Agenten löschen. Seine Mitarbeiter rücken eine Ebene hoch',
+ '#t_add':'Gibt diesem Agenten den Auftrag. Er startet sofort (oder zu Arbeitsbeginn)',
+ '#ga_go':'Stellt alle ausgewählten Agenten auf die gewählte KI um',
+ '#ga_none':'Hebt die Auswahl auf',
+ '#h_save':'Öffnungszeiten speichern. Außerhalb davon wartet die Warteschlange',
+ '#s_add':'Neue regelmäßige Aufgabe anlegen',
+ '#s_rep':'Zeigt den aktuellen Statusbericht des Projekts (Fakten aus Aufgaben, Zeitplänen und Verlauf)',
+ '#no_go':'Schickt den Auftrag an den Chef des Projekts',
+ '#sitebtn':'Startet bzw. beendet die Webseite aus www/index.html dieses Projekts',
+ '#hk_copy':'Eingangsadresse kopieren',
+ '#hk_reset':'Erzeugt einen neuen geheimen Schlüssel. Die alte Adresse funktioniert dann nicht mehr',
+ '#cn_add':'Neue Verbindung mit diesen Angaben anlegen',
+ '#cn_save':'Änderungen an der Verbindung speichern',
+ '#cn_back':'Zurück zur Liste ohne zu speichern',
+ '#cu_go':'Lädt die Datei zum gewählten Dienst hoch',
+ '#cu_back':'Zurück zur Dateiliste',
+ '#gl_add':'Neues Ziel anlegen (optional unter einem anderen Ziel)',
+ '#kn_save':'Firmenwissen speichern. Alle Agenten des Projekts kennen es ab dem nächsten Auftrag',
+ '#tp_go':'Legt das Projekt mit allen Agenten der Vorlage an',
+ '#tp_back':'Zurück zur Auswahl der Vorlagen',
+ '#tp_loc_all':'Alle Agenten der Vorlage laufen mit Ollama auf deinem Rechner',
+ '#tp_loc_team':'Nur die Mitarbeiter laufen mit Ollama, die Chefs mit der gewählten KI',
+ '#ops_usage':'Alle Kosten nach Projekt, Agent und Modell',
+ '#ops_appr':'Öffnet die Freigaben zum Entscheiden',
+ '#ops_audit':'Öffnet den ganzen Verlauf',
+ '#gParty':'Zeigt die Feier beim Stufenaufstieg zum Ausprobieren',
+ '#partyOk':'Feier schließen',
+ '#zfit':'Ansicht so zoomen, dass alles sichtbar ist',
+ '#helpoff':'Hilfe-Modus ausschalten',
+ '[data-tab]':el=>({set:'Name, KI, Rechte und Anweisungen des Agenten',chat:'Direkt mit dem Agenten schreiben',tasks:'Aufträge dieses Agenten ansehen und neue geben',log:'Was dieser Agent zuletzt getan hat'})[el.dataset.tab],
+ '[data-run]':el=>'Startet die Aufgabe '+(el.textContent.includes('Nochmal')?'noch einmal':'jetzt')+(el.dataset.kids==='1'?'. Bisherige Teilaufgaben des Teams werden verworfen':''),
+ '[data-del]':'Löscht die Aufgabe samt Teilaufgaben',
+ '[data-ok]':el=>ovIs('Post')?'Auftrag als erledigt abhaken (+20 Punkte)':'Freigeben: der Agent darf das ausführen und macht danach weiter',
+ '[data-no]':'Ablehnen: die Aufgabe endet und landet in der Post',
+ '[data-rw]':'Mit deinem Hinweis zur Überarbeitung zurückgeben',
+ '[data-rep]':'Stellt alle Agenten dieser Gruppe auf das gewählte Modell um',
+ '[data-srun]':'Diese Aufgabe jetzt sofort ausführen',
+ '[data-stog]':el=>el.dataset.en==='1'?'Zeitplan wieder einschalten':'Zeitplan pausieren (bleibt gespeichert)',
+ '[data-sdel]':'Zeitplan löschen',
+ '[data-ctest]':'Ruft die Verbindung testweise auf und zeigt die Antwort',
+ '[data-cedit]':'Verbindung bearbeiten',
+ '[data-ctog]':'Verbindung ein- oder ausschalten',
+ '[data-cdel]':'Verbindung löschen',
+ '[data-cfsave]':'Zielordner für dieses Projekt speichern',
+ '[data-clogin]':'Bei diesem Dienst anmelden (Code am Handy oder PC eingeben)',
+ '[data-clogout]':'Vom Dienst abmelden',
+ '[data-days]':el=>'Zeitraum: '+el.textContent,
+ '[data-tpl]':'Diese Firmenvorlage auswählen',
+ '[data-go]':'Springt zum passenden Abschnitt',
+ '[data-rerun]':'Startet die fehlgeschlagene Aufgabe neu',
+ '[data-agent]':'Öffnet diesen Agenten (Einstellungen, Chat, Aufgaben)',
+ '[data-act]':el=>({tasks:'Diesem Team einen Auftrag geben',chat:'Mit der Leitung chatten',set:'Einstellungen der Leitung öffnen'})[el.dataset.act],
+ '[data-copy]':'In die Zwischenablage kopieren',
+ '#projlist button':'Dieses Projekt öffnen',
+ '#inref':'Post neu laden',
+ '#mdref':'Modelle bei den Anbietern neu prüfen',
+ '.ops-tile':'Anzahl der abgenommenen Aufträge',
+};
+function applyTips(root){
+  (root||document).querySelectorAll('button:not([title]),a:not([title]),[role=button]:not([title])').forEach(el=>{
+    for(const k in TIPS){ if(el.matches(k)){ const v=typeof TIPS[k]==='function'?TIPS[k](el):TIPS[k]; if(v) el.title=v; return; } }
+    if(el.tagName==='A' && el.target==='_blank') el.title='Öffnet in einem neuen Tab';
+    else if(el.getAttribute('onclick')&&el.getAttribute('onclick').startsWith('copyText')) el.title='In die Zwischenablage kopieren';
+  });
+}
+new MutationObserver(ms=>{ for(const m of ms) m.addedNodes.forEach(n=>{ if(n.nodeType===1) applyTips(n.parentNode||n); }); }).observe(document.body,{childList:true,subtree:true});
+applyTips();
+function helpModeOn(){ return document.documentElement.dataset.helpmode==='on'; }
+function setHelpMode(on){ if(on) document.documentElement.dataset.helpmode='on'; else delete document.documentElement.dataset.helpmode; try{ localStorage.setItem('hs-helpmode',on?'on':'off'); }catch(e){} hideTip(); }
+try{ if(localStorage.getItem('hs-helpmode')==='on') document.documentElement.dataset.helpmode='on'; }catch(e){}
+let tipFor=null, tipT=null;
+function hideTip(){ $('#tipbox').classList.remove('on'); tipFor=null; }
+function showTip(el){
+  const b=$('#tipbox'); b.textContent=el.title||el.getAttribute('aria-label')||''; b.classList.add('on');
+  const r=el.getBoundingClientRect(), w=b.offsetWidth, h=b.offsetHeight;
+  b.style.left=Math.max(12,Math.min(innerWidth-w-12,r.left+r.width/2-w/2))+'px';
+  b.style.top=(r.bottom+8+h<innerHeight? r.bottom+8 : Math.max(12,r.top-h-8))+'px';
+  tipFor=el; clearTimeout(tipT); tipT=setTimeout(hideTip,7000);
+}
+document.addEventListener('click',e=>{
+  if(!helpModeOn()) return;
+  const el=e.target.closest('button,a,[role=button],select,input[type=checkbox]');
+  if(!el || el.id==='helpoff' || el.id==='hmode' || !(el.title||el.getAttribute('aria-label'))) { hideTip(); return; }
+  if(tipFor===el){ hideTip(); return; }   // zweites Tippen: normal ausführen
+  e.preventDefault(); e.stopPropagation(); showTip(el);
+},true);
+$('#helpoff').onclick=()=>setHelpMode(false);
 
 /* ---------- Welten und Wachstum (Hyperstead) ---------- */
 const WORLD = {list:null, g:null, at:0};

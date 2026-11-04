@@ -144,6 +144,10 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (früher PaperclipL
 - Feinschliff: `celebrate(g)` (`#party`, Konfetti nur ohne `motionOff()`), Rang-Aufstieg als Toast (Vergleich alter `WORLD.g.ranks`), Schalter Bewegung
   im ⓘ-Fenster (`setMotion`, localStorage `hs-motion`, `data-motion=off`). `#ov` ist `role=dialog`, `openOv`/`closeOv` setzen den Fokus, Esc schliesst
   Feier/Fenster/Gebaeudekarte, `:focus-visible`-Rahmen. Pruefskript (nicht im Repo): alle sichtbaren Bedienelemente brauchen Text, title oder aria-label.
+- Anleitung/Hilfe: `HELP` (Kapitel als HTML, offline), `showHelp(kapitel)` (📖, Suche, `<details>`), `HELP_MAP` ordnet Fenstertitel einem Kapitel zu
+  (ⓘ `#ovhelp` in `openOv`). `TIPS` (Selektor -> Text oder Funktion) setzt per `applyTips` + MutationObserver `title` auf jeden Knopf/Link ohne
+  eigenen Hinweis; Hilfe-Modus (`data-helpmode`, localStorage `hs-helpmode`) faengt den ersten Klick ab und zeigt `#tipbox`. Neue Knoepfe brauchen
+  `title` oder einen TIPS-Eintrag, sonst schlaegt `tests/test_ui_hilfe.py` fehl. Neue Funktionen auch in `HELP` beschreiben.
 
 ## Verbindungen (Webhooks)
 - Tabelle `connections` (Besitzer legt URL/Methode/Kopfzeilen fest, `${ENV}` in Kopfzeilen aus .env, `confirm`, `on_post`). Recht `connect`
