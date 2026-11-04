@@ -1,4 +1,4 @@
-# PaperclipLite
+# Hyperstead
 
 🌐 Languages: [Deutsch](README.md) · **English** · [Türkçe](README.tr.md) · [Srpski](README.sr.md) · [Bosanski](README.bs.md) · [Hrvatski](README.hr.md)
 
@@ -9,7 +9,7 @@ Create a project, drag agents onto the canvas, connect them (boss → employee),
 
 ## Installation
 
-PaperclipLite is a Python program (Flask + SQLite) and runs on several systems. Several installations
+Hyperstead is a Python program (Flask + SQLite) and runs on several systems. Several installations
 can run in parallel; each has its own companies and data.
 
 | System | Status | Guide |
@@ -17,9 +17,9 @@ can run in parallel; each has its own companies and data.
 | Raspberry Pi / Linux (Debian, Ubuntu) | main system, full feature set | below |
 | Windows 10/11 | works, without `run_code`, building Rust only without isolation via a switch, some features need extra programs | [docs/windows.md](docs/windows.md) |
 | macOS | untested, basic functions should work | below (by hand) |
-| Own image computer (e.g. an old laptop without a graphics card) | free images with reference images for PaperclipLite | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
+| Own image computer (e.g. an old laptop without a graphics card) | free images with reference images for Hyperstead | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
 
-Moving from one computer to another: stop PaperclipLite and copy `data.db`, the folder `workspace/` and `.env`
+Moving from one computer to another: stop Hyperstead and copy `data.db`, the folder `workspace/` and `.env`
 ([example Pi → Windows](docs/windows.md)).
 
 ### Raspberry Pi / Linux
@@ -27,7 +27,7 @@ Moving from one computer to another: stop PaperclipLite and copy `data.db`, the 
 ```bash
 git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
 ./install.sh --service     # venv, dependencies, .env with a random password, systemd service
-nano .env                  # enter API keys, then: sudo systemctl restart paperclip-lite
+nano .env                  # enter API keys, then: sudo systemctl restart hyperstead
 ```
 
 Without the service: `./install.sh`, then `./venv/bin/python app.py` → http://127.0.0.1:8787.
@@ -36,13 +36,13 @@ More features (video, OCR, compilers, browser): `./install.sh --all`.
 
 ### Windows
 
-PowerShell in the PaperclipLite folder:
+PowerShell in the Hyperstead folder:
 
 ```powershell
 git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
 powershell -ExecutionPolicy Bypass -File install.ps1
 notepad .env
-deploy\windows\paperclip-start.bat
+deploy\windows\hyperstead-start.bat
 ```
 
 What is missing under Windows, autostart and running in parallel with the Pi: [docs/windows.md](docs/windows.md).
@@ -63,7 +63,7 @@ cp .env.example .env       # set APP_TOKEN=<long password>, add API keys
 ### Images on your own computer
 
 A computer on the home network (even without a graphics card, at least 8 GB RAM) can generate free images with
-reference images for PaperclipLite. In `.env`, keep exactly these two lines active (only one `IMAGE_PROVIDER=` line without `#`):
+reference images for Hyperstead. In `.env`, keep exactly these two lines active (only one `IMAGE_PROVIDER=` line without `#`):
 
 ```
 IMAGE_PROVIDER=sdcpp
@@ -74,9 +74,9 @@ Setup: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
 
 ### Animated films with Blender
 
-If Blender is installed on the computer that runs PaperclipLite, the agents make cartoon films: characters with their own
+If Blender is installed on the computer that runs Hyperstead, the agents make cartoon films: characters with their own
 voices and mouth movement, scenes, camera, subtitles, a finished film with sound (tool `film`, company template „🐶 Animationsstudio“).
-If PaperclipLite does not find Blender by itself, add it to `.env`:
+If Hyperstead does not find Blender by itself, add it to `.env`:
 
 ```
 BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.2\blender.exe
@@ -87,22 +87,22 @@ Guide and script format (German): [docs/filmstudio.md](docs/filmstudio.md).
 ## Operations: who does what, where, when, how
 
 **Who:** the owner of the computer (you) does all of this, not the agents. The commands run in the
-PaperclipLite folder: on the Pi in the terminal (`cd ~/paperclip-lite`), on Windows in PowerShell
+Hyperstead folder: on the Pi in the terminal (`cd ~/paperclip-lite`), on Windows in PowerShell
 (`cd $HOME\paperclip-lite`, or wherever you put the folder).
 
 ### Quick overview
 
 | What | When | Raspberry Pi / Linux (with service) | Windows |
 | --- | --- | --- | --- |
-| Start | after installation, after a restart without autostart | `sudo systemctl start paperclip-lite` | double-click `deploy\windows\paperclip-start.bat` (keep the window open) |
-| Stop | before a move, a backup, an update | `sudo systemctl stop paperclip-lite` | close the start window (or press Ctrl+C in it) |
-| Restart | after every change to `.env`, after an update | `sudo systemctl restart paperclip-lite` | close the start window, start `paperclip-start.bat` again |
-| Is it running? | when there are problems | `systemctl status paperclip-lite` | is the start window open? Browser: <http://127.0.0.1:8787> |
-| View the log | on errors | `journalctl -u paperclip-lite -f` (Ctrl+C stops it) | shown in the start window |
+| Start | after installation, after a restart without autostart | `sudo systemctl start hyperstead` | double-click `deploy\windows\hyperstead-start.bat` (keep the window open) |
+| Stop | before a move, a backup, an update | `sudo systemctl stop hyperstead` | close the start window (or press Ctrl+C in it) |
+| Restart | after every change to `.env`, after an update | `sudo systemctl restart hyperstead` | close the start window, start `hyperstead-start.bat` again |
+| Is it running? | when there are problems | `systemctl status hyperstead` | is the start window open? Browser: <http://127.0.0.1:8787> |
+| View the log | on errors | `journalctl -u hyperstead -f` (Ctrl+C stops it) | shown in the start window |
 | Update | when there is a new version (e.g. after a merged pull request) | see below | see below |
 | Check | after installation, an update, new keys | `./venv/bin/python selftest.py` | `venv\Scripts\python.exe selftest.py` |
 | Keys / settings | new key, other image provider | `nano .env`, then restart | `notepad .env`, then restart |
-| Back up | regularly, before a move and big updates | copy `data.db`, `workspace/`, `.env` (stop first) | the same in the PaperclipLite folder |
+| Back up | regularly, before a move and big updates | copy `data.db`, `workspace/`, `.env` (stop first) | the same in the Hyperstead folder |
 
 ### Update (get the new version)
 
@@ -112,7 +112,7 @@ PaperclipLite folder: on the Pi in the terminal (`cd ~/paperclip-lite`), on Wind
 cd ~/paperclip-lite
 git pull
 ./install.sh               # only needed if requirements.txt changed; .env stays unchanged
-sudo systemctl restart paperclip-lite
+sudo systemctl restart hyperstead
 ./venv/bin/python selftest.py llm     # quick check that the AI providers answer
 ```
 
@@ -122,18 +122,30 @@ sudo systemctl restart paperclip-lite
 2. `git pull`
 3. Only if packages changed (or when in doubt): `powershell -ExecutionPolicy Bypass -File install.ps1`
    (the existing `.env` stays unchanged).
-4. Close the black start window of PaperclipLite.
-5. Start `deploy\windows\paperclip-start.bat` again (double-click or type it in PowerShell).
+4. Close the black start window of Hyperstead.
+5. Start `deploy\windows\hyperstead-start.bat` again (double-click or type it in PowerShell).
 6. Check: `venv\Scripts\python.exe selftest.py llm`
 
 If `git pull` says „local changes would be overwritten“, you changed a file of the program yourself.
 `git stash` sets the change aside, then repeat `git pull`. Your data (`data.db`, `workspace/`, `.env`)
 is never affected, because Git does not know them.
 
+### Switching from PaperclipLite to Hyperstead (once)
+
+The program is now called **Hyperstead**. Data, `.env`, folders and all `PCL_*` settings stay as they are.
+Only the service and the start file have new names.
+
+- **Pi:** `cd ~/paperclip-lite && git pull && ./install.sh --service`. The installer stops the old service
+  `paperclip-lite`, removes it and starts `hyperstead`. From then on use the commands with `hyperstead`.
+- **Windows:** `git pull`, then start `deploy\windows\hyperstead-start.bat`. Old shortcuts to
+  `paperclip-start.bat` keep working, the file now calls `hyperstead-start.bat`.
+- The folder may keep the name `paperclip-lite`. If you rename the GitHub repo, GitHub redirects the old address.
+- Cloud upload: new projects upload to `Hyperstead/<project>` by default. Target folders you set yourself stay.
+
 ### Start automatically
 
 - **Pi:** `./install.sh --service` sets up the service; it then starts by itself at every boot.
-- **Windows:** Win+R, type `shell:startup`, and put a shortcut to `deploy\windows\paperclip-start.bat` there
+- **Windows:** Win+R, type `shell:startup`, and put a shortcut to `deploy\windows\hyperstead-start.bat` there
   (and to `bildrechner-start.bat`, if you use it). Windows must sign in by itself for this
   ([docs/windows.md](docs/windows.md), section 4).
 
@@ -141,7 +153,7 @@ is never affected, because Git does not know them.
 
 - Each setting appears exactly once, without `#` at the start. Lines starting with `#` are switched off. With duplicate lines
   the first one counts.
-- After every change, restart PaperclipLite, otherwise the old state still applies.
+- After every change, restart Hyperstead, otherwise the old state still applies.
 - Never copy keys into chats, screenshots or the repository. If a key has ended up somewhere by accident: revoke it with the provider and enter a new one.
 - Then check with `selftest.py`. Single areas: `selftest.py llm`, `web`, `telegram`, `media`, `ocr`, `code`.
 
@@ -158,15 +170,15 @@ is never affected, because Git does not know them.
 
 - **Where:** on the computer that makes the images (e.g. a laptop), folder `C:\bildrechner`.
 - **When:** it must run as long as agents should generate images.
-- **Set up (once):** in PowerShell in the PaperclipLite folder
+- **Set up (once):** in PowerShell in the Hyperstead folder
   `powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1` (downloads the program and the models).
-- **How:** start `C:\bildrechner\bildrechner-start.bat`, keep the window open. In the `.env` of PaperclipLite
-  `IMAGE_PROVIDER=sdcpp` and `SDCPP_URL=...` ([guide](docs/laptop-bildrechner.md)), then restart PaperclipLite.
+- **How:** start `C:\bildrechner\bildrechner-start.bat`, keep the window open. In the `.env` of Hyperstead
+  `IMAGE_PROVIDER=sdcpp` and `SDCPP_URL=...` ([guide](docs/laptop-bildrechner.md)), then restart Hyperstead.
 
 ### Film studio (if used)
 
-- **Where:** on the computer with Blender (e.g. the laptop). The company with the `film` tool must run in **this** PaperclipLite instance.
-- **When:** Blender does not need to be open, PaperclipLite starts it in the background for each scene and closes it again.
+- **Where:** on the computer with Blender (e.g. the laptop). The company with the `film` tool must run in **this** Hyperstead instance.
+- **When:** Blender does not need to be open, Hyperstead starts it in the background for each scene and closes it again.
 - **Check:** `venv\Scripts\python.exe selftest.py film` (Windows) or `./venv/bin/python selftest.py film`.
 - **How long:** at 640×360 and 12 frames/s, depending on the laptop, about 1 to 5 minutes per 10 seconds of film. Blender never runs at the same time as the image computer.
 
@@ -182,10 +194,10 @@ This list is extended with every change to the program. Each row says what the s
 
 | Missing | What the system does | What you do |
 | --- | --- | --- |
-| `.env` | PaperclipLite starts without keys and without a password, reachable only from this computer. With `HOST=0.0.0.0` the start is aborted as long as `APP_TOKEN` is empty. | `./install.sh` (Pi) or `install.ps1` (Windows) creates it with a random password. |
+| `.env` | Hyperstead starts without keys and without a password, reachable only from this computer. With `HOST=0.0.0.0` the start is aborted as long as `APP_TOKEN` is empty. | `./install.sh` (Pi) or `install.ps1` (Windows) creates it with a random password. |
 | `data.db` | Is created new and empty. Companies, tasks and posts are gone. | Back it up first (see Operations). Only copy back from a backup. |
 | API key in `.env` | The provider is reported as FEHLT in the self-test and the agents do not use it. If it is set but invalid: FEHLER with HTTP 401. | Enter the key, or switch the line off with `#`. |
-| `SDCPP_URL` (with `IMAGE_PROVIDER=sdcpp`) | Image requests fail with „SDCPP_URL fehlt“ (SDCPP_URL missing). With `IMAGE_FALLBACK=pollinations` a free replacement image without references is made, with a note in the result. | Add the line to `.env`, restart PaperclipLite. |
+| `SDCPP_URL` (with `IMAGE_PROVIDER=sdcpp`) | Image requests fail with „SDCPP_URL fehlt“ (SDCPP_URL missing). With `IMAGE_FALLBACK=pollinations` a free replacement image without references is made, with a note in the result. | Add the line to `.env`, restart Hyperstead. |
 | Image computer not reachable (laptop off, firewall, wrong IP) | As above: error „Bildrechner … nicht erreichbar“ (not reachable), with the fallback a replacement image. | Switch on the laptop, start `bildrechner-start.bat`, check the IP and the firewall. |
 | `sd-server.exe` (Windows, image computer) | `bildrechner-start.bat` shows „sd-server.exe fehlt“ (missing) and starts nothing. | Run `deploy\windows\bildrechner-einrichten.ps1`. |
 | Model file (Windows, image computer) | The start file names the missing file and does not start. If only the large language model (`Qwen3-4B-Q4_K_M.gguf`) is missing, it uses the smaller one if present. | Run the set-up script again; it only downloads the missing file. |
@@ -197,7 +209,7 @@ This list is extended with every change to the program. Each row says what the s
 | Image, music or `.blend` file named in the script | The check names scene, character and path, nothing is rendered. | Put the file into `assets/` or `input/` or fix the path in the script. |
 | Clip of a scene (`film/clips/`) | `assemble` names the missing scenes and cuts nothing. If `render` stops (time limit), the finished frames are kept and the next call continues there. | Nothing, the agents call `render` again. |
 | Speech output for the film | `voices`/`render` stop with „Keine Sprachausgabe verfügbar“ (no speech output). Scenes without any dialogue still work. | As for „speech output“ above (on Windows `edge-tts` + `TTS_ENGINE=edge`). |
-| `cargo` (Rust, tool `rust_project`) | The tool is not shown to the agents; `check_code` keeps checking `.rs` files if `rustc` is there. The self-test (`selftest.py rust`) shows FEHLT with the install command. | Install Rust: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Then restart PaperclipLite. |
+| `cargo` (Rust, tool `rust_project`) | The tool is not shown to the agents; `check_code` keeps checking `.rs` files if `rustc` is there. The self-test (`selftest.py rust`) shows FEHLT with the install command. | Install Rust: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Then restart Hyperstead. |
 | bubblewrap when building Rust (Pi/Linux) | `rust_project` stays hidden, just like `run_code`. | `./install.sh --run` |
 | `PCL_CARGO_UNSAFE=1` (Windows) | Windows has no isolation, so `rust_project` stays hidden without the switch. With the switch the laptop builds without isolation. | Only set it if you know the risk ([Rust programs](#-building-complete-rust-programs)), then restart. |
 | `Cargo.toml` in the Rust folder | `rust_project` reports "In … fehlt Cargo.toml" and names the files the agent has to create first. | Nothing, the agent creates them with `write_code`. |
@@ -218,11 +230,13 @@ This list is extended with every change to the program. Each row says what the s
 | `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET` or `ONEDRIVE_CLIENT_ID` | The service stays "not set up", the "Sign in" button is missing. | Register the app and enter the lines ([docs/cloud.md](docs/cloud.md)), restart. |
 | Sign-in at Google/Microsoft (folder `tokens/`) | The service shows "not signed in". An upload reports "not signed in yet" or "sign-in expired" and uploads nothing. | ☁️ Cloud → Sign in. When moving from Pi to laptop, simply sign in again on the laptop. |
 | File over 50 MB for Telegram | Telegram does not accept it. `/datei` marks it with ⚠️ and does not send it, the agent gets a notice. | Choose Google Drive, OneDrive or GitHub as the target. |
-| `cloud_upload.py` (program file) | PaperclipLite does not start (import error). | Run `git pull` again, the file is part of the program. |
+| `cloud_upload.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
 | `PCL_ALLOW_WERKSTATT=1` | The “Workshop” checkbox is grey, no agent gets `befehl` or `nachruesten`. Everything else works as before. | Add the line to `.env`, restart, tick the box for the agent ([docs/werkstatt.md](docs/werkstatt.md)). |
 | A program an agent needs (e.g. Node.js, Remotion, a Python package) | With the workshop the agent files an upgrade request: the CEO checks it, you get ✅/❌ via Telegram and under ✋ Approvals. After your yes the server installs it and the task continues. Without the workshop the agent only names what is missing. | Read the request and decide. Without Telegram only on the web. |
 | The CEO's AI (for an upgrade request) | The request comes straight to you with the note “no CEO with AI” or “CEO not reachable”. | Decide yourself or assign an AI to the CEO. |
-| `werkstatt.py` (program file) | PaperclipLite does not start (import error). | Run `git pull` again, the file is part of the program. |
+| `werkstatt.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
+| Service `hyperstead` (Pi) | After the update the old service `paperclip-lite` is still running, `systemctl … hyperstead` reports "not found". | Run `./install.sh --service` once, it replaces the old service. |
+| `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` cannot find the new file and the window closes with an error. | Run `git pull` again, the file is part of the program. |
 
 ## Access from the internet
 
@@ -246,10 +260,10 @@ Add to `.env`: `TRUST_PROXY=1`, then restart the service.
 ```bash
 # install cloudflared (see developers.cloudflare.com/cloudflare-one/connections/connect-networks)
 cloudflared tunnel login
-cloudflared tunnel create paperclip
-cloudflared tunnel route dns paperclip agents.your-domain.de
+cloudflared tunnel create hyperstead
+cloudflared tunnel route dns hyperstead agents.your-domain.de
 # ~/.cloudflared/config.yml:  ingress: - hostname: agents.your-domain.de  service: http://127.0.0.1:8787
-cloudflared tunnel run paperclip
+cloudflared tunnel run hyperstead
 ```
 
 Strongly recommended in addition: put **Cloudflare Access** (e-mail login) in front.
@@ -356,7 +370,7 @@ type, the task, team figures and the result. The chain of rights and reports und
 
 **Set up Telegram (about 2 minutes):**
 1. In Telegram: `@BotFather` → `/newbot` → copy the token → `.env`: `TELEGRAM_BOT_TOKEN=…`
-2. `sudo systemctl restart paperclip-lite`, write `/start` to the new bot → it tells you your chat ID.
+2. `sudo systemctl restart hyperstead`, write `/start` to the new bot → it tells you your chat ID.
 3. `.env`: enter `TELEGRAM_CHAT_ID=…`, restart the service. In the web under „Post“ there is a test message.
 
 **Using Telegram:**
@@ -433,7 +447,7 @@ costs can arise; you see the tokens per agent on the node.
   what worked). They are shown in the agent panel under „🧠 Gedächtnis“ (memory); you can change or clear them. Limit `PCL_MEMORY_CHARS`
   (4000); the oldest entries drop out first. Every new note is in the audit log.
 
-## Goals, approvals, usage (as in Paperclip)
+## Goals, approvals, usage
 
 - **🎯 Goals**: goals and sub-goals per project. When assigning a task you optionally choose the goal; delegated tasks inherit it.
   Bosses see the goals with progress in the prompt, the CEO's inspection round reports it. Tick off = reached.
@@ -461,7 +475,7 @@ Runs without internet and without keys (provider `mock`, own database).
   **„Bei Post benachrichtigen“** (notify on post) sends every finished result of a top-level task as JSON to the address. Time limit `PCL_CONN_TIMEOUT` (30 s).
 - **Incoming:** switch on „Aufträge von außen“ (tasks from outside); then `POST /hook/<project>/<key>` with `{"text": "…", "agent": "optional"}`
   accepts a task for the boss (e.g. from n8n, iOS shortcuts or DEXTER). No login; protected only by the key in the address.
-  „Neuen Schlüssel“ (new key) invalidates the old address. It is only reachable as far as PaperclipLite itself is (e.g. only in the tailnet).
+  „Neuen Schlüssel“ (new key) invalidates the old address. It is only reachable as far as Hyperstead itself is (e.g. only in the tailnet).
 
 ## ☁️ Cloud upload (GitHub, Google Drive, OneDrive, Telegram)
 
@@ -469,7 +483,7 @@ Runs without internet and without keys (provider `mock`, own database).
   `ONEDRIVE_CLIENT_ID`), step by step in [docs/cloud.md](docs/cloud.md) (German). For Google and Microsoft you then sign in in the
   **☁️ Cloud** window: it shows a code that you enter on your phone on the Google or Microsoft page (works without HTTPS).
   The sign-in is stored in `tokens/` next to `.env`, never in the database.
-- **Target folder:** per project and service in the ☁️ Cloud window (default `PaperclipLite/<project name>`). Agents may only choose a
+- **Target folder:** per project and service in the ☁️ Cloud window (default `Hyperstead/<project name>`). Agents may only choose a
   subfolder below it, e.g. when you name one in the task.
 - **Upload yourself:** 📁 Files → ☁️ next to the file → choose target and folder. You get the link.
 - **Agents:** permission **"May upload to the cloud"** (only you set it). Tool `cloud_upload`; every upload waits under ✋ Approvals,
@@ -477,7 +491,7 @@ Runs without internet and without keys (provider `mock`, own database).
 - **Setup with the CEO:** ask the top boss in 💬 Chat, e.g. "Help me set up GitHub". It knows the current status of each service and the guide and walks you through step by step. You never write tokens into the chat, you enter them in `.env` yourself.
 - **Telegram:** `/datei` sends you files up to 50 MB on your phone, only when you click or approve it.
 - GitHub: up to 50 MB as a file in the repo, larger ones as an attachment to the release `paperclip-ablage` (up to 2 GB). Google Drive: only
-  folders and files that PaperclipLite created itself (scope `drive.file`). OneDrive: any folder. Only tested against simulated services.
+  folders and files that Hyperstead created itself (scope `drive.file`). OneDrive: any folder. Only tested against simulated services.
 
 ## 🌐 Real browser and ▶ run code
 
@@ -506,7 +520,7 @@ Give an agent with the rights **„Darf programmieren“**, **„Darf Dateien sc
 
 You get the package in the inbox or under **📁 Dateien** (single file or in the project ZIP). More commands: `op=build`, `op=run` (with `args`, `stdin`).
 
-- **For which system?** The program in `programm/` fits the computer PaperclipLite runs on: from the Pi a Linux program (ARM),
+- **For which system?** The program in `programm/` fits the computer Hyperstead runs on: from the Pi a Linux program (ARM),
   from the Windows laptop an `.exe`. For another system run `cargo build --release` yourself in the `quelle/` folder.
 - **Isolation (Pi/Linux):** Building, testing and running happen in bubblewrap like `run_code`: no internet, no `.env`, no home,
   only the project's build folder `.rust/` is writable. Only `cargo fetch` (downloads dependencies, runs nothing) has internet.
@@ -515,7 +529,7 @@ You get the package in the inbox or under **📁 Dateien** (single file or in th
   code (tests, `build.rs`) then runs with your rights and could read or change files on the laptop. It does not get API keys in its
   environment. Only switch it on if you trust the agents and their models.
 - **Installing Rust:** Pi `curl https://sh.rustup.rs -sSf | sh` (newer than `apt install cargo`), Windows `winget install Rustlang.Rustup`
-  and include the "Visual Studio Build Tools (C++)" in the installer. Then restart PaperclipLite and run `selftest.py rust`.
+  and include the "Visual Studio Build Tools (C++)" in the installer. Then restart Hyperstead and run `selftest.py rust`.
 - **Limits:** `PCL_CARGO_TIMEOUT` (900 s per step), `PCL_CARGO_MEM_MB` (3072, Linux only), `PCL_CARGO_JOBS` (2), only one Rust build
   at a time. The first build on the Pi takes long, after that cargo only rebuilds what changed. An agent has `PCL_MAX_TOOL_STEPS`
   (default 6) tool rounds per run; for bigger programs a higher value helps, e.g. 12. Off: `PCL_CARGO=0`.
@@ -573,7 +587,7 @@ appear in all provider lists. The server calls them without a shell, in an empty
 
 ## Model gone? Switch agents
 
-PaperclipLite checks every 6 hours (`PCL_MODEL_CHECK_HOURS`) whether the agents' models still exist at the provider, and also notices when a call reports „model not found“. Then a Telegram message arrives, the task fails with a clear note, and in the menu **⚠ Modelle** you switch all affected agents to another model with one click.
+Hyperstead checks every 6 hours (`PCL_MODEL_CHECK_HOURS`) whether the agents' models still exist at the provider, and also notices when a call reports „model not found“. Then a Telegram message arrives, the task fails with a clear note, and in the menu **⚠ Modelle** you switch all affected agents to another model with one click.
 
 ## Large teams
 

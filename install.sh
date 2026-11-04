@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PaperclipLite Installer (Raspberry Pi / Debian / Ubuntu / MX Linux)
+# Hyperstead Installer (Raspberry Pi / Debian / Ubuntu / MX Linux)
 #   ./install.sh            -> venv + Abhaengigkeiten + .env mit zufaelligem Passwort
 #   ./install.sh --service  -> zusaetzlich systemd-Dienst einrichten und starten (braucht sudo)
 #   ./install.sh --piper    -> zusaetzlich Piper (gute deutsche Offline-Stimme) einrichten
@@ -102,13 +102,19 @@ else
 fi
 
 if has --service; then
-  sed -e "s|__USER__|$(id -un)|g" -e "s|__DIR__|${DIR}|g" -e "s|__HOME__|${HOME}|g" deploy/paperclip-lite.service \
-    | sudo tee /etc/systemd/system/paperclip-lite.service >/dev/null
+  # Umzug vom alten Dienstnamen (PaperclipLite) auf hyperstead: alten Dienst stoppen und entfernen
+  if [ -f /etc/systemd/system/paperclip-lite.service ]; then
+    echo "Alter Dienst paperclip-lite gefunden - wird durch hyperstead ersetzt."
+    sudo systemctl disable --now paperclip-lite || true
+    sudo rm -f /etc/systemd/system/paperclip-lite.service
+  fi
+  sed -e "s|__USER__|$(id -un)|g" -e "s|__DIR__|${DIR}|g" -e "s|__HOME__|${HOME}|g" deploy/hyperstead.service \
+    | sudo tee /etc/systemd/system/hyperstead.service >/dev/null
   sudo systemctl daemon-reload
-  sudo systemctl enable --now paperclip-lite
+  sudo systemctl enable --now hyperstead
   sleep 2
-  systemctl --no-pager --lines=5 status paperclip-lite || true
-  echo "Dienst laeuft. Logs: journalctl -u paperclip-lite -f"
+  systemctl --no-pager --lines=5 status hyperstead || true
+  echo "Dienst laeuft. Logs: journalctl -u hyperstead -f"
 else
   echo
   echo "Manuell starten:   ./venv/bin/python app.py     (http://127.0.0.1:8787)"

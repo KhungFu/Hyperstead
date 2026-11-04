@@ -1,6 +1,6 @@
-# PaperclipLite – Projektnotizen für die Weiterarbeit
+# Hyperstead – Projektnotizen für die Weiterarbeit
 
-Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.ing), läuft auf einem Raspberry Pi 4
+Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (früher PaperclipLite), läuft auf einem Raspberry Pi 4
 (Hostname `dexter`). Sprache der Oberfläche und Doku: Deutsch.
 
 ## Aufbau
@@ -138,7 +138,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   per Name suchen/anlegen, resumable in `DRIVE_CHUNK`), onedrive (Graph `Files.ReadWrite`, bis 4 MB PUT, sonst Upload-Session). Google/Microsoft per
   Geraete-Code (`device_start`/`device_poll`, Poll-Thread in `api_cloud_login`, Status in `_cloud_logins`), Refresh-Token in `tokens/<dienst>.json`
   (`PCL_TOKENS_DIR`, gitignored, chmod 600; Microsoft rotiert das Token bei jedem Refresh).
-- app.py: `cloud_ready()` (+ telegram), `cloud_folders(pid)` = Zielordner je Projekt (`settings cloud:<pid>`, Std. `PaperclipLite/<Projekt>`),
+- app.py: `cloud_ready()` (+ telegram), `cloud_folders(pid)` = Zielordner je Projekt (`settings cloud:<pid>`, Std. `Hyperstead/<Projekt>`),
   `project_file` (keine Dotpfade), `do_upload`/`start_upload_job` (Thread, `_cloud_jobs`). Werkzeug `cloud_upload` (`cloud_doc`, `request_upload`)
   legt IMMER `approvals.kind='upload'` an (Wunsch ABI), Agent waehlt nur Unterordner. Freigabe startet den Upload im Thread, `approval_add_result`
   haengt den Link an und beendet die Aufgabe erst, wenn kein Upload mehr laeuft. Web: Fenster ☁️ Cloud, Knopf ☁️ je Datei (Ordner aus dem Dialog
@@ -173,7 +173,7 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
 ```bash
 ./install.sh && ./venv/bin/python app.py      # http://127.0.0.1:8787
 ```
-Windows: `install.ps1` + `deploy/windows/paperclip-start.bat`, Doku `docs/windows.md`. Subprozesse mit `text=True` immer `encoding="utf-8", errors="replace"` (Windows-Standard ist cp1252), `.env` mit `utf-8-sig`, `_run_cli` loest das Programm per `shutil.which` auf (`claude.cmd`). Auf echtem Windows ungetestet.
+Windows: `install.ps1` + `deploy/windows/hyperstead-start.bat`, Doku `docs/windows.md`. Subprozesse mit `text=True` immer `encoding="utf-8", errors="replace"` (Windows-Standard ist cp1252), `.env` mit `utf-8-sig`, `_run_cli` loest das Programm per `shutil.which` auf (`claude.cmd`). Auf echtem Windows ungetestet.
 Tests: `python -m pytest -q tests` (mock-Anbieter, ohne Internet). UI-Prüfung weiter per Playwright (nicht im Repo).
 
 ## Roadmap (Reihenfolge nach Wunsch des Besitzers)

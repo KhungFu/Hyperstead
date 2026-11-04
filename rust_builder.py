@@ -288,7 +288,7 @@ def _package(root, src, crate, build, files, name, rel, test_out, no_tests, rust
         host = "unbekannt"
     exe = ", ".join(b.name for b in bins) or "(keins, nur Bibliothek)"
     liesmich = (f"{name}\n{'=' * len(name)}\n\n"
-                f"Gebaut und getestet von PaperclipLite am {time.strftime('%d.%m.%Y %H:%M')}.\n"
+                f"Gebaut und getestet von Hyperstead am {time.strftime('%d.%m.%Y %H:%M')}.\n"
                 f"Programm in programm/: {exe}\nFuer System: {host}\n"
                 + ("Tests: keine vorhanden.\n" if no_tests else "Tests: alle bestanden (siehe TESTBERICHT.txt).\n") +
                 "\nStarten: das Programm in programm/ ausfuehren (Windows: Doppelklick bzw. in PowerShell .\\programm\\name.exe).\n"

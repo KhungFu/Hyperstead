@@ -2,14 +2,14 @@
 
 Mit dem Werkzeug `film` (Recht **Medien**) drehen die Agenten kleine Zeichentrickfilme im Stil einer Kinderserie:
 Figuren mit eigenen Stimmen und Mundbewegung, Orte, Requisiten, Bewegungen, Kamera, Untertitel, fertiger Film mit Ton.
-Gerendert wird mit **Blender** auf dem Rechner, auf dem PaperclipLite läuft (bei dir: der Laptop).
+Gerendert wird mit **Blender** auf dem Rechner, auf dem Hyperstead läuft (bei dir: der Laptop).
 
 ## 1. Einrichten (einmal, auf dem Laptop)
 
 1. Blender installieren, falls noch nicht da: `winget install BlenderFoundation.Blender` (oder von blender.org).
    Getestet ist Blender 5.2, das Skript ist für 3.6 bis 5.x geschrieben.
-2. PaperclipLite findet Blender meist selbst (`C:\Program Files\Blender Foundation\Blender …\blender.exe`).
-   Sonst in `.env` eintragen und PaperclipLite neu starten:
+2. Hyperstead findet Blender meist selbst (`C:\Program Files\Blender Foundation\Blender …\blender.exe`).
+   Sonst in `.env` eintragen und Hyperstead neu starten:
    ```
    BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.2\blender.exe
    ```

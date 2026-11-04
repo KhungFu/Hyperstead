@@ -1,6 +1,6 @@
 # Eigener Bildrechner auf einem Windows-Laptop
 
-PaperclipLite kann Bilder auf einem eigenen Rechner im Heimnetz erzeugen lassen. Das kostet nichts, geht mit
+Hyperstead kann Bilder auf einem eigenen Rechner im Heimnetz erzeugen lassen. Das kostet nichts, geht mit
 Referenzbildern (gleiche Figuren über eine Serie) und braucht keine Grafikkarte. Dafür ist es langsam:
 auf einem Laptop mit i5-8250U und 8 GB RAM sind mehrere Minuten je Bild zu erwarten.
 
@@ -10,7 +10,7 @@ Modell: FLUX.2 klein 4B (Apache 2.0, auch kommerziell nutzbar), auf 4 Bit verkle
 ## Was du brauchst
 
 - Windows 10/11, 64 Bit, mindestens 8 GB RAM, etwa 6 GB freier Platz auf `C:`
-- PaperclipLite-Ordner auf dem Laptop (für das Einrichtungsskript), z. B. `C:\Users\<Name>\paperclip-lite`
+- Hyperstead-Ordner auf dem Laptop (für das Einrichtungsskript), z. B. `C:\Users\<Name>\paperclip-lite`
 - Laptop am Strom, Energiesparen aus
 
 Wichtig: Auf der GitHub-Seite von stable-diffusion.cpp **nicht** die Ordner (`assets`, `docs`, `examples`) anklicken.
@@ -59,14 +59,14 @@ C:\bildrechner\
    kann hängen bleiben ([bekannter Fehler](https://github.com/leejet/stable-diffusion.cpp/issues/2081)), dann
    Fenster schließen und neu starten.
 3. Test im Browser auf dem Laptop: <http://127.0.0.1:1234> muss eine Seite zeigen.
-4. In der `.env` von PaperclipLite auf dem Laptop (`notepad .env`) genau diese zwei Zeilen aktiv:
+4. In der `.env` von Hyperstead auf dem Laptop (`notepad .env`) genau diese zwei Zeilen aktiv:
 
    ```
    IMAGE_PROVIDER=sdcpp
    SDCPP_URL=http://127.0.0.1:1234
    ```
 
-5. PaperclipLite neu starten (Startfenster schließen, `deploy\windows\paperclip-start.bat`) und prüfen:
+5. Hyperstead neu starten (Startfenster schließen, `deploy\windows\hyperstead-start.bat`) und prüfen:
    `venv\Scripts\python.exe selftest.py web`. Das erzeugt zwei Testbilder und dauert mehrere Minuten.
 
 Meldet die Startdatei „sd-server.exe fehlt“ oder „Modelldatei fehlt“: Schritt 1 wiederholen.
@@ -92,7 +92,7 @@ Autostart: Win+R, `shell:startup` eingeben, eine Verknüpfung zu `C:\bildrechner
    | `Qwen3-4B-Q4_K_M.gguf` | 2,5 GB | <https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf> |
    | `full_encoder_small_decoder.safetensors` | 250 MB | <https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors> |
 
-5. `deploy\windows\bildrechner-start.bat` aus dem PaperclipLite-Ordner nach `C:\bildrechner\` kopieren.
+5. `deploy\windows\bildrechner-start.bat` aus dem Hyperstead-Ordner nach `C:\bildrechner\` kopieren.
 6. Weiter mit Abschnitt 2.
 
 ## 4. Firewall und Energiesparen
@@ -113,7 +113,7 @@ den Port 1234 nie im Router freigeben.
 `ipconfig` in der Eingabeaufforderung, Zeile „IPv4-Adresse“, z. B. `192.168.1.50`. Im Router am besten
 eine feste Adresse für den Laptop einstellen, sonst ändert sie sich irgendwann.
 
-## 6. PaperclipLite auf dem Pi (bestellt beim Laptop)
+## 6. Hyperstead auf dem Pi (bestellt beim Laptop)
 
 In `.env`:
 
@@ -125,7 +125,7 @@ IMAGE_STYLE=farbige Buntstiftzeichnung auf Pastellflaeche, sichtbare Strichstruk
 # IMAGE_FALLBACK=pollinations
 ```
 
-Dann `sudo systemctl restart paperclip-lite` und `./venv/bin/python selftest.py web`.
+Dann `sudo systemctl restart hyperstead` und `./venv/bin/python selftest.py web`.
 Der Selbsttest erzeugt ein Bild und eins mit Referenz, das dauert entsprechend.
 
 Weitere Schalter: `SDCPP_SIZE` (längste Bildseite, Standard 1024; 768 ist etwa doppelt so schnell),
@@ -138,4 +138,4 @@ Weitere Schalter: `SDCPP_SIZE` (längste Bildseite, Standard 1024; 768 ist etwa 
 - Referenzbilder halten Figuren ähnlich, aber nicht perfekt gleich. Ein klares Referenzbild je Figur
   (Ganzkörper, neutraler Hintergrund) hilft am meisten.
 - Mit Referenzbildern rechnet er länger als ohne.
-- PaperclipLite schickt immer nur ein Bild gleichzeitig an den Laptop.
+- Hyperstead schickt immer nur ein Bild gleichzeitig an den Laptop.

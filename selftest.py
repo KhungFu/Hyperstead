@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PaperclipLite Selbsttest: prueft auf dem echten Rechner (Pi), ob alles funktioniert, was die Agenten brauchen.
+"""Hyperstead Selbsttest: prueft auf dem echten Rechner (Pi), ob alles funktioniert, was die Agenten brauchen.
 
     ./venv/bin/python selftest.py            # alles pruefen
     ./venv/bin/python selftest.py web        # nur Gruppe: web | browser | run | llm | telegram | media | ocr | code | film
@@ -199,7 +199,7 @@ def group_telegram():
     cid = sorted(A.TG_CHATS)[0]
 
     def send():
-        r = requests.post(f"{A.TG_API}/bot{A.TG_TOKEN}/sendMessage", json={"chat_id": cid, "text": "PaperclipLite Selbsttest: Telegram funktioniert."}, timeout=15).json()
+        r = requests.post(f"{A.TG_API}/bot{A.TG_TOKEN}/sendMessage", json={"chat_id": cid, "text": "Hyperstead Selbsttest: Telegram funktioniert."}, timeout=15).json()
         if not r.get("ok"):
             raise RuntimeError(r.get("description", "Senden fehlgeschlagen"))
         return "Testnachricht gesendet"
@@ -312,7 +312,7 @@ def group_rust():
     print("\nRust-Programme bauen (Werkzeug rust_project, Recht 'Code ausfuehren')")
     import rust_builder as R
     if not R.cargo_path():
-        line("warn", "cargo", fix("nicht gefunden: curl https://sh.rustup.rs -sSf | sh (danach PaperclipLite neu starten)",
+        line("warn", "cargo", fix("nicht gefunden: curl https://sh.rustup.rs -sSf | sh (danach Hyperstead neu starten)",
                                   "nicht gefunden: winget install Rustlang.Rustup (mit Visual Studio Build Tools C++), dann neu starten"))
         return
     line("ok", "cargo", R.cargo_path())
@@ -365,7 +365,7 @@ GROUPS = {"web": group_web, "browser": group_browser, "run": group_run, "llm": g
 
 if __name__ == "__main__":
     wanted = [a for a in sys.argv[1:] if a in GROUPS] or list(GROUPS)
-    print("PaperclipLite Selbsttest")
+    print("Hyperstead Selbsttest")
     for g in wanted:
         GROUPS[g]()
     print(f"\nErgebnis: {RES['ok']} OK, {RES['warn']} fehlt/optional, {RES['fail']} Fehler")

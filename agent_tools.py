@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, quote, unquote, urljoin, urlparse
 
 import requests
 
-UA = "Mozilla/5.0 (compatible; PaperclipLite/1.0; self-hosted agent team)"
+UA = "Mozilla/5.0 (compatible; Hyperstead/1.0; self-hosted agent team)"
 MAX_PAGE_BYTES = 2_000_000
 MAX_IMAGE_BYTES = 8_000_000
 PAGE_CHARS = 7000        # Text pro Seite, der ans Modell geht

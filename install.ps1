@@ -1,5 +1,5 @@
-# PaperclipLite unter Windows einrichten: venv + Abhaengigkeiten + .env mit zufaelligem Passwort
-# Aufruf in PowerShell im PaperclipLite-Ordner:  powershell -ExecutionPolicy Bypass -File install.ps1
+# Hyperstead unter Windows einrichten: venv + Abhaengigkeiten + .env mit zufaelligem Passwort
+# Aufruf in PowerShell im Hyperstead-Ordner:  powershell -ExecutionPolicy Bypass -File install.ps1
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
@@ -29,5 +29,5 @@ if (-not (Test-Path ".env")) {
   Write-Host ".env existiert bereits - unveraendert gelassen."
 }
 Write-Host ""
-Write-Host "Starten:  deploy\windows\paperclip-start.bat   (oder: venv\Scripts\python.exe app.py)"
+Write-Host "Starten:  deploy\windows\hyperstead-start.bat   (oder: venv\Scripts\python.exe app.py)"
 Write-Host "Pruefen:  venv\Scripts\python.exe selftest.py"

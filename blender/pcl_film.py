@@ -1,5 +1,5 @@
 """
-PaperclipLite Filmstudio: baut EINE Szene aus job.json und rendert sie Bild fuer Bild als PNG.
+Hyperstead Filmstudio: baut EINE Szene aus job.json und rendert sie Bild fuer Bild als PNG.
 
 Aufruf (film_studio.run_blender):
   blender -b --factory-startup --disable-autoexec -noaudio --python-exit-code 3 --python pcl_film.py -- job.json

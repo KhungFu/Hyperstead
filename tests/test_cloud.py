@@ -53,7 +53,7 @@ def env(monkeypatch, tmp_path):
 
 def test_clean_folder():
     assert C.clean_folder("../a/./b\\c:/ ..") == "a/b/c"
-    assert C.join_folder("PaperclipLite/Film", "/Szene 1/") == "PaperclipLite/Film/Szene 1"
+    assert C.join_folder("Hyperstead/Film", "/Szene 1/") == "Hyperstead/Film/Szene 1"
     assert C.join_folder("", "") == ""
 
 
@@ -113,7 +113,7 @@ def test_gdrive_login_and_chunked_upload(env, tmp_path):
     assert C.load_token("gdrive")["refresh_token"] == "rt" and C.ready("gdrive")
     f = tmp_path / "a.txt"
     f.write_bytes(b"0123456789")  # 3 Teile zu 4 Byte
-    assert C.upload("gdrive", f, "PaperclipLite/Neu") == "https://drive/x"
+    assert C.upload("gdrive", f, "Hyperstead/Neu") == "https://drive/x"
     assert fake.find("POST", "googleapis.com/drive/v3/files")[0][2]["json"]["parents"] == ["F1"]  # erster Ordner gefunden, zweiter angelegt
     meta = fake.find("POST", "/upload/drive/v3/files")[0][2]["json"]
     assert meta == {"name": "a.txt", "parents": ["F2"]}
@@ -199,7 +199,7 @@ def test_web_upload_settings_and_job(env, client, monkeypatch):
     (A.proj_dir(pid) / "output" / "buch.pdf").write_bytes(b"%PDF")
     r = client.get(f"/api/projects/{pid}/cloud").get_json()
     assert r["services"]["github"]["configured"] and not r["services"]["gdrive"]["configured"]
-    assert r["folders"]["gdrive"] == "PaperclipLite/Buch"
+    assert r["folders"]["gdrive"] == "Hyperstead/Buch"
     client.put(f"/api/projects/{pid}/cloud", json={"folders": {"gdrive": "Meine Ablage/../Buch"}})
     assert A.cloud_folders(pid)["gdrive"] == "Meine Ablage/Buch"
     assert client.post(f"/api/projects/{pid}/cloud/upload", json={"to": "gdrive", "path": "output/buch.pdf"}).status_code == 400
