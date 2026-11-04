@@ -237,6 +237,7 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | `werkstatt.py` (Programmdatei) | Hyperstead startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 | Dienst `hyperstead` (Pi) | Nach dem Update läuft noch der alte Dienst `paperclip-lite`, `systemctl … hyperstead` meldet „not found“. | `./install.sh --service` einmal ausführen, er ersetzt den alten Dienst. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` findet die neue Datei nicht und das Fenster schließt sich mit einer Fehlermeldung. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
+| `growth.py` (Programmdatei) | Hyperstead startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 
 ## Zugriff aus dem Internet
 
@@ -289,6 +290,27 @@ Ein Chef bekommt eine Aufgabe und **plant** (verteilt Teilaufgaben) oder erledig
 Mitarbeiter fertig sind, wacht er wieder auf, **liest ihre Berichte**, gibt Mängel mit Feedback zurück oder
 fasst alles zusammen und berichtet an seinen Chef. So wandert das Ergebnis über beliebig viele Ebenen nach oben.
 Status „Wartet auf Team“ heißt: der Chef wartet auf seine Leute. Im Aufgaben-Tab siehst du den ganzen Baum.
+
+## Welten und Wachstum
+
+Jedes Projekt spielt in einer **Welt**, die du jederzeit umschaltest. Die Welt ändert nur Begriffe, Symbole und Farben
+der Oberfläche. Die Agenten arbeiten immer mit klaren Begriffen (Auftrag, Bericht, Team), damit ihre Qualität gleich bleibt.
+
+| Welt | Du bist | Oben steht | Teams heißen | Stufen |
+| --- | --- | --- | --- | --- |
+| Gilde | König:in | Burgherr | Zünfte | 🛖 Hütte → 🏡 Weiler → 🏘️ Dorf → 🏰 Burg → 👑 Königreich |
+| Tycoon (Standard) | Gründer:in | Boss | Räume | 🛠️ Garage → 🏚️ Werkstatt → 🏪 Laden → 🏢 Firmensitz → 🏙️ Konzern |
+| Gizmo-Stadt | Stadtgründer:in | Bürgermeister:in | Gebäude | ⛺ Lager → 🏡 Dorf → 🏘️ Kleinstadt → 🏛️ Stadt → 🌆 Metropole |
+
+**Punkte:** Lieferung beim ersten Mal abgenommen +10, nach Überarbeitung +5, Auftrag in der Post als erledigt markiert +20,
+fehlgeschlagen −3, Nacharbeit angefordert −5. Stufen ab 0 / 100 / 300 / 700 / 1500 Punkten. Bestehende Projekte bekommen
+ihre bisherigen Erfolge automatisch angerechnet. Ein Aufstieg kommt einmal per Telegram.
+
+**Was die Stufe begrenzt:** nur, wie viele Agenten die Führung **selbst** anwerben darf (8 / 12 / 18 / 25 / unbegrenzt
+im Projekt) und wie tief (2 / 3 / 4 / 5 / volle Tiefe). Du selbst kannst immer alles anlegen. Die Grenze lässt sich je
+Projekt abschalten.
+
+**Ränge der Agenten** nach eigenen abgenommenen Lieferungen: ab 0 / 5 / 20 / 60 (z. B. Lehrling, Geselle, Meister, Großmeister).
 
 ## Fähigkeiten der Agenten (Internet, Bilder, Dateien)
 

@@ -237,6 +237,7 @@ This list is extended with every change to the program. Each row says what the s
 | `werkstatt.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
 | Service `hyperstead` (Pi) | After the update the old service `paperclip-lite` is still running, `systemctl … hyperstead` reports "not found". | Run `./install.sh --service` once, it replaces the old service. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` cannot find the new file and the window closes with an error. | Run `git pull` again, the file is part of the program. |
+| `growth.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
 
 ## Access from the internet
 
@@ -289,6 +290,29 @@ A boss receives a task and **plans** (distributes sub-tasks) or does it himself.
 employees are finished, he wakes up again, **reads their reports**, returns defects with feedback or
 summarises everything and reports to his own boss. This is how the result moves up through any number of levels.
 The status „Wartet auf Team“ (waiting for team) means: the boss is waiting for his people. In the tasks tab you see the whole tree.
+
+## Worlds and growth
+
+Every project lives in a **world** that you can switch at any time. The world only changes words, icons and colours
+of the interface. The agents always work with clear terms (task, report, team), so their quality stays the same.
+
+| World | You are | At the top | Teams are | Stages |
+| --- | --- | --- | --- | --- |
+| Guild | Monarch | Lord of the castle | Guilds | 🛖 Hut → 🏡 Hamlet → 🏘️ Village → 🏰 Castle → 👑 Kingdom |
+| Tycoon (default) | Founder | Boss | Rooms | 🛠️ Garage → 🏚️ Workshop → 🏪 Shop → 🏢 Headquarters → 🏙️ Corporation |
+| Gizmo City | City founder | Mayor | Buildings | ⛺ Camp → 🏡 Village → 🏘️ Small town → 🏛️ City → 🌆 Metropolis |
+
+The interface shows the names in German.
+
+**Points:** delivery accepted the first time +10, after revision +5, task marked as done in the mail +20,
+failed −3, rework requested −5. Stages from 0 / 100 / 300 / 700 / 1500 points. Existing projects get
+their past successes counted automatically. A stage-up is announced once via Telegram.
+
+**What the stage limits:** only how many agents the management may recruit **by itself** (8 / 12 / 18 / 25 / unlimited
+in the project) and how deep (2 / 3 / 4 / 5 / full depth). You can always create anything yourself. The limit can be
+switched off per project.
+
+**Agent ranks** by their own accepted deliveries: from 0 / 5 / 20 / 60 (e.g. apprentice, journeyman, master, grandmaster).
 
 ## Agent abilities (internet, images, files)
 
