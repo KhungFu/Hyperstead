@@ -244,8 +244,9 @@ Ova lista se dopunjava pri svakoj promjeni programa. Svaki red kaže šta sistem
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` ne pronalazi novi fajl i prozor se zatvara sa greškom. | Ponovo pokrenite `git pull`, fajl je dio programa. |
 | Git adresa i dalje pokazuje na `KhungFu/paperclip-lite` | `git pull` i dalje radi jer GitHub preusmjerava. Ako neko napravi novi repo sa starim imenom, preusmjeravanje prestaje i `git pull` ne uspijeva. | Jednom pokrenite `git remote set-url origin https://github.com/KhungFu/hyperstead.git` u folderu programa. |
 | `growth.py` (programski fajl) | Hyperstead se ne pokreće (greška pri uvozu). | Ponovo pokrenite `git pull`, fajl je dio programa. |
+| Raniji svijet (Ceh, Tycoon, Gizmo grad) sačuvan u projektu | Projekat automatski prikazuje svemir. Bodovi, nivo i rangovi ostaju isti, mijenjaju se samo nazivi i ikone. | Ništa ne treba raditi. |
 | Danas nema poziva vještačke inteligencije (operativni centar, 💶 u traci) | Prikazuje 0 $ odnosno „keine Aufrufe“. | Ništa ne treba raditi. Troškovi su procjene, vlastite cijene preko `PCL_PRICES` u `.env`. |
-| Preglednik ništa ne čuva (privatni prozor) | Svijetlo/tamno, svijet/nacrt, pokreti i režim pomoći se pri svakom učitavanju vraćaju na zadano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
+| Preglednik ništa ne čuva (privatni prozor) | Svijetlo/tamno, svemir/nacrt, pokreti i režim pomoći se pri svakom učitavanju vraćaju na zadano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
 
 ## Pristup sa interneta
 
@@ -299,26 +300,28 @@ saradnici gotovi, on se ponovo budi, **čita njihove izvještaje**, vraća nedos
 sažima sve i izvještava svog šefa. Tako se rezultat penje kroz koliko god nivoa.
 Status „Wartet auf Team“ (čeka tim) znači: šef čeka svoje ljude. U kartici zadataka vidite cijelo stablo.
 
-## Svjetovi i rast
+## Svemir i rast
 
-Svaki projekat se odvija u jednom **svijetu** koji možete promijeniti u bilo kojem trenutku. Svijet mijenja samo riječi, ikone i boje
+Svaki projekat je mali **univerzum** koji raste sa svojim uspjesima. Svemir mijenja samo riječi, ikone i boje
 interfejsa. Agenti uvijek rade s jasnim pojmovima (zadatak, izvještaj, tim), tako da njihov kvalitet ostaje isti.
 
-| Svijet | Vi ste | Na vrhu | Timovi su | Nivoi |
-| --- | --- | --- | --- | --- |
-| Esnaf | Vladar | Gospodar dvorca | Esnafi | 🛖 Koliba → 🏡 Zaseok → 🏘️ Selo → 🏰 Dvorac → 👑 Kraljevstvo |
-| Tycoon (zadano) | Osnivač | Šef | Prostorije | 🛠️ Garaža → 🏚️ Radionica → 🏪 Radnja → 🏢 Sjedište → 🏙️ Koncern |
-| Gizmo grad | Osnivač grada | Gradonačelnik | Zgrade | ⛺ Logor → 🏡 Selo → 🏘️ Gradić → 🏛️ Grad → 🌆 Metropola |
+| U svemiru | Značenje u timu |
+| --- | --- |
+| ☀️ Sunce | najviše rukovodstvo (npr. CEO) |
+| 🪐 Planeta | odjel ili poslovođa, kruži oko Sunca |
+| 🌙 Mjesec | uposlenik, kruži oko svoje planete (ko je još niže, mali je mjesec mjeseca) |
+| Nivoi | ☄️ Asteroid → 🪐 Planeta → ☀️ Sunčev sistem → ✨ Zvjezdano jato → 🌌 Galaksija |
+| Rangovi agenata | ☄️ Kometa → 🌙 Mjesec → 🪐 Planeta → ⭐ Zvijezda |
 
-Interfejs prikazuje nazive na njemačkom.
+Bodovi se zovu zvjezdana prašina, zadaci se zovu misije. Raniji svjetovi Ceh, Tycoon i Gizmo grad više ne postoje; postojeći projekti automatski prikazuju svemir, bodovi i nivoi ostaju sačuvani. Interfejs prikazuje nazive na njemačkom.
 
-**Upotreba:** Traka iznad površine prikazuje nivo, napredak do sljedećeg nivoa i najvažnije brojeve. Desno birate svijet, prebacujete između svijetlog i tamnog prikaza (🌓) i sa ⓘ otvarate pregled nivoa, bodova i rangova. Rang svakog agenta je prikazan kao ikona na njegovoj kartici.
+**Upotreba:** Traka iznad površine prikazuje nivo, napredak do sljedećeg nivoa i najvažnije brojeve. Desno prebacujete između svijetlog i tamnog prikaza (🌓) i sa ⓘ otvarate pregled nivoa, bodova i rangova. Rang svakog agenta je prikazan kao ikona na njegovoj kartici.
 
-**Mapa svijeta:** Sa 🗺 / 📐 u traci prelazite između mape svijeta i nacrta (uređivač čvorova). Na mapi je svaki rukovodilac sa svojim timom jedna zgrada, agenti stoje ispred nje kao figure, putevi pokazuju ko kome podnosi izvještaj. Dim i svjetlo znače "radi", 🔧 neuspješno, ✋ čeka vaše odobrenje, ⏳ čeka podzadatke, 📦 isporučeno. Dodir na zgradu prikazuje tim i radnje, dodir na figuru otvara agenta. Na telefonu se umjesto mape prikazuje lista zgrada. Animacije se zaustavljaju kada uređaj traži smanjeno kretanje.
+**Sunčev sistem:** Sa 🌌 / 📐 u traci prelazite između svemira i nacrta (uređivač čvorova). Planete i mjeseci polako kruže; kada mišem pokažete na jedan od njih, sve se zaustavi da biste ga lako pogodili. Plavi prsten koji pulsira znači "radi", žuti prsten "čeka vaše odobrenje", crveni prsten "greška", ljubičasti isprekidani prsten "čeka svoj tim". Dodir na Sunce ili planetu prikazuje tim i radnje, dodir na mjesec otvara agenta. Sa svakim nivoom nebo je punije, od zvjezdanog jata svijetle magline, a kao galaksija pojavljuje se spirala. Svemir ostaje taman i u svijetlom prikazu. Na telefonu se umjesto mape prikazuje lista: Sunce, ispod njega svaka planeta sa svojim mjesecima. Pokreti se isključuju kada uređaj traži „smanji pokrete“.
 
 **Operativni centar:** 🛰 u bočnoj traci (ili dodir na brojeve u traci rasta) na prvi pogled prikazuje šta trenutno radi i čeka, koja odobrenja su otvorena, šta nije uspjelo u posljednjih 7 dana (sa ↻ Neu), rasporede (sa ▶ Jetzt), poruke o greškama i posljednje događaje. Uz to prikazuje procijenjene troškove vještačke inteligencije za danas i posljednjih 7 dana; današnji trošak stoji i kao 💶 u traci. Svi brojevi dolaze iz postojećih zadataka, odobrenja, rasporeda i historije, ništa nije izmišljeno.
 
-**Napredovanje i rukovanje:** Kada projekat dostigne novi stepen, pojavi se kratka proslava s novim stepenom i sljedećim ciljem (Telegram šalje istu poruku). Kada agent napreduje u rangu, pojavi se kratko obavještenje. Pod ⓘ u traci možete za ovaj uređaj isključiti pokrete i efekte proslave; ako uređaj traži „smanji pokrete“, sve ionako ostaje mirno. Svi prozori se zatvaraju tipkom Esc, zgrade i figure na mapi mogu se koristiti tipkama Tab i Enter.
+**Napredovanje i rukovanje:** Kada projekat dostigne novi stepen, pojavi se kratka proslava s novim stepenom i sljedećim ciljem (Telegram šalje istu poruku). Kada agent napreduje u rangu, pojavi se kratko obavještenje. Pod ⓘ u traci možete za ovaj uređaj isključiti pokrete i efekte proslave; ako uređaj traži „smanji pokrete“, sve ionako ostaje mirno. Svi prozori se zatvaraju tipkom Esc, Sunce, planete i mjeseci u svemiru mogu se koristiti tipkama Tab i Enter.
 
 **Uputstvo i pomoć:** 📖 Anleitung na vrhu bočne trake otvara uputstvo za upotrebu direktno u kontrolnoj tabli (poglavlja na rasklapanje, sa pretragom, bez preuzimanja, radi i offline). ⓘ na vrhu prozora vodi do odgovarajućeg poglavlja. Svako dugme pokazuje kratko objašnjenje kada pokažete mišem na njega. Na telefonu u uputstvu uključite režim pomoći: prvi dodir dugmeta ga objašnjava, drugi ga izvršava.
 

@@ -126,18 +126,25 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (früher PaperclipL
   Abo-Warnung `PCL_ABO_WARN_5H` einmal je 5 h (`settings abo_warn:<anbieter>`). API `/api/usage?days=`.
 - Tests: `tests/` (pytest, `conftest.drain()` arbeitet die Queue synchron ab). Neue Funktionen dort mit abdecken.
 
-## Welten und Wachstum (Hyperstead)
-- `growth.py` (reine Daten + Rechnung): `WORLDS` (guild/tycoon/gizmo: Stufen, Raenge, Begriffe, Gebaeude, Farben), `STAGE_POINTS`,
-  `STAGE_TEAM`/`STAGE_DEPTH` (Grenzen nur fuers SELBST-Anwerben), `RANK_AT`, `POINTS`. Welt nur Oberflaeche: Agenten-Prompts nie mit Spielbegriffen.
+## Weltall und Wachstum (Hyperstead)
+- `growth.py` (reine Daten + Rechnung): `WORLDS` hat seit 2026-11-04 nur noch `kosmos` (Wunsch ABI: Gilde/Tycoon/Gizmo-Stadt gestrichen,
+  alte Werte in `settings world:<pid>` faengt `world_ok` ab). Stufen Asteroid/Planet/Sonnensystem/Sternhaufen/Galaxie, Raenge Komet/Mond/Planet/Stern,
+  Begriffe Sonne/Planet/Mond/Mission/Sternenstaub. `STAGE_POINTS`, `STAGE_TEAM`/`STAGE_DEPTH` (Grenzen nur fuers SELBST-Anwerben), `RANK_AT`, `POINTS`.
+  Welt nur Oberflaeche: Agenten-Prompts nie mit Spielbegriffen (Test `test_prompts_ohne_spielbegriffe`).
 - app.py: `project_world` (`settings world:<pid>`), `growth_limits_on` (`growth_limits:<pid>`, Std. an), `project_points` aus dem Audit-Log
   (task_done mit tasks.rounds, inbox_closed, task_failed, inbox_rework; dadurch automatisch nachgeruestet), `agent_ranks`, `growth_check`
   (aus `log()` bei GROWTH_EVENTS; erster Aufruf merkt `stage:<pid>` still, Aufstieg -> audit `stage_up` + Telegram einmal).
-  `recruit_team` kuerzt nach Stufe (Notiz an den Chef). API `/api/worlds`, `/api/projects/<id>/growth`, PUT `/api/projects/<id>/world`.
+  `recruit_team` kuerzt nach Stufe (Notiz an den Chef). API `/api/worlds`, `/api/projects/<id>/growth`, PUT `/api/projects/<id>/world` (nur noch `limits` sinnvoll).
   Tests `tests/test_growth.py`.
-- UI (index.html): Wachstumsleiste `#growth` (`loadGrowth` alle 10 s, `renderGrowth`), Welt-Farben per CSS-Variablen, Hell/Dunkel `data-theme`
-  (localStorage `hs-theme`). Welt-Karte `#map` (SVG im selben `#world`-Transform wie die Knoten): `teamsOf` (Gebaeude = Agent mit Unterstellten +
-  oberste Ebene), `placeTeams` (Ring um die Mitte), `buildingSvg`/`figuresSvg` je Welt, Klick ueber `mapPick` (`#bcard`), Handy <=820 px `#wlist`.
-  Ansicht `VIEW` world|plan (localStorage `hs-view`).
+- UI (index.html): Wachstumsleiste `#growth` (`loadGrowth` alle 10 s, `renderGrowth`), Farben per CSS-Variablen, Hell/Dunkel `data-theme`
+  (localStorage `hs-theme`), keine Weltauswahl mehr. Sonnensystem `#map` (SVG im selben `#world`-Transform wie die Knoten, Weltall immer dunkel):
+  `teamsOf` (Team = Wurzel oder Agent mit Unterstellten, members = alle direkt Unterstellten), `sysLayout` (Sonne = Wurzel, Planeten = ihre Kinder,
+  bis 5 Planeten je eigene Bahn, sonst geteilte Bahnen; Bahnen als Ellipsen `MAP.TILT`), `systemSvg`/`moonSvg` (Monde = Kinder der Planeten, alle
+  tieferen als Mini-Monde `allBelow`), `skySvg` (Sterne/Nebel/Spirale je Stufe, Zufall mit Projekt-ID als Saat). Mehrere Wurzeln = mehrere Sonnen
+  nebeneinander. Bewegung per `requestAnimationFrame` (`orbitTick`/`placeMovers`, Winkel = a0 + Zeit*w, ~25 fps), nur mit Bewegung an, nicht auf
+  dem Handy, haelt bei Maus ueber einem Koerper (`MAP.hold`). `drawMap` baut nur neu, wenn sich `MAP.sig` (Agenten, Zaehler, Stufe, Auswahl) aendert.
+  Zustandsringe `agentState` (appr > run > fail > wait). Klick ueber `mapPick`: Sonne/Planet mit Team -> `#bcard`, Mond -> Agent. Handy <=820 px `#wlist`
+  (Sonne, Planeten, Monde als eingerueckte Karten). Ansicht `VIEW` world|plan (localStorage `hs-view`).
 - Betriebszentrale: `project_ops(pid)` / `GET /api/projects/<id>/ops` (aktive + fehlgeschlagene Aufgaben 7 Tage, offene Freigaben, Zeitplaene,
   Kosten heute/7 Tage aus `llm_calls`, Fehler-Ereignisse und letzte Ereignisse aus `audit`, `open` = `is_open`). UI `showOps` (🛰, Klick auf `#gStats`),
   Knoepfe nutzen vorhandene APIs (`/tasks/<id>/run`, `/schedules/<id>/run`). Growth-API liefert zusaetzlich `cost_today`/`calls_today` (💶 in der Leiste).

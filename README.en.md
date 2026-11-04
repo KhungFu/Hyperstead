@@ -244,8 +244,9 @@ This list is extended with every change to the program. Each row says what the s
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` cannot find the new file and the window closes with an error. | Run `git pull` again, the file is part of the program. |
 | Git address still points to `KhungFu/paperclip-lite` | `git pull` keeps working because GitHub redirects. If someone creates a new repo with the old name, the redirect ends and `git pull` fails. | Run `git remote set-url origin https://github.com/KhungFu/hyperstead.git` once in the program folder. |
 | `growth.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
+| Former world (Guild, Tycoon, Gizmo City) saved in a project | The project shows space automatically. Points, stage and ranks stay the same, only names and icons change. | Nothing to do. |
 | No AI calls today (operations centre, 💶 in the bar) | Shows 0 $ or “keine Aufrufe”. | Nothing to do. Costs are estimates, set your own prices with `PCL_PRICES` in `.env`. |
-| Browser stores nothing (private window) | Light/dark, world/blueprint, motion and help mode fall back to the default on every load. | Use a normal window; the project data is not affected. |
+| Browser stores nothing (private window) | Light/dark, space/blueprint, motion and help mode fall back to the default on every load. | Use a normal window; the project data is not affected. |
 
 ## Access from the internet
 
@@ -299,26 +300,28 @@ employees are finished, he wakes up again, **reads their reports**, returns defe
 summarises everything and reports to his own boss. This is how the result moves up through any number of levels.
 The status „Wartet auf Team“ (waiting for team) means: the boss is waiting for his people. In the tasks tab you see the whole tree.
 
-## Worlds and growth
+## Space and growth
 
-Every project lives in a **world** that you can switch at any time. The world only changes words, icons and colours
+Every project is a small **universe** that grows with its successes. Space only changes words, icons and colours
 of the interface. The agents always work with clear terms (task, report, team), so their quality stays the same.
 
-| World | You are | At the top | Teams are | Stages |
-| --- | --- | --- | --- | --- |
-| Guild | Monarch | Lord of the castle | Guilds | 🛖 Hut → 🏡 Hamlet → 🏘️ Village → 🏰 Castle → 👑 Kingdom |
-| Tycoon (default) | Founder | Boss | Rooms | 🛠️ Garage → 🏚️ Workshop → 🏪 Shop → 🏢 Headquarters → 🏙️ Corporation |
-| Gizmo City | City founder | Mayor | Buildings | ⛺ Camp → 🏡 Village → 🏘️ Small town → 🏛️ City → 🌆 Metropolis |
+| In space | Meaning in the team |
+| --- | --- |
+| ☀️ Sun | top lead (e.g. the CEO) |
+| 🪐 Planet | department or foreman, orbits the sun |
+| 🌙 Moon | team member, orbits their own planet (anyone further down is a small moon of a moon) |
+| Stages | ☄️ Asteroid → 🪐 Planet → ☀️ Solar system → ✨ Star cluster → 🌌 Galaxy |
+| Agent ranks | ☄️ Comet → 🌙 Moon → 🪐 Planet → ⭐ Star |
 
-The interface shows the names in German.
+Points are called stardust, tasks are called missions. The former worlds Guild, Tycoon and Gizmo City no longer exist; existing projects show space automatically, and points and stages are kept. The interface shows the names in German.
 
-**Usage:** The bar above the canvas shows the stage, progress to the next stage and the key numbers. On the right you pick the world, switch between light and dark (🌓) and open the overview of stages, points and ranks with ⓘ. Each agent's rank is shown as an icon on its card.
+**Usage:** The bar above the canvas shows the stage, progress to the next stage and the key numbers. On the right you switch between light and dark (🌓) and open the overview of stages, points and ranks with ⓘ. Each agent's rank is shown as an icon on its card.
 
-**World map:** With 🗺 / 📐 in the bar you switch between the world map and the blueprint (node editor). On the map every manager with their team is a building, the agents stand in front of it as figures, roads show who reports to whom. Smoke and light mean "working", 🔧 failed, ✋ waiting for your approval, ⏳ waiting for subtasks, 📦 delivered. Tapping a building shows the team and actions, tapping a figure opens the agent. On a phone a list of buildings replaces the map. Animations stop when the device asks for reduced motion.
+**Solar system:** With 🌌 / 📐 in the bar you switch between space and the blueprint (node editor). Planets and moons orbit slowly; when you point at one with the mouse, everything stops so you can hit it easily. A pulsing blue ring means "working", a yellow ring "waiting for your approval", a red ring "error", a dashed purple ring "waiting for its team". Tapping the sun or a planet shows the team and actions, tapping a moon opens the agent. With every stage the sky gets fuller, from star cluster on nebulae glow, and as a galaxy a spiral appears. Space stays dark even in the light theme. On the phone a list replaces the map: the sun, below it each planet with its moons. Motion is turned off when the device asks for "reduce motion".
 
 **Operations centre:** 🛰 in the sidebar (or a tap on the numbers in the growth bar) shows at a glance what is running and waiting, which approvals are open, what failed in the last 7 days (with ↻ Neu), the schedules (with ▶ Jetzt), error messages and the latest events. It also shows the estimated AI costs for today and the last 7 days; today's cost also appears as 💶 in the bar. All numbers come from the existing tasks, approvals, schedules and the history, nothing is made up.
 
-**Level-ups and controls:** When a project reaches a new stage, a short celebration shows the new stage and the next goal (Telegram sends the same message). When an agent rises in rank, a short notice appears. Under ⓘ in the bar you can turn off motion and celebration effects for this device; if the device asks for “reduce motion”, everything stays still anyway. All windows close with Esc, buildings and figures on the map can be used with Tab and Enter.
+**Level-ups and controls:** When a project reaches a new stage, a short celebration shows the new stage and the next goal (Telegram sends the same message). When an agent rises in rank, a short notice appears. Under ⓘ in the bar you can turn off motion and celebration effects for this device; if the device asks for “reduce motion”, everything stays still anyway. All windows close with Esc, the sun, planets and moons in space can be used with Tab and Enter.
 
 **Guide and help:** 📖 Anleitung at the top of the sidebar opens the user guide right in the dashboard (expandable chapters, with search, no download, works offline). ⓘ at the top of a window jumps to the matching chapter. Every button shows a short explanation when you point at it with the mouse. On the phone, turn on help mode in the guide: the first tap on a button explains it, the second runs it.
 

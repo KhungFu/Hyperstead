@@ -6,7 +6,7 @@ Punkte werden aus dem Audit-Log berechnet (append-only), daher bekommen alte Pro
 automatisch nachgeruestet und nichts muss mitgezaehlt werden.
 """
 
-DEFAULT_WORLD = "tycoon"
+DEFAULT_WORLD = "kosmos"
 
 # Punkte je Ereignis
 POINTS = {"done_first": 10, "done_revised": 5, "inbox_closed": 20, "task_failed": -3, "inbox_rework": -5}
@@ -19,36 +19,18 @@ STAGE_DEPTH = [2, 3, 4, 5, None]
 # Raenge der Agenten nach eigenen abgenommenen Lieferungen
 RANK_AT = [0, 5, 20, 60]
 
+# Seit 2026-11-04 gibt es nur noch die Welt "Kosmos" (Wunsch ABI): Sonne = oberste Leitung, Planeten = Abteilungen
+# bzw. Vorarbeiter, Monde = Mitarbeiter. Fruehere Welten (guild, tycoon, gizmo) werden per world_ok auf Kosmos umgestellt.
 WORLDS = {
-    "guild": {
-        "name": "Gilde", "tagline": "Gründe deine Gilde, bau dein Königreich.",
-        "stages": [["🛖", "Hütte"], ["🏡", "Weiler"], ["🏘️", "Dorf"], ["🏰", "Burg"], ["👑", "Königreich"]],
-        "ranks": [["🌱", "Lehrling"], ["🔨", "Geselle"], ["⚒️", "Meister"], ["⭐", "Großmeister"]],
-        "words": {"owner": "König:in", "top": "Burgherr", "lead": "Zunftmeister:in", "member": "Zunftmitglied",
-                  "team": "Zunft", "teams": "Zünfte", "task": "Schriftrolle", "tasks": "Schriftrollen",
-                  "done": "besiegelt", "project": "Gilde", "world": "Gildenstadt", "points": "Ruhm"},
-        "buildings": ["Schreibstube", "Alchemistenlabor", "Malerstube", "Handelskontor", "Schmiede", "Bibliothek"],
-        "colors": {"accent": "#b8892b", "accent2": "#2f5d3a", "ground": "#efe4c9", "ground_dark": "#2a241b"},
-    },
-    "tycoon": {
-        "name": "Tycoon", "tagline": "Von der Garage zum Konzern.",
-        "stages": [["🛠️", "Garage"], ["🏚️", "Werkstatt"], ["🏪", "Laden"], ["🏢", "Firmensitz"], ["🏙️", "Konzern"]],
-        "ranks": [["🌱", "Neuling"], ["💼", "Profi"], ["⚙️", "Experte"], ["⭐", "Legende"]],
-        "words": {"owner": "Gründer:in", "top": "Boss", "lead": "Raumleitung", "member": "Mitarbeiter:in",
-                  "team": "Raum", "teams": "Räume", "task": "Ticket", "tasks": "Tickets",
-                  "done": "abgenommen", "project": "Firma", "world": "Firmengelände", "points": "Umsatzpunkte"},
-        "buildings": ["Schreibraum", "Labor", "Studio", "Handelsbüro", "Werkstatt", "Archiv"],
-        "colors": {"accent": "#14b8a6", "accent2": "#1e3a5f", "ground": "#e8eef3", "ground_dark": "#0f1a26"},
-    },
-    "gizmo": {
-        "name": "Gizmo-Stadt", "tagline": "Eine kleine Stadt, die für dich arbeitet.",
-        "stages": [["⛺", "Lager"], ["🏡", "Dorf"], ["🏘️", "Kleinstadt"], ["🏛️", "Stadt"], ["🌆", "Metropole"]],
-        "ranks": [["🌱", "Neuling"], ["🔩", "Bastler"], ["🤖", "Meister-Gizmo"], ["⭐", "Legende"]],
-        "words": {"owner": "Stadtgründer:in", "top": "Bürgermeister:in", "lead": "Werkmeister:in", "member": "Gizmo",
-                  "team": "Gebäude", "teams": "Gebäude", "task": "Arbeitszettel", "tasks": "Arbeitszettel",
-                  "done": "geliefert", "project": "Stadt", "world": "Stadtplan", "points": "Stadtpunkte"},
-        "buildings": ["Druckerei", "Tüftellabor", "Atelier", "Markthalle", "Fabrik", "Rathaus"],
-        "colors": {"accent": "#f97316", "accent2": "#7c3aed", "ground": "#f3f0fa", "ground_dark": "#17141f"},
+    "kosmos": {
+        "name": "Kosmos", "tagline": "Vom Asteroiden zur Galaxie.",
+        "stages": [["☄️", "Asteroid"], ["🪐", "Planet"], ["☀️", "Sonnensystem"], ["✨", "Sternhaufen"], ["🌌", "Galaxie"]],
+        "ranks": [["☄️", "Komet"], ["🌙", "Mond"], ["🪐", "Planet"], ["⭐", "Stern"]],
+        "words": {"owner": "Kommandant:in", "top": "Sonne", "lead": "Planet", "member": "Mond",
+                  "team": "Planet", "teams": "Planeten", "task": "Mission", "tasks": "Missionen",
+                  "done": "erfüllt", "project": "Universum", "world": "Sternkarte", "points": "Sternenstaub"},
+        "planets": ["Nova", "Orion", "Vega", "Lyra", "Atlas", "Kepler", "Rigel", "Sirius"],
+        "colors": {"accent": "#f59e0b", "accent2": "#6366f1", "ground": "#0b1026", "ground_dark": "#070b1a"},
     },
 }
 
