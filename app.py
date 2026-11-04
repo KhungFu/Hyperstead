@@ -3878,7 +3878,10 @@ def api_growth(pid):
     if not q1("SELECT 1 AS x FROM projects WHERE id=?", (pid,)):
         abort(404)
     ranks = agent_ranks(pid)
-    return jsonify({**project_growth(pid), "ranks": {str(k): v for k, v in ranks.items()}})
+    c = q1("SELECT SUM(cost) cost, COUNT(*) calls FROM llm_calls WHERE project_id=? "
+           "AND date(ts,'unixepoch','localtime')=date('now','localtime')", (pid,))
+    return jsonify({**project_growth(pid), "ranks": {str(k): v for k, v in ranks.items()},
+                    "cost_today": c["cost"] or 0, "calls_today": c["calls"]})
 
 
 @app.put("/api/projects/<int:pid>/world")
@@ -4941,6 +4944,41 @@ def api_audit():
     sql += " ORDER BY au.id DESC LIMIT ?"
     args.append(min(int(request.args.get("limit", 100)), 500))
     return jsonify(q(sql, args))
+
+
+ACTIVE_STATES = ("running", "queued", "waiting_subtasks", "waiting_approval")
+
+
+def project_ops(pid):
+    """Betriebszentrale: nur Zahlen aus vorhandenen Tabellen (tasks, approvals, schedules, llm_calls, audit)."""
+    marks = ",".join("?" * len(ACTIVE_STATES))
+    tj = "SELECT t.id, t.title, t.status, t.updated, t.agent_id, t.parent_task_id, a.name agent_name FROM tasks t " \
+         "LEFT JOIN agents a ON a.id=t.agent_id WHERE t.project_id=? "
+    active = q(tj + f"AND t.status IN ({marks}) ORDER BY t.updated DESC LIMIT 50", (pid, *ACTIVE_STATES))
+    failed = q(tj.replace("t.updated,", "t.updated, substr(t.result,1,300) error,") +
+               "AND t.status='failed' AND t.updated>=? ORDER BY t.updated DESC LIMIT 20", (pid, time.time() - 7 * 86400))
+    counts = {r["status"]: r["c"] for r in q("SELECT status, COUNT(*) c FROM tasks WHERE project_id=? GROUP BY status", (pid,))}
+    approvals = q("""SELECT ap.id, ap.kind, substr(ap.payload,1,200) payload, ap.task_id, ap.created, a.name agent_name, t.title task_title
+                     FROM approvals ap LEFT JOIN agents a ON a.id=ap.agent_id LEFT JOIN tasks t ON t.id=ap.task_id
+                     WHERE ap.status='pending' AND ap.project_id=? ORDER BY ap.id""", (pid,))
+    schedules = q("""SELECT s.id, s.title, s.at, s.days, s.enabled, s.last_run, s.kind, a.name agent_name
+                     FROM schedules s LEFT JOIN agents a ON a.id=s.agent_id WHERE s.project_id=? ORDER BY s.at""", (pid,))
+    cost = "COUNT(*) calls, COALESCE(SUM(tokens),0) tokens, SUM(cost) cost"
+    today = q1(f"SELECT {cost} FROM llm_calls WHERE project_id=? AND date(ts,'unixepoch','localtime')=date('now','localtime')", (pid,))
+    week = q1(f"SELECT {cost} FROM llm_calls WHERE project_id=? AND ts>=?", (pid, time.time() - 7 * 86400))
+    errors = q("""SELECT au.id, au.ts, au.event, au.detail, a.name agent_name FROM audit au LEFT JOIN agents a ON a.id=au.agent_id
+                  WHERE au.project_id=? AND (au.event LIKE '%fail%' OR au.event LIKE '%error%') ORDER BY au.id DESC LIMIT 20""", (pid,))
+    audit = q("""SELECT au.id, au.ts, au.event, au.detail, a.name agent_name FROM audit au LEFT JOIN agents a ON a.id=au.agent_id
+                 WHERE au.project_id=? ORDER BY au.id DESC LIMIT 40""", (pid,))
+    return {"counts": counts, "active": active, "failed": failed, "approvals": approvals, "schedules": schedules,
+            "cost_today": today, "cost_week": week, "errors": errors, "audit": audit, "open": bool(is_open(pid))}
+
+
+@app.get("/api/projects/<int:pid>/ops")
+def api_project_ops(pid):
+    if not q1("SELECT id FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    return jsonify(project_ops(pid))
 
 
 @app.errorhandler(400)

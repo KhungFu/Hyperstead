@@ -260,6 +260,24 @@ a.btn.pri{color:#fff}
   .att span{max-width:150px}
   #toast{max-width:94vw;bottom:14px}
 }
+
+/* Betriebszentrale */
+.ops-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-bottom:10px}
+.ops-tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border:1px solid var(--line);border-radius:10px;background:var(--panel2,var(--chip));color:var(--text);cursor:pointer;font:inherit}
+.ops-tile:disabled{cursor:default}
+.ops-tile:not(:disabled):hover{border-color:var(--accent)}
+.ops-tile span{font-size:18px}.ops-tile b{font-size:20px}.ops-tile small{color:var(--mute);font-size:11px;text-align:center}
+.ops-cost{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:10px;margin-bottom:12px}
+.ops-cost button{margin-left:auto}
+.ops-sec{margin:14px 0 4px}.ops-sec h4{margin:0 0 6px;font-size:14px}
+.ops-n{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:var(--chip);color:var(--mute);font-size:11px;text-align:center}
+.ops-row{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)}
+.ops-row .chip{flex:none;margin-top:1px}
+.ops-main{flex:1;min-width:0;word-break:break-word}.ops-main small{display:block;color:var(--mute);font-size:12px}
+.ops-main a{color:var(--accent)}
+.ops-err{margin-top:3px;font-size:12px;color:var(--mute);white-space:pre-wrap;max-height:4.5em;overflow:hidden}
+.ops-empty{color:var(--mute);font-size:12px}
+#gStats{cursor:pointer}
 </style>
 </head>
 <body>
@@ -267,6 +285,7 @@ a.btn.pri{color:#fff}
   <aside id="side">
     <div class="brand"><div class="logo">H</div><b>Hyperstead</b></div>
     <div class="side-sec">
+      <button class="side-btn" id="btnOps" title="Was gerade läuft, wartet, schiefging und was es heute kostet">🛰 Betriebszentrale</button>
       <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnGroupAI" title="Mehrere Agenten auswählen und gemeinsam auf eine KI / ein Modell umstellen">🔀 KI für Gruppe</button>
@@ -1348,6 +1367,49 @@ $('#btnAudit').onclick=async()=>{
 };
 
 
+/* ---------- Betriebszentrale (nur vorhandene Daten) ---------- */
+async function showOps(){
+  if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+  openOv('🛰 Betriebszentrale'); const body=$('#ovbody');
+  let r; try{ r=await api('/projects/'+S.pid+'/ops'); }catch(e){ return; }
+  if(!$('#ov').classList.contains('on')) return;
+  const c=r.counts||{}, task=wword('tasks','Aufgaben');
+  const tile=(ico,n,lbl,go)=>`<button class="ops-tile" ${go?`data-go="${go}"`:'disabled'}><span>${ico}</span><b>${n}</b><small>${lbl}</small></button>`;
+  const cost=x=>x&&x.calls?`${usdShort(x.cost)} · ${(x.calls||0).toLocaleString('de-AT')} ${x.calls===1?'Aufruf':'Aufrufe'}`:'0 $ · keine Aufrufe';
+  const ago=ts=>{ const m=Math.round((Date.now()/1000-ts)/60); return m<1?'gerade':m<60?'vor '+m+' min':m<1440?'vor '+Math.round(m/60)+' h':fmt(ts); };
+  const agentLink=x=>x.agent_id?`<a href="#" data-agent="${x.agent_id}">${esc(x.agent_name||'?')}</a>`:esc(x.agent_name||'?');
+  const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const when=s=>s.at==='open'?'bei Öffnung':s.at==='close'?'bei Schluss':esc(s.at);
+  const days=d=>{ const l=String(d||'').split(',').filter(x=>x!=='').map(Number); return l.length===7?'täglich':l.map(i=>DAYS[i]).join(' '); };
+  const sec=(id,title,n,html)=>`<section class="ops-sec" id="ops_${id}"><h4>${title} <span class="ops-n">${n}</span></h4>${html}</section>`;
+  const empty=t=>`<div class="ops-empty">${t}</div>`;
+  body.innerHTML=`
+    ${r.open?'':'<div class="task" style="padding:8px;margin-bottom:10px">🌙 Außerhalb der Öffnungszeiten: neue Aufträge warten bis zum Arbeitsbeginn.</div>'}
+    <div class="ops-tiles">
+      ${tile('▶',(c.running||0),'läuft','active')}
+      ${tile('⏳',(c.queued||0)+(c.waiting_subtasks||0),'wartet','active')}
+      ${tile('✋',r.approvals.length,'Freigaben','appr')}
+      ${tile('🔧',r.failed.length,'Fehler (7 Tage)','failed')}
+      ${tile('✓',(c.done||0),wword('done','fertig'),'')}
+    </div>
+    <div class="task ops-cost"><div>💶 <b>Heute:</b> ${cost(r.cost_today)}</div><div>📅 <b>7 Tage:</b> ${cost(r.cost_week)}</div>
+      <button class="btn sm" id="ops_usage">📊 Alle Kosten</button></div>
+    ${sec('active','▶ Läuft und wartet',r.active.length,r.active.length?r.active.map(t=>`<div class="ops-row"><span class="chip ${t.status}">${STATUS[t.status]||esc(t.status)}</span><div class="ops-main"><b>${esc(t.title)}</b><small>${agentLink(t)} · ${ago(t.updated)}</small></div></div>`).join(''):empty('Gerade ist nichts los.'))}
+    ${sec('appr','✋ Offene Freigaben',r.approvals.length,r.approvals.length?r.approvals.map(a=>`<div class="ops-row"><span class="chip waiting_approval">${esc(a.kind)}</span><div class="ops-main"><b>${esc(a.task_title||'—')}</b><small>${esc(a.agent_name||'?')} · ${ago(a.created)}</small></div></div>`).join('')+'<div class="row" style="margin-top:6px"><button class="btn pri sm" id="ops_appr">Freigaben entscheiden</button></div>':empty('Nichts wartet auf dich.'))}
+    ${sec('failed','🔧 Fehlgeschlagen (7 Tage)',r.failed.length,r.failed.length?r.failed.map(t=>`<div class="ops-row"><span class="chip failed">Fehler</span><div class="ops-main"><b>${esc(t.title)}</b><small>${agentLink(t)} · ${ago(t.updated)}</small>${t.error?`<div class="ops-err">${esc(t.error)}</div>`:''}</div>${t.parent_task_id?'':`<button class="btn sm" data-rerun="${t.id}">↻ Neu</button>`}</div>`).join(''):empty('Keine Fehler in den letzten 7 Tagen.'))}
+    ${sec('sched','🕘 Zeitpläne',r.schedules.length,r.schedules.length?r.schedules.map(s=>`<div class="ops-row"><span class="chip ${s.enabled?'done':'todo'}">${s.enabled?'aktiv':'aus'}</span><div class="ops-main"><b>${s.kind==='inspect'?'🔎 ':''}${esc(s.title)}</b><small>${esc(s.agent_name||'?')} · ${when(s)} · ${days(s.days)}${s.last_run?' · zuletzt '+esc(s.last_run):''}</small></div><button class="btn sm" data-srun="${s.id}">▶ Jetzt</button></div>`).join(''):empty('Keine Zeitpläne. Anlegen unter 🕘 Zeitplan.'))}
+    ${sec('err','⚠ Fehlermeldungen im Verlauf',r.errors.length,r.errors.length?r.errors.map(e=>`<div class="logrow"><span class="ts">${fmt(e.ts)}</span> <b>${esc(e.event)}</b> ${e.agent_name?'· '+esc(e.agent_name):''}<br>${esc(e.detail)}</div>`).join(''):empty('Keine.'))}
+    ${sec('log','📜 Letzte Ereignisse',r.audit.length,r.audit.map(e=>`<div class="logrow"><span class="ts">${fmt(e.ts)}</span> <b>${esc(e.event)}</b> ${e.agent_name?'· '+esc(e.agent_name):''}<br>${esc(e.detail)}</div>`).join('')+'<div class="row" style="margin-top:6px"><button class="btn sm" id="ops_audit">Ganzer Verlauf</button></div>')}
+    <div class="ops-empty" style="margin-top:8px">Alle Zahlen kommen aus den ${esc(task)}, Freigaben, Zeitplänen und dem Verlauf dieses Projekts. Kosten sind Schätzungen.</div>`;
+  body.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const el=$('#ops_'+b.dataset.go); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); });
+  body.querySelectorAll('[data-agent]').forEach(a=>a.onclick=e=>{ e.preventDefault(); $('#ov').classList.remove('on'); selectAgent(+a.dataset.agent); });
+  body.querySelectorAll('[data-rerun]').forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await api('/tasks/'+b.dataset.rerun+'/run','POST',{}); toast('Neu gestartet'); }catch(e){} showOps(); refresh(true); });
+  body.querySelectorAll('[data-srun]').forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await api('/schedules/'+b.dataset.srun+'/run','POST',{}); toast('Gestartet'); }catch(e){} showOps(); refresh(true); });
+  const on=(id,f)=>{ const el=$('#'+id); if(el) el.onclick=f; };
+  on('ops_usage',()=>showUsage(1)); on('ops_appr',()=>$('#btnApprovals').click()); on('ops_audit',()=>$('#btnAudit').click());
+}
+$('#btnOps').onclick=showOps;
+
 /* ---------- Welten und Wachstum (Hyperstead) ---------- */
 const WORLD = {list:null, g:null, at:0};
 function wdef(){ return (WORLD.list && WORLD.g && WORLD.list.worlds[WORLD.g.world]) || null; }
@@ -1386,12 +1448,15 @@ function renderGrowth(){
   $('#gBar').style.width = Math.round(g.progress*100)+'%';
   const ags=(S.graph&&S.graph.agents)||[]; let run=0, done=0;
   ags.forEach(a=>{ const c=a.counts||{}; run+=(c.running||0)+(c.queued||0)+(c.waiting_subtasks||0); done+=(c.done||0); });
-  $('#gStats').innerHTML = `<span>👥 <b>${ags.length}</b>${g.limits&&g.team_limit?' / '+g.team_limit:''}</span><span>▶ <b>${run}</b> läuft</span><span>✓ <b>${done}</b> ${esc(w.words.done)}</span><span>✋ <b>${(S.graph&&S.graph.pending_approvals)||0}</b> Freigaben</span>`;
+  $('#gStats').innerHTML = `<span>👥 <b>${ags.length}</b>${g.limits&&g.team_limit?' / '+g.team_limit:''}</span><span>▶ <b>${run}</b> läuft</span><span>✓ <b>${done}</b> ${esc(w.words.done)}</span><span>✋ <b>${(S.graph&&S.graph.pending_approvals)||0}</b> Freigaben</span><span title="Geschätzte KI-Kosten heute (${g.calls_today||0} Aufrufe)">💶 <b>${usdShort(g.cost_today)}</b> heute</span>`;
   const sel=$('#gWorld');
   if(sel.options.length!==Object.keys(WORLD.list.worlds).length)
     sel.innerHTML = Object.entries(WORLD.list.worlds).map(([k,v])=>`<option value="${k}">${esc(v.stages[0][0]+' '+v.name)}</option>`).join('');
   if(document.activeElement!==sel) sel.value = g.world;
 }
+function usdShort(c){ c=c||0; return c>0&&c<0.01?'< 0,01 $':c.toLocaleString('de-AT',{maximumFractionDigits:2})+' $'; }
+$('#gStats').onclick = ()=>showOps();
+$('#gStats').title = 'Betriebszentrale öffnen';
 $('#gWorld').onchange = async e=>{ if(!S.pid) return; await api('/projects/'+S.pid+'/world','PUT',{world:e.target.value}); await loadGrowth(true); fit(); loadProjects(); };
 $('#gTheme').onclick = ()=>{
   const d=document.documentElement, cur=d.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');

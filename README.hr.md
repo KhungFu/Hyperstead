@@ -238,6 +238,7 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | Servis `hyperstead` (Pi) | Nakon ažuriranja i dalje radi stari servis `paperclip-lite`, `systemctl … hyperstead` javlja "not found". | Jednom pokrenite `./install.sh --service`, on zamjenjuje stari servis. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` ne pronalazi novu datoteku i prozor se zatvara s pogreškom. | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 | `growth.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
+| Danas nema poziva umjetne inteligencije (operativni centar, 💶 u traci) | Prikazuje 0 $ odnosno „keine Aufrufe“. | Ništa nije potrebno. Troškovi su procjene, vlastite cijene putem `PCL_PRICES` u `.env`. |
 
 ## Pristup s interneta
 
@@ -307,6 +308,8 @@ Sučelje prikazuje nazive na njemačkom.
 **Upotreba:** Traka iznad površine prikazuje razinu, napredak do sljedeće razine i najvažnije brojeve. Desno birate svijet, prebacujete između svijetlog i tamnog prikaza (🌓) i s ⓘ otvarate pregled razina, bodova i rangova. Rang svakog agenta prikazan je kao ikona na njegovoj kartici.
 
 **Karta svijeta:** S 🗺 / 📐 u traci prelazite između karte svijeta i nacrta (uređivač čvorova). Na karti je svaki rukovoditelj sa svojim timom jedna zgrada, agenti stoje ispred nje kao figure, ceste pokazuju tko kome podnosi izvješće. Dim i svjetlo znače "radi", 🔧 neuspješno, ✋ čeka vaše odobrenje, ⏳ čeka podzadatke, 📦 isporučeno. Dodir na zgradu prikazuje tim i radnje, dodir na figuru otvara agenta. Na telefonu se umjesto karte prikazuje popis zgrada. Animacije se zaustavljaju kada uređaj traži smanjeno kretanje.
+
+**Operativni centar:** 🛰 u bočnoj traci (ili dodir na brojeve u traci rasta) na prvi pogled prikazuje što trenutačno radi i čeka, koja su odobrenja otvorena, što nije uspjelo u posljednjih 7 dana (s ↻ Neu), rasporede (s ▶ Jetzt), poruke o pogreškama i posljednje događaje. Uz to prikazuje procijenjene troškove umjetne inteligencije za danas i posljednjih 7 dana; današnji trošak stoji i kao 💶 u traci. Svi brojevi dolaze iz postojećih zadataka, odobrenja, rasporeda i povijesti, ništa nije izmišljeno.
 
 **Bodovi:** isporuka prihvaćena iz prve +10, nakon ispravka +5, zadatak označen kao završen u pošti +20,
 neuspješno −3, zatražena dorada −5. Razine od 0 / 100 / 300 / 700 / 1500 bodova. Postojeći projekti automatski

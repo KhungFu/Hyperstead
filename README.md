@@ -238,6 +238,7 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Dienst `hyperstead` (Pi) | Nach dem Update läuft noch der alte Dienst `paperclip-lite`, `systemctl … hyperstead` meldet „not found“. | `./install.sh --service` einmal ausführen, er ersetzt den alten Dienst. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` findet die neue Datei nicht und das Fenster schließt sich mit einer Fehlermeldung. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 | `growth.py` (Programmdatei) | Hyperstead startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
+| Keine KI-Aufrufe heute (Betriebszentrale, 💶 in der Leiste) | Zeigt 0 $ bzw. „keine Aufrufe“. | Nichts zu tun. Kosten sind Schätzungen, eigene Preise per `PCL_PRICES` in `.env`. |
 
 ## Zugriff aus dem Internet
 
@@ -305,6 +306,8 @@ der Oberfläche. Die Agenten arbeiten immer mit klaren Begriffen (Auftrag, Beric
 **Bedienung:** Die Leiste über der Fläche zeigt Stufe, Fortschritt zur nächsten Stufe und die wichtigsten Zahlen. Rechts wählst du die Welt, schaltest zwischen Hell und Dunkel um (🌓) und öffnest mit ⓘ die Übersicht über Stufen, Punkte und Ränge. Der Rang jedes Agenten steht als Symbol auf seiner Karte.
 
 **Welt-Karte:** Mit 🗺 / 📐 in der Leiste wechselst du zwischen der Welt-Karte und dem Bauplan (Knoten-Editor). Auf der Karte ist jede Führungskraft mit ihrem Team ein Gebäude, die Agenten stehen als Figuren davor, Straßen zeigen, wer wem berichtet. Rauch und Licht bedeuten „arbeitet“, 🔧 fehlgeschlagen, ✋ wartet auf deine Freigabe, ⏳ wartet auf Zulieferung, 📦 geliefert. Ein Tipp auf ein Gebäude zeigt Team und Aktionen, ein Tipp auf eine Figur öffnet den Agenten. Auf dem Handy erscheint statt der Karte eine Liste der Gebäude. Bewegung wird abgeschaltet, wenn das Gerät „Bewegung reduzieren“ verlangt.
+
+**Betriebszentrale:** 🛰 in der Seitenleiste (oder ein Tipp auf die Zahlen in der Wachstumsleiste) zeigt auf einen Blick, was gerade läuft und wartet, welche Freigaben offen sind, was in den letzten 7 Tagen fehlgeschlagen ist (mit ↻ Neu), die Zeitpläne (mit ▶ Jetzt), Fehlermeldungen und die letzten Ereignisse. Dazu die geschätzten KI-Kosten von heute und den letzten 7 Tagen; heute steht auch als 💶 in der Leiste. Alle Zahlen kommen aus den vorhandenen Aufgaben, Freigaben, Zeitplänen und dem Verlauf, nichts wird erfunden.
 
 **Punkte:** Lieferung beim ersten Mal abgenommen +10, nach Überarbeitung +5, Auftrag in der Post als erledigt markiert +20,
 fehlgeschlagen −3, Nacharbeit angefordert −5. Stufen ab 0 / 100 / 300 / 700 / 1500 Punkten. Bestehende Projekte bekommen
