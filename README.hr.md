@@ -1,4 +1,4 @@
-# PaperclipLite
+# Hyperstead
 
 🌐 Jezici: [Deutsch](README.md) · [English](README.en.md) · [Türkçe](README.tr.md) · [Srpski](README.sr.md) · [Bosanski](README.bs.md) · **Hrvatski**
 
@@ -9,7 +9,7 @@ Napravite projekt, povucite agente na površinu, povežite ih (nadređeni → su
 
 ## Instalacija
 
-PaperclipLite je Python program (Flask + SQLite) i radi na više sustava. Više instalacija
+Hyperstead je Python program (Flask + SQLite) i radi na više sustava. Više instalacija
 može raditi paralelno; svaka ima svoje tvrtke i podatke.
 
 | Sustav | Stanje | Upute |
@@ -17,9 +17,9 @@ može raditi paralelno; svaka ima svoje tvrtke i podatke.
 | Raspberry Pi / Linux (Debian, Ubuntu) | glavni sustav, puni opseg funkcija | dolje |
 | Windows 10/11 | radi, bez `run_code`, izrada Rust programa samo bez izolacije preko prekidača, neke funkcije traže dodatne programe | [docs/windows.md](docs/windows.md) |
 | macOS | nije testirano, osnovne funkcije bi trebale raditi | dolje (ručno) |
-| Vlastito računalo za slike (npr. stari laptop bez grafičke kartice) | besplatne slike s referentnim slikama za PaperclipLite | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
+| Vlastito računalo za slike (npr. stari laptop bez grafičke kartice) | besplatne slike s referentnim slikama za Hyperstead | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
 
-Selidba s jednog računala na drugo: zaustavite PaperclipLite i kopirajte `data.db`, mapu `workspace/` i `.env`
+Selidba s jednog računala na drugo: zaustavite Hyperstead i kopirajte `data.db`, mapu `workspace/` i `.env`
 ([primjer Pi → Windows](docs/windows.md)).
 
 ### Raspberry Pi / Linux
@@ -27,7 +27,7 @@ Selidba s jednog računala na drugo: zaustavite PaperclipLite i kopirajte `data.
 ```bash
 git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
 ./install.sh --service     # venv, ovisnosti, .env s nasumičnom lozinkom, systemd servis
-nano .env                  # unesite API ključeve, zatim: sudo systemctl restart paperclip-lite
+nano .env                  # unesite API ključeve, zatim: sudo systemctl restart hyperstead
 ```
 
 Bez servisa: `./install.sh`, pa `./venv/bin/python app.py` → http://127.0.0.1:8787.
@@ -36,13 +36,13 @@ Više funkcija (video, OCR, prevoditelji, preglednik): `./install.sh --all`.
 
 ### Windows
 
-PowerShell u mapi PaperclipLite:
+PowerShell u mapi Hyperstead:
 
 ```powershell
 git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
 powershell -ExecutionPolicy Bypass -File install.ps1
 notepad .env
-deploy\windows\paperclip-start.bat
+deploy\windows\hyperstead-start.bat
 ```
 
 Što nedostaje na Windowsu, automatsko pokretanje i paralelni rad s Pi-jem: [docs/windows.md](docs/windows.md).
@@ -62,7 +62,7 @@ cp .env.example .env       # upišite APP_TOKEN=<duga lozinka>, dodajte API klju
 
 ### Slike na vlastitom računalu
 
-Računalo u kućnoj mreži (i bez grafičke kartice, barem 8 GB RAM-a) može za PaperclipLite besplatno raditi slike s
+Računalo u kućnoj mreži (i bez grafičke kartice, barem 8 GB RAM-a) može za Hyperstead besplatno raditi slike s
 referentnim slikama. U `.env` ostavite aktivne točno ova dva retka (samo jedan redak `IMAGE_PROVIDER=` bez `#`):
 
 ```
@@ -74,9 +74,9 @@ Postavljanje: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
 
 ### Animirani filmovi uz Blender
 
-Ako je Blender instaliran na računalu na kojem radi PaperclipLite, agenti izrađuju crtane filmove: likove s vlastitim glasovima i
+Ako je Blender instaliran na računalu na kojem radi Hyperstead, agenti izrađuju crtane filmove: likove s vlastitim glasovima i
 pokretima usta, scene, kameru, titlove, gotov film sa zvukom (alat `film`, predložak tvrtke „🐶 Animationsstudio“).
-Ako PaperclipLite sam ne pronađe Blender, upišite ga u `.env`:
+Ako Hyperstead sam ne pronađe Blender, upišite ga u `.env`:
 
 ```
 BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.2\blender.exe
@@ -87,22 +87,22 @@ Upute i format scenarija (na njemačkom): [docs/filmstudio.md](docs/filmstudio.m
 ## Rad: tko što, gdje, kada i kako
 
 **Tko:** sve ovo radi vlasnik računala (vi), a ne agenti. Naredbe se izvršavaju u
-mapi PaperclipLite: na Pi-ju u terminalu (`cd ~/paperclip-lite`), na Windowsu u PowerShellu
+mapi Hyperstead: na Pi-ju u terminalu (`cd ~/paperclip-lite`), na Windowsu u PowerShellu
 (`cd $HOME\paperclip-lite`, ili gdje god ste stavili mapu).
 
 ### Kratki pregled
 
 | Što | Kada | Raspberry Pi / Linux (sa servisom) | Windows |
 | --- | --- | --- | --- |
-| Pokretanje | nakon instalacije, nakon ponovnog pokretanja bez automatskog starta | `sudo systemctl start paperclip-lite` | dvostruki klik na `deploy\windows\paperclip-start.bat` (prozor ostavite otvoren) |
-| Zaustavljanje | prije selidbe, sigurnosne kopije, ažuriranja | `sudo systemctl stop paperclip-lite` | zatvorite prozor za pokretanje (ili u njemu Ctrl+C) |
-| Ponovno pokretanje | nakon svake promjene u `.env`, nakon ažuriranja | `sudo systemctl restart paperclip-lite` | zatvorite prozor za pokretanje, ponovno pokrenite `paperclip-start.bat` |
-| Radi li? | kada ima problema | `systemctl status paperclip-lite` | je li prozor za pokretanje otvoren? Preglednik: <http://127.0.0.1:8787> |
-| Pregled dnevnika | kod pogrešaka | `journalctl -u paperclip-lite -f` (Ctrl+C prekida) | prikazuje se u prozoru za pokretanje |
+| Pokretanje | nakon instalacije, nakon ponovnog pokretanja bez automatskog starta | `sudo systemctl start hyperstead` | dvostruki klik na `deploy\windows\hyperstead-start.bat` (prozor ostavite otvoren) |
+| Zaustavljanje | prije selidbe, sigurnosne kopije, ažuriranja | `sudo systemctl stop hyperstead` | zatvorite prozor za pokretanje (ili u njemu Ctrl+C) |
+| Ponovno pokretanje | nakon svake promjene u `.env`, nakon ažuriranja | `sudo systemctl restart hyperstead` | zatvorite prozor za pokretanje, ponovno pokrenite `hyperstead-start.bat` |
+| Radi li? | kada ima problema | `systemctl status hyperstead` | je li prozor za pokretanje otvoren? Preglednik: <http://127.0.0.1:8787> |
+| Pregled dnevnika | kod pogrešaka | `journalctl -u hyperstead -f` (Ctrl+C prekida) | prikazuje se u prozoru za pokretanje |
 | Ažuriranje | kada postoji nova verzija (npr. nakon spojenog pull requesta) | vidi dolje | vidi dolje |
 | Provjera | nakon instalacije, ažuriranja, novih ključeva | `./venv/bin/python selftest.py` | `venv\Scripts\python.exe selftest.py` |
 | Ključevi / postavke | novi ključ, drugi pružatelj slika | `nano .env`, pa ponovno pokrenite | `notepad .env`, pa ponovno pokrenite |
-| Sigurnosna kopija | redovito, prije selidbe i većih ažuriranja | kopirajte `data.db`, `workspace/`, `.env` (prvo zaustavite) | isto u mapi PaperclipLite |
+| Sigurnosna kopija | redovito, prije selidbe i većih ažuriranja | kopirajte `data.db`, `workspace/`, `.env` (prvo zaustavite) | isto u mapi Hyperstead |
 
 ### Ažuriranje (preuzimanje nove verzije)
 
@@ -112,7 +112,7 @@ mapi PaperclipLite: na Pi-ju u terminalu (`cd ~/paperclip-lite`), na Windowsu u 
 cd ~/paperclip-lite
 git pull
 ./install.sh               # potrebno samo ako se requirements.txt promijenio; .env ostaje nepromijenjen
-sudo systemctl restart paperclip-lite
+sudo systemctl restart hyperstead
 ./venv/bin/python selftest.py llm     # kratka provjera odgovaraju li AI pružatelji
 ```
 
@@ -122,18 +122,30 @@ sudo systemctl restart paperclip-lite
 2. `git pull`
 3. Samo ako su se paketi promijenili (ili kada niste sigurni): `powershell -ExecutionPolicy Bypass -File install.ps1`
    (postojeći `.env` ostaje nepromijenjen).
-4. Zatvorite crni prozor za pokretanje PaperclipLitea.
-5. Ponovno pokrenite `deploy\windows\paperclip-start.bat` (dvostruki klik ili upišite u PowerShell).
+4. Zatvorite crni prozor za pokretanje Hypersteada.
+5. Ponovno pokrenite `deploy\windows\hyperstead-start.bat` (dvostruki klik ili upišite u PowerShell).
 6. Provjera: `venv\Scripts\python.exe selftest.py llm`
 
 Ako `git pull` javi „local changes would be overwritten“, sami ste promijenili neku datoteku programa.
 `git stash` odlaže promjenu na stranu, zatim ponovite `git pull`. Vaši podaci (`data.db`, `workspace/`, `.env`)
 nikada nisu ugroženi, jer ih Git ne poznaje.
 
+### Prijelaz s PaperclipLite na Hyperstead (jednom)
+
+Program se sada zove **Hyperstead**. Podaci, `.env`, mape i sve `PCL_*` postavke ostaju kakve jesu.
+Samo servis i datoteka za pokretanje imaju nova imena.
+
+- **Pi:** `cd ~/paperclip-lite && git pull && ./install.sh --service`. Instalacijska skripta zaustavlja stari servis
+  `paperclip-lite`, uklanja ga i pokreće `hyperstead`. Od tada koristite naredbe s `hyperstead`.
+- **Windows:** `git pull`, zatim pokrenite `deploy\windows\hyperstead-start.bat`. Stari prečaci na
+  `paperclip-start.bat` i dalje rade, datoteka sada poziva `hyperstead-start.bat`.
+- Mapa se može i dalje zvati `paperclip-lite`. Ako preimenujete GitHub repozitorij, GitHub preusmjerava staru adresu.
+- Prijenos u oblak: novi projekti prema zadanim postavkama prenose u `Hyperstead/<projekt>`. Ciljne mape koje ste sami postavili ostaju.
+
 ### Automatsko pokretanje
 
 - **Pi:** `./install.sh --service` postavlja servis; on se tada sam pokreće pri svakom podizanju sustava.
-- **Windows:** Win+R, upišite `shell:startup` i tamo stavite prečac do `deploy\windows\paperclip-start.bat`
+- **Windows:** Win+R, upišite `shell:startup` i tamo stavite prečac do `deploy\windows\hyperstead-start.bat`
   (i do `bildrechner-start.bat`, ako ga koristite). Windows se za to mora sam prijaviti
   ([docs/windows.md](docs/windows.md), odjeljak 4).
 
@@ -141,7 +153,7 @@ nikada nisu ugroženi, jer ih Git ne poznaje.
 
 - Svaka postavka stoji točno jednom, bez `#` na početku. Reci s `#` su isključeni. Kod dupliciranih redaka
   vrijedi prvi.
-- Nakon svake promjene ponovno pokrenite PaperclipLite, inače vrijedi staro stanje.
+- Nakon svake promjene ponovno pokrenite Hyperstead, inače vrijedi staro stanje.
 - Ključeve nikada ne kopirajte u chatove, snimke zaslona ili repozitorij. Ako je ključ ipak negdje završio: opozovite ga kod pružatelja i unesite novi.
 - Zatim provjerite sa `selftest.py`. Pojedina područja: `selftest.py llm`, `web`, `telegram`, `media`, `ocr`, `code`.
 
@@ -158,15 +170,15 @@ nikada nisu ugroženi, jer ih Git ne poznaje.
 
 - **Gdje:** na računalu koje pravi slike (npr. laptop), u mapi `C:\bildrechner`.
 - **Kada:** mora raditi dok agenti trebaju praviti slike.
-- **Kako se postavlja (jednom):** u PowerShellu u mapi PaperclipLite
+- **Kako se postavlja (jednom):** u PowerShellu u mapi Hyperstead
   `powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1` (preuzima program i modele).
-- **Kako se pokreće:** pokrenite `C:\bildrechner\bildrechner-start.bat`, prozor ostavite otvoren. U `.env` datoteci PaperclipLitea
-  `IMAGE_PROVIDER=sdcpp` i `SDCPP_URL=...` ([upute](docs/laptop-bildrechner.md)), zatim ponovno pokrenite PaperclipLite.
+- **Kako se pokreće:** pokrenite `C:\bildrechner\bildrechner-start.bat`, prozor ostavite otvoren. U `.env` datoteci Hypersteada
+  `IMAGE_PROVIDER=sdcpp` i `SDCPP_URL=...` ([upute](docs/laptop-bildrechner.md)), zatim ponovno pokrenite Hyperstead.
 
 ### Filmski studio (ako se koristi)
 
-- **Gdje:** na računalu s Blenderom (npr. laptop). Tvrtka s alatom `film` mora raditi u **ovoj** instanci PaperclipLite.
-- **Kada:** Blender ne mora biti otvoren, PaperclipLite ga za svaku scenu pokreće u pozadini i ponovno zatvara.
+- **Gdje:** na računalu s Blenderom (npr. laptop). Tvrtka s alatom `film` mora raditi u **ovoj** instanci Hyperstead.
+- **Kada:** Blender ne mora biti otvoren, Hyperstead ga za svaku scenu pokreće u pozadini i ponovno zatvara.
 - **Provjera:** `venv\Scripts\python.exe selftest.py film` (Windows) ili `./venv/bin/python selftest.py film`.
 - **Koliko traje:** pri 640×360 i 12 sličica u sekundi, ovisno o laptopu, oko 1 do 5 minuta po 10 sekundi filma. Blender nikad ne radi istovremeno s računalom za slike.
 
@@ -182,10 +194,10 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 
 | Nedostaje | Što sustav radi | Što vi radite |
 | --- | --- | --- |
-| `.env` | PaperclipLite se pokreće bez ključeva i bez lozinke, dostupan samo s ovog računala. S `HOST=0.0.0.0` pokretanje se prekida dok je `APP_TOKEN` prazan. | `./install.sh` (Pi) odnosno `install.ps1` (Windows) ga stvara s nasumičnom lozinkom. |
+| `.env` | Hyperstead se pokreće bez ključeva i bez lozinke, dostupan samo s ovog računala. S `HOST=0.0.0.0` pokretanje se prekida dok je `APP_TOKEN` prazan. | `./install.sh` (Pi) odnosno `install.ps1` (Windows) ga stvara s nasumičnom lozinkom. |
 | `data.db` | Stvara se nova i prazna. Tvrtke, zadaci i pošta su nestali. | Prvo napravite sigurnosnu kopiju (vidi Rad). Vraćajte samo iz kopije. |
 | API ključ u `.env` | Pružatelj se u samoprovjeri prijavljuje kao FEHLT i agenti ga ne koriste. Ako je unesen, ali nevažeći: FEHLER s HTTP 401. | Unesite ključ ili isključite redak s `#`. |
-| `SDCPP_URL` (uz `IMAGE_PROVIDER=sdcpp`) | Zahtjevi za slike ne uspijevaju uz poruku „SDCPP_URL fehlt“ (nedostaje). Uz `IMAGE_FALLBACK=pollinations` izrađuje se besplatna nadomjesna slika bez referenci, uz napomenu u rezultatu. | Dodajte redak u `.env`, ponovno pokrenite PaperclipLite. |
+| `SDCPP_URL` (uz `IMAGE_PROVIDER=sdcpp`) | Zahtjevi za slike ne uspijevaju uz poruku „SDCPP_URL fehlt“ (nedostaje). Uz `IMAGE_FALLBACK=pollinations` izrađuje se besplatna nadomjesna slika bez referenci, uz napomenu u rezultatu. | Dodajte redak u `.env`, ponovno pokrenite Hyperstead. |
 | Računalo za slike nije dostupno (laptop isključen, vatrozid, kriva IP) | Kao gore: pogreška „Bildrechner … nicht erreichbar“ (nije dostupno), uz nadomjesnu sliku. | Uključite laptop, pokrenite `bildrechner-start.bat`, provjerite IP i vatrozid. |
 | `sd-server.exe` (Windows, računalo za slike) | `bildrechner-start.bat` prikazuje „sd-server.exe fehlt“ (nedostaje) i ništa ne pokreće. | Pokrenite `deploy\windows\bildrechner-einrichten.ps1`. |
 | Datoteka modela (Windows, računalo za slike) | Startna datoteka navodi nedostajuću datoteku i ne pokreće se. Ako nedostaje samo veliki jezični model (`Qwen3-4B-Q4_K_M.gguf`), koristi se manji, ako postoji. | Ponovno pokrenite skriptu za postavljanje; preuzima samo nedostajuću datoteku. |
@@ -197,7 +209,7 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | Slika, glazba ili `.blend` datoteka navedena u scenariju | Provjera navodi scenu, lik i putanju, ništa se ne renderira. | Stavite datoteku u `assets/` ili `input/` ili ispravite putanju u scenariju. |
 | Klip scene (`film/clips/`) | `assemble` navodi scene koje nedostaju i ništa ne montira. Ako se `render` prekine (vremensko ograničenje), gotove sličice ostaju spremljene i sljedeći poziv nastavlja odatle. | Ništa, agenti ponovno pozivaju `render`. |
 | Govor za film | `voices`/`render` se prekidaju porukom „Keine Sprachausgabe verfügbar“ (nema govora). Scene bez dijaloga i dalje rade. | Kao kod „govora“ iznad (na Windowsu `edge-tts` + `TTS_ENGINE=edge`). |
-| `cargo` (Rust, alat `rust_project`) | Alat se agentima ne prikazuje; `check_code` i dalje provjerava `.rs` datoteke ako postoji `rustc`. Samoprovjera (`selftest.py rust`) prikazuje FEHLT s naredbom za instalaciju. | Instalirajte Rust: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Zatim ponovno pokrenite PaperclipLite. |
+| `cargo` (Rust, alat `rust_project`) | Alat se agentima ne prikazuje; `check_code` i dalje provjerava `.rs` datoteke ako postoji `rustc`. Samoprovjera (`selftest.py rust`) prikazuje FEHLT s naredbom za instalaciju. | Instalirajte Rust: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Zatim ponovno pokrenite Hyperstead. |
 | bubblewrap pri izradi Rust programa (Pi/Linux) | `rust_project` ostaje skriven, isto kao `run_code`. | `./install.sh --run` |
 | `PCL_CARGO_UNSAFE=1` (Windows) | Windows nema izolaciju, zato `rust_project` bez prekidača ostaje skriven. S prekidačem laptop gradi bez izolacije. | Postavite ga samo ako znate rizik ([Rust programi](#-potpuna-izrada-rust-programa)), zatim ponovno pokrenite. |
 | `Cargo.toml` u Rust mapi | `rust_project` javlja „In … fehlt Cargo.toml“ i navodi datoteke koje agent prvo mora napraviti. | Ništa, agent ih pravi pomoću `write_code`. |
@@ -218,11 +230,13 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET` ili `ONEDRIVE_CLIENT_ID` | Usluga ostaje „nije postavljeno”, gumb „Prijava” ne postoji. | Registrirajte aplikaciju i unesite retke ([docs/cloud.md](docs/cloud.md)), ponovno pokrenite. |
 | Prijava kod Googlea/Microsofta (mapa `tokens/`) | Usluga stoji na „nije prijavljeno”. Prijenos javlja „još niste prijavljeni” odnosno „prijava je istekla” i ništa ne prenosi. | ☁️ Cloud → Prijava. Pri selidbi s Pi-ja na laptop jednostavno se ponovno prijavite na laptopu. |
 | Datoteka veća od 50 MB za Telegram | Telegram je ne prima. `/datei` je označava s ⚠️ i ne šalje je, agent dobiva napomenu. | Kao cilj odaberite Google Drive, OneDrive ili GitHub. |
-| `cloud_upload.py` (programska datoteka) | PaperclipLite se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
+| `cloud_upload.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 | `PCL_ALLOW_WERKSTATT=1` | Polje „Radionica” je sivo, nijedan agent ne dobiva `befehl` ni `nachruesten`. Sve ostalo radi kao i prije. | Dodajte redak u `.env`, ponovno pokrenite, označite polje kod agenta ([docs/werkstatt.md](docs/werkstatt.md)). |
 | Program koji je agentu potreban (npr. Node.js, Remotion, Python paket) | Agent s radionicom podnosi zahtjev za nadogradnju: CEO ga provjerava, vi dobivate ✅/❌ preko Telegrama i pod ✋ Odobrenja. Nakon vašeg „da” poslužitelj instalira i zadatak se nastavlja. Bez radionice agent samo navodi što nedostaje. | Pročitajte zahtjev i odlučite. Bez Telegrama samo preko weba. |
 | AI CEO-a (kod zahtjeva za nadogradnju) | Zahtjev stiže izravno vama uz napomenu „Nema CEO-a s AI” ili „CEO nije dostupan”. | Odlučite sami ili dodijelite CEO-u AI. |
-| `werkstatt.py` (programska datoteka) | PaperclipLite se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
+| `werkstatt.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
+| Servis `hyperstead` (Pi) | Nakon ažuriranja i dalje radi stari servis `paperclip-lite`, `systemctl … hyperstead` javlja "not found". | Jednom pokrenite `./install.sh --service`, on zamjenjuje stari servis. |
+| `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` ne pronalazi novu datoteku i prozor se zatvara s pogreškom. | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 
 ## Pristup s interneta
 
@@ -246,10 +260,10 @@ U `.env` dodajte: `TRUST_PROXY=1`, zatim ponovno pokrenite servis.
 ```bash
 # instalirajte cloudflared (vidi developers.cloudflare.com/cloudflare-one/connections/connect-networks)
 cloudflared tunnel login
-cloudflared tunnel create paperclip
-cloudflared tunnel route dns paperclip agents.vas-domen.de
+cloudflared tunnel create hyperstead
+cloudflared tunnel route dns hyperstead agents.vas-domen.de
 # ~/.cloudflared/config.yml:  ingress: - hostname: agents.vas-domen.de  service: http://127.0.0.1:8787
-cloudflared tunnel run paperclip
+cloudflared tunnel run hyperstead
 ```
 
 Dodatno se snažno preporučuje: stavite ispred **Cloudflare Access** (prijava e-poštom).
@@ -356,7 +370,7 @@ vrstom, zadatkom, brojevima tima i rezultatom. Lanac prava i izvješća ispod ra
 
 **Postavljanje Telegrama (oko 2 minute):**
 1. U Telegramu `@BotFather` → `/newbot` → kopirajte token → `.env`: `TELEGRAM_BOT_TOKEN=…`
-2. `sudo systemctl restart paperclip-lite`, novom botu pošaljite `/start` → on vam kaže vaš ID chata.
+2. `sudo systemctl restart hyperstead`, novom botu pošaljite `/start` → on vam kaže vaš ID chata.
 3. `.env`: upišite `TELEGRAM_CHAT_ID=…`, ponovno pokrenite servis. Na webu pod „Post“ postoji probna poruka.
 
 **Rad u Telegramu:**
@@ -432,7 +446,7 @@ mogu nastati troškovi; bilancu po agentu vidite na čvoru.
   što je radilo). One se prikazuju u panelu agenta pod „🧠 Gedächtnis“ (pamćenje); možete ih mijenjati ili brisati. Granica `PCL_MEMORY_CHARS`
   (4000); najstariji unosi prvi ispadaju. Svaka nova bilješka je u dnevniku revizije.
 
-## Ciljevi, odobrenja, upotreba (kao kod Paperclipa)
+## Ciljevi, odobrenja, upotreba
 
 - **🎯 Ciljevi**: ciljevi i podciljevi po projektu. Pri dodjeljivanju zadatka neobavezno birate cilj; delegirani zadaci ga nasljeđuju.
   Nadređeni vide ciljeve s napretkom u promptu, a CEO-ov kontrolni obilazak to izvješćuje. Označeno = ostvareno.
@@ -460,7 +474,7 @@ Radi bez interneta i bez ključeva (pružatelj `mock`, vlastita baza).
   **„Bei Post benachrichtigen“** (obavijesti u pošti) šalje svaki gotov rezultat zadatka na vrhu kao JSON na adresu. Vremensko ograničenje `PCL_CONN_TIMEOUT` (30 s).
 - **Ulaz:** uključite „Aufträge von außen“ (zadaci izvana), zatim `POST /hook/<projekt>/<ključ>` s `{"text": "…", "agent": "neobavezno"}`
   prima zadatak za nadređenog (npr. iz n8n, iOS prečaca ili DEXTER-a). Bez prijave; štiti ga samo ključ u adresi.
-  „Neuen Schlüssel“ (novi ključ) poništava staru adresu. Dostupna je samo onoliko koliko je dostupan i sam PaperclipLite (npr. samo u tailnetu).
+  „Neuen Schlüssel“ (novi ključ) poništava staru adresu. Dostupna je samo onoliko koliko je dostupan i sam Hyperstead (npr. samo u tailnetu).
 
 ## ☁️ Prijenos u oblak (GitHub, Google Drive, OneDrive, Telegram)
 
@@ -468,7 +482,7 @@ Radi bez interneta i bez ključeva (pružatelj `mock`, vlastita baza).
   `ONEDRIVE_CLIENT_ID`), korak po korak u [docs/cloud.md](docs/cloud.md) (na njemačkom). Kod Googlea i Microsofta se zatim prijavljujete u prozoru
   **☁️ Cloud**: prikazuje kod koji na mobitelu unesete na stranici Googlea odnosno Microsofta (radi bez HTTPS-a).
   Prijava se čuva u `tokens/` pokraj `.env`, nikad u bazi podataka.
-- **Ciljna mapa:** po projektu i usluzi u prozoru ☁️ Cloud (zadano `PaperclipLite/<ime projekta>`). Agenti smiju odabrati samo
+- **Ciljna mapa:** po projektu i usluzi u prozoru ☁️ Cloud (zadano `Hyperstead/<ime projekta>`). Agenti smiju odabrati samo
   podmapu ispod nje, npr. kada je navedete u zadatku.
 - **Sami prenesite:** 📁 Datoteke → ☁️ pokraj datoteke → odaberite cilj i mapu. Dobivate poveznicu.
 - **Agenti:** pravo **„Smije prenositi u oblak”** (postavljate samo vi). Alat `cloud_upload`; svaki prijenos čeka pod ✋ Odobrenja,
@@ -476,7 +490,7 @@ Radi bez interneta i bez ključeva (pružatelj `mock`, vlastita baza).
 - **Postavljanje s CEO-om:** pitajte glavnog šefa u 💬 Chatu, npr. „Pomozi mi postaviti GitHub”. On zna trenutačno stanje svake usluge i upute te vas vodi korak po korak. Tokene nikad ne pišete u chat, nego ih sami unosite u `.env`.
 - **Telegram:** `/datei` vam šalje datoteke do 50 MB na mobitel, samo kada kliknete ili odobrite.
 - GitHub: do 50 MB kao datoteka u repozitoriju, veće kao privitak izdanju `paperclip-ablage` (do 2 GB). Google Drive: samo mape i datoteke koje je
-  PaperclipLite sam napravio (pravo `drive.file`). OneDrive: bilo koja mapa. Testirano samo na simuliranim uslugama.
+  Hyperstead sam napravio (pravo `drive.file`). OneDrive: bilo koja mapa. Testirano samo na simuliranim uslugama.
 
 ## 🌐 Pravi preglednik i ▶ pokretanje koda
 
@@ -505,7 +519,7 @@ Agentu s pravima **„Darf programmieren“**, **„Darf Dateien schreiben“** 
 
 Paket dobivate u pošti ili pod **📁 Dateien** (pojedinačno ili u ZIP-u projekta). Ostale naredbe: `op=build`, `op=run` (s `args`, `stdin`).
 
-- **Za koji sustav?** Program u `programm/` odgovara računalu na kojem radi PaperclipLite: s Pi-ja Linux program (ARM),
+- **Za koji sustav?** Program u `programm/` odgovara računalu na kojem radi Hyperstead: s Pi-ja Linux program (ARM),
   s Windows laptopa `.exe`. Za drugi sustav sami pokrenite `cargo build --release` u mapi `quelle/`.
 - **Izolacija (Pi/Linux):** Izrada, testiranje i pokretanje idu u bubblewrapu kao `run_code`: bez interneta, bez `.env`, bez home mape,
   upisiva je samo mapa za izradu `.rust/` projekta. Internet ima samo `cargo fetch` (preuzima ovisnosti, ništa ne pokreće).
@@ -514,7 +528,7 @@ Paket dobivate u pošti ili pod **📁 Dateien** (pojedinačno ili u ZIP-u proje
   (testovi, `build.rs`) tada radi s vašim pravima i mogao bi čitati ili mijenjati datoteke na laptopu. API ključeve ne dobiva u
   okruženju. Uključite samo ako vjerujete agentima i njihovim modelima.
 - **Instalacija Rusta:** Pi `curl https://sh.rustup.rs -sSf | sh` (novije od `apt install cargo`), Windows `winget install Rustlang.Rustup`
-  i u instalaciji uzmite i „Visual Studio Build Tools (C++)“. Zatim ponovno pokrenite PaperclipLite i izvršite `selftest.py rust`.
+  i u instalaciji uzmite i „Visual Studio Build Tools (C++)“. Zatim ponovno pokrenite Hyperstead i izvršite `selftest.py rust`.
 - **Granice:** `PCL_CARGO_TIMEOUT` (900 s po koraku), `PCL_CARGO_MEM_MB` (3072, samo Linux), `PCL_CARGO_JOBS` (2), uvijek samo jedna
   Rust izrada istovremeno. Prva izrada na Pi-ju traje dugo, nakon toga cargo ponovno gradi samo ono što se promijenilo. Agent ima
   `PCL_MAX_TOOL_STEPS` (zadano 6) krugova alata po pokretanju; za veće programe pomaže veća vrijednost, npr. 12. Isključeno: `PCL_CARGO=0`.
@@ -572,7 +586,7 @@ pojavljuju u svim popisima pružatelja. Poslužitelj ih poziva bez shella, u pra
 
 ## Model nestao? Prebacite agente
 
-PaperclipLite svakih 6 sati (`PCL_MODEL_CHECK_HOURS`) provjerava postoje li modeli agenata još kod pružatelja i primjećuje i kada poziv javi „Modell nicht gefunden“ (model nije pronađen). Tada stiže Telegram poruka, zadatak pada uz jasnu napomenu, a u izborniku **⚠ Modelle** sve pogođene agente prebacujete na drugi model jednim klikom.
+Hyperstead svakih 6 sati (`PCL_MODEL_CHECK_HOURS`) provjerava postoje li modeli agenata još kod pružatelja i primjećuje i kada poziv javi „Modell nicht gefunden“ (model nije pronađen). Tada stiže Telegram poruka, zadatak pada uz jasnu napomenu, a u izborniku **⚠ Modelle** sve pogođene agente prebacujete na drugi model jednim klikom.
 
 ## Veliki timovi
 

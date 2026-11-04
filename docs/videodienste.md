@@ -1,4 +1,4 @@
-# KI-Videodienste in PaperclipLite
+# KI-Videodienste in Hyperstead
 
 Agenten mit dem Recht **Medien & Dokumente erstellen** können über diese Werkzeuge Videos und Ton erzeugen:
 

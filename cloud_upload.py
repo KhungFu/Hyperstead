@@ -210,7 +210,7 @@ def access_token(svc):
 # ------------------------------------------------------------------ GitHub
 def _gh_headers(extra=None):
     return {"Authorization": f"Bearer {env('GITHUB_UPLOAD_TOKEN')}", "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "PaperclipLite", **(extra or {})}
+            "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Hyperstead", **(extra or {})}
 
 
 def _gh_path(p):
@@ -229,7 +229,7 @@ def github_upload(path, folder, name):
     url = f"{GITHUB_API}/repos/{repo}/contents/{_gh_path(target)}"
     branch = env("GITHUB_UPLOAD_BRANCH")
     old = requests.get(url, headers=_gh_headers(), params={"ref": branch} if branch else None, timeout=TIMEOUT)
-    body = {"message": f"PaperclipLite: {target}", "content": base64.b64encode(path.read_bytes()).decode()}
+    body = {"message": f"Hyperstead: {target}", "content": base64.b64encode(path.read_bytes()).decode()}
     if branch:
         body["branch"] = branch
     if old.status_code == 200 and isinstance(old.json(), dict) and old.json().get("sha"):
@@ -245,8 +245,8 @@ def _github_release(repo, path, name, size):
     r = requests.get(f"{GITHUB_API}/repos/{repo}/releases/tags/{tag}", headers=_gh_headers(), timeout=TIMEOUT)
     if r.status_code == 404:
         r = _check(requests.post(f"{GITHUB_API}/repos/{repo}/releases", headers=_gh_headers(),
-                                 json={"tag_name": tag, "name": "PaperclipLite-Ablage",
-                                       "body": "Grosse Dateien aus PaperclipLite (ueber 50 MB)."}, timeout=TIMEOUT), "GitHub-Release")
+                                 json={"tag_name": tag, "name": "Hyperstead-Ablage",
+                                       "body": "Grosse Dateien aus Hyperstead (ueber 50 MB)."}, timeout=TIMEOUT), "GitHub-Release")
     rel = _check(r, "GitHub-Release").json()
     for a in rel.get("assets") or []:
         if a.get("name") == name:  # gleicher Name: alte Datei ersetzen

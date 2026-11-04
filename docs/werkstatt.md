@@ -10,7 +10,7 @@ meldet das Ergebnis zurück und der Mitarbeiter macht mit seiner Aufgabe weiter.
 
 ## Einschalten
 
-1. In der `.env` eintragen und PaperclipLite neu starten:
+1. In der `.env` eintragen und Hyperstead neu starten:
    ```
    PCL_ALLOW_WERKSTATT=1
    ```
@@ -71,7 +71,7 @@ Remotion ist laut seiner Lizenz für Einzelpersonen und kleine Firmen (bis 3 Mit
 
 - **Windows-UAC:** Manche winget-Installationen öffnen das Fenster „Darf diese App Änderungen vornehmen?“. Das muss jemand am Laptop
   bestätigen. Mit `--scope user` klappt es oft ohne.
-- **Pi/Linux:** `apt` braucht `sudo`. Läuft PaperclipLite ohne Passwort-freies sudo, schlägt die Installation fehl. Dann installierst du
+- **Pi/Linux:** `apt` braucht `sudo`. Läuft Hyperstead ohne Passwort-freies sudo, schlägt die Installation fehl. Dann installierst du
   das Programm selbst und der Mitarbeiter findet es danach.
 - **Was installiert ist, gilt für den ganzen Rechner** (bzw. bei npm/pip im Projektordner für dieses Projekt).
 - **Abo-Verbrauch:** Claude Code und Codex mit Werkzeugen verbrauchen mehr von deinem Abo als reine Textantworten.
@@ -86,7 +86,7 @@ Remotion ist laut seiner Lizenz für Einzelpersonen und kleine Firmen (bis 3 Mit
 | Meldung | Was tun |
 |---|---|
 | „Keine Werkstatt (Recht 'werkstatt' fehlt oder PCL_ALLOW_WERKSTATT ist aus)“ | `PCL_ALLOW_WERKSTATT=1` in `.env`, neu starten, Häkchen beim Agenten setzen. |
-| Häkchen ist grau | `PCL_ALLOW_WERKSTATT=1` fehlt oder PaperclipLite wurde nicht neu gestartet. |
+| Häkchen ist grau | `PCL_ALLOW_WERKSTATT=1` fehlt oder Hyperstead wurde nicht neu gestartet. |
 | Stufe 3 ist grau | `PCL_WERKSTATT_FREI=1` in `.env`. |
 | „Zugangsdaten … sind für Agenten gesperrt“ | Gewollt: Agenten dürfen `.env`, Tokens und Keys nie lesen. |
 | Antrag hängt bei „Der CEO prüft gerade …“ | Der CEO hat keine KI oder sie antwortet nicht. Du kannst trotzdem entscheiden. |

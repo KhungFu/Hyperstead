@@ -1,4 +1,4 @@
-# PaperclipLite
+# Hyperstead
 
 🌐 Diller: [Deutsch](README.md) · [English](README.en.md) · **Türkçe** · [Srpski](README.sr.md) · [Bosanski](README.bs.md) · [Hrvatski](README.hr.md)
 
@@ -9,7 +9,7 @@ Proje oluşturun, ajanları sürükleyip alana bırakın, bağlayın (patron →
 
 ## Kurulum
 
-PaperclipLite bir Python programıdır (Flask + SQLite) ve birçok sistemde çalışır. Birden çok kurulum
+Hyperstead bir Python programıdır (Flask + SQLite) ve birçok sistemde çalışır. Birden çok kurulum
 paralel çalışabilir; her birinin kendi şirketleri ve verileri vardır.
 
 | Sistem | Durum | Kılavuz |
@@ -19,7 +19,7 @@ paralel çalışabilir; her birinin kendi şirketleri ve verileri vardır.
 | macOS | test edilmedi, temel işlevler çalışmalı | aşağıda (elle) |
 | Kendi görüntü bilgisayarı (ör. ekran kartı olmayan eski bir dizüstü) | referans görselleriyle ücretsiz görseller | [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md) |
 
-Bir bilgisayardan diğerine taşıma: PaperclipLite'i durdurun ve `data.db`, `workspace/` klasörünü ve `.env` dosyasını kopyalayın
+Bir bilgisayardan diğerine taşıma: Hyperstead'i durdurun ve `data.db`, `workspace/` klasörünü ve `.env` dosyasını kopyalayın
 ([Pi → Windows örneği](docs/windows.md)).
 
 ### Raspberry Pi / Linux
@@ -27,7 +27,7 @@ Bir bilgisayardan diğerine taşıma: PaperclipLite'i durdurun ve `data.db`, `wo
 ```bash
 git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
 ./install.sh --service     # venv, bağımlılıklar, rastgele şifreli .env, systemd hizmeti
-nano .env                  # API anahtarlarını girin, ardından: sudo systemctl restart paperclip-lite
+nano .env                  # API anahtarlarını girin, ardından: sudo systemctl restart hyperstead
 ```
 
 Hizmet olmadan: `./install.sh` ve sonra `./venv/bin/python app.py` → http://127.0.0.1:8787.
@@ -36,13 +36,13 @@ Daha fazla özellik (video, OCR, derleyiciler, tarayıcı): `./install.sh --all`
 
 ### Windows
 
-PaperclipLite klasöründe PowerShell:
+Hyperstead klasöründe PowerShell:
 
 ```powershell
 git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
 powershell -ExecutionPolicy Bypass -File install.ps1
 notepad .env
-deploy\windows\paperclip-start.bat
+deploy\windows\hyperstead-start.bat
 ```
 
 Windows'ta eksik olanlar, otomatik başlatma ve Pi ile paralel çalışma: [docs/windows.md](docs/windows.md).
@@ -62,7 +62,7 @@ cp .env.example .env       # APP_TOKEN=<uzun şifre> girin, API anahtarlarını 
 
 ### Kendi bilgisayarınızda görseller
 
-Ev ağındaki bir bilgisayar (ekran kartı olmasa bile en az 8 GB RAM ile) PaperclipLite için referans görselleriyle
+Ev ağındaki bir bilgisayar (ekran kartı olmasa bile en az 8 GB RAM ile) Hyperstead için referans görselleriyle
 ücretsiz görseller üretebilir. `.env` dosyasında tam olarak bu iki satırı etkin bırakın (`#` olmadan yalnızca bir `IMAGE_PROVIDER=` satırı):
 
 ```
@@ -74,9 +74,9 @@ Kurulum: [docs/laptop-bildrechner.md](docs/laptop-bildrechner.md).
 
 ### Blender ile animasyon filmleri
 
-PaperclipLite'in çalıştığı bilgisayarda Blender kuruluysa, ajanlar çizgi film çeker: kendi sesi ve ağız hareketi olan karakterler,
+Hyperstead'in çalıştığı bilgisayarda Blender kuruluysa, ajanlar çizgi film çeker: kendi sesi ve ağız hareketi olan karakterler,
 sahneler, kamera, altyazı, sesli bitmiş film (`film` aracı, „🐶 Animationsstudio“ şirket şablonu).
-PaperclipLite Blender'ı kendisi bulamazsa `.env` dosyasına ekleyin:
+Hyperstead Blender'ı kendisi bulamazsa `.env` dosyasına ekleyin:
 
 ```
 BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.2\blender.exe
@@ -86,22 +86,22 @@ Kılavuz ve senaryo biçimi (Almanca): [docs/filmstudio.md](docs/filmstudio.md).
 
 ## İşletim: kim neyi, nerede, ne zaman, nasıl yapar
 
-**Kim:** Bunların hepsini bilgisayarın sahibi (siz) yapar, ajanlar değil. Komutlar PaperclipLite klasöründe çalışır: Pi'de terminalde (`cd ~/paperclip-lite`), Windows'ta PowerShell'de
+**Kim:** Bunların hepsini bilgisayarın sahibi (siz) yapar, ajanlar değil. Komutlar Hyperstead klasöründe çalışır: Pi'de terminalde (`cd ~/paperclip-lite`), Windows'ta PowerShell'de
 (`cd $HOME\paperclip-lite`, ya da klasörü nereye koyduysanız orada).
 
 ### Kısa genel bakış
 
 | Ne | Ne zaman | Raspberry Pi / Linux (hizmetle) | Windows |
 | --- | --- | --- | --- |
-| Başlatma | kurulumdan sonra, otomatik başlatma olmadan yeniden başlatmadan sonra | `sudo systemctl start paperclip-lite` | `deploy\windows\paperclip-start.bat` dosyasına çift tıklayın (pencereyi açık bırakın) |
-| Durdurma | taşımadan, yedeklemeden, güncellemeden önce | `sudo systemctl stop paperclip-lite` | başlatma penceresini kapatın (ya da içinde Ctrl+C) |
-| Yeniden başlatma | `.env` her değiştiğinde, güncellemeden sonra | `sudo systemctl restart paperclip-lite` | başlatma penceresini kapatın, `paperclip-start.bat` dosyasını yeniden çalıştırın |
-| Çalışıyor mu? | sorun olduğunda | `systemctl status paperclip-lite` | başlatma penceresi açık mı? Tarayıcı: <http://127.0.0.1:8787> |
-| Günlüğe bakma | hatalarda | `journalctl -u paperclip-lite -f` (Ctrl+C ile çıkılır) | başlatma penceresinde görünür |
+| Başlatma | kurulumdan sonra, otomatik başlatma olmadan yeniden başlatmadan sonra | `sudo systemctl start hyperstead` | `deploy\windows\hyperstead-start.bat` dosyasına çift tıklayın (pencereyi açık bırakın) |
+| Durdurma | taşımadan, yedeklemeden, güncellemeden önce | `sudo systemctl stop hyperstead` | başlatma penceresini kapatın (ya da içinde Ctrl+C) |
+| Yeniden başlatma | `.env` her değiştiğinde, güncellemeden sonra | `sudo systemctl restart hyperstead` | başlatma penceresini kapatın, `hyperstead-start.bat` dosyasını yeniden çalıştırın |
+| Çalışıyor mu? | sorun olduğunda | `systemctl status hyperstead` | başlatma penceresi açık mı? Tarayıcı: <http://127.0.0.1:8787> |
+| Günlüğe bakma | hatalarda | `journalctl -u hyperstead -f` (Ctrl+C ile çıkılır) | başlatma penceresinde görünür |
 | Güncelleme | yeni bir sürüm olduğunda (ör. birleştirilmiş bir pull request'ten sonra) | aşağıya bakın | aşağıya bakın |
 | Kontrol | kurulumdan, güncellemeden, yeni anahtarlardan sonra | `./venv/bin/python selftest.py` | `venv\Scripts\python.exe selftest.py` |
 | Anahtarlar / ayarlar | yeni anahtar, başka görsel sağlayıcısı | `nano .env`, sonra yeniden başlatın | `notepad .env`, sonra yeniden başlatın |
-| Yedekleme | düzenli olarak, taşımadan ve büyük güncellemelerden önce | `data.db`, `workspace/`, `.env` kopyalayın (önce durdurun) | PaperclipLite klasöründe aynısı |
+| Yedekleme | düzenli olarak, taşımadan ve büyük güncellemelerden önce | `data.db`, `workspace/`, `.env` kopyalayın (önce durdurun) | Hyperstead klasöründe aynısı |
 
 ### Güncelleme (yeni sürümü alma)
 
@@ -111,7 +111,7 @@ Kılavuz ve senaryo biçimi (Almanca): [docs/filmstudio.md](docs/filmstudio.md).
 cd ~/paperclip-lite
 git pull
 ./install.sh               # yalnızca requirements.txt değiştiyse gerekir; .env değişmez
-sudo systemctl restart paperclip-lite
+sudo systemctl restart hyperstead
 ./venv/bin/python selftest.py llm     # yapay zekâ sağlayıcılarının yanıt verdiğini kısaca kontrol edin
 ```
 
@@ -121,18 +121,30 @@ sudo systemctl restart paperclip-lite
 2. `git pull`
 3. Yalnızca paketler değiştiyse (ya da emin değilseniz): `powershell -ExecutionPolicy Bypass -File install.ps1`
    (mevcut `.env` değişmez).
-4. PaperclipLite'in siyah başlatma penceresini kapatın.
-5. `deploy\windows\paperclip-start.bat` dosyasını yeniden başlatın (çift tıklayın ya da PowerShell'e yazın).
+4. Hyperstead'in siyah başlatma penceresini kapatın.
+5. `deploy\windows\hyperstead-start.bat` dosyasını yeniden başlatın (çift tıklayın ya da PowerShell'e yazın).
 6. Kontrol: `venv\Scripts\python.exe selftest.py llm`
 
 `git pull` „local changes would be overwritten“ diyorsa, programın bir dosyasını kendiniz değiştirmişsiniz demektir.
 `git stash` değişikliği kenara koyar, ardından `git pull` komutunu tekrarlayın. Verileriniz (`data.db`, `workspace/`, `.env`)
 bundan asla etkilenmez, çünkü Git bunları bilmez.
 
+### PaperclipLite'tan Hyperstead'e geçiş (bir kez)
+
+Programın adı artık **Hyperstead**. Veriler, `.env`, klasörler ve tüm `PCL_*` ayarları olduğu gibi kalır.
+Yalnızca servisin ve başlatma dosyasının adı değişti.
+
+- **Pi:** `cd ~/paperclip-lite && git pull && ./install.sh --service`. Kurulum betiği eski `paperclip-lite`
+  servisini durdurur, kaldırır ve `hyperstead` servisini başlatır. Bundan sonra komutları `hyperstead` ile kullanın.
+- **Windows:** `git pull`, ardından `deploy\windows\hyperstead-start.bat` dosyasını başlatın. `paperclip-start.bat`
+  için eski kısayollar çalışmaya devam eder, dosya artık `hyperstead-start.bat` dosyasını çağırır.
+- Klasörün adı `paperclip-lite` olarak kalabilir. GitHub reposunu yeniden adlandırırsanız GitHub eski adresi yönlendirir.
+- Bulut yükleme: yeni projeler varsayılan olarak `Hyperstead/<proje>` klasörüne yükler. Kendi belirlediğiniz hedef klasörler kalır.
+
 ### Otomatik başlatma
 
 - **Pi:** `./install.sh --service` hizmeti kurar; böylece her açılışta kendiliğinden başlar.
-- **Windows:** Win+R tuşlarına basın, `shell:startup` yazın ve oraya `deploy\windows\paperclip-start.bat` dosyasının bir kısayolunu koyun
+- **Windows:** Win+R tuşlarına basın, `shell:startup` yazın ve oraya `deploy\windows\hyperstead-start.bat` dosyasının bir kısayolunu koyun
   (kullanıyorsanız `bildrechner-start.bat` dosyasının da). Bunun için Windows'un kendiliğinden oturum açması gerekir
   ([docs/windows.md](docs/windows.md), bölüm 4).
 
@@ -140,7 +152,7 @@ bundan asla etkilenmez, çünkü Git bunları bilmez.
 
 - Her ayar tam olarak bir kez, başında `#` olmadan yazılır. `#` ile başlayan satırlar kapalıdır. Yinelenen satırlarda
   ilki geçerlidir.
-- Her değişiklikten sonra PaperclipLite'i yeniden başlatın, yoksa eski durum geçerli kalır.
+- Her değişiklikten sonra Hyperstead'i yeniden başlatın, yoksa eski durum geçerli kalır.
 - Anahtarları asla sohbetlere, ekran görüntülerine ya da depoya kopyalamayın. Bir anahtar bir yere yanlışlıkla düştüyse: sağlayıcıda iptal edin ve yenisini girin.
 - Sonra `selftest.py` ile kontrol edin. Tek tek alanlar: `selftest.py llm`, `web`, `telegram`, `media`, `ocr`, `code`.
 
@@ -157,15 +169,15 @@ bundan asla etkilenmez, çünkü Git bunları bilmez.
 
 - **Nerede:** görselleri üreten bilgisayarda (ör. dizüstü), klasör `C:\bildrechner`.
 - **Ne zaman:** ajanların görsel üretmesi gerektiği sürece çalışmalı.
-- **Nasıl:** Kurulum bir kez yapılır: PaperclipLite klasöründe PowerShell içinde
+- **Nasıl:** Kurulum bir kez yapılır: Hyperstead klasöründe PowerShell içinde
   `powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1` (program ve modelleri indirir).
-- **Nasıl çalıştırılır:** `C:\bildrechner\bildrechner-start.bat` dosyasını başlatın, pencereyi açık bırakın. PaperclipLite'in `.env` dosyasında
-  `IMAGE_PROVIDER=sdcpp` ve `SDCPP_URL=...` ([kılavuz](docs/laptop-bildrechner.md)), ardından PaperclipLite'i yeniden başlatın.
+- **Nasıl çalıştırılır:** `C:\bildrechner\bildrechner-start.bat` dosyasını başlatın, pencereyi açık bırakın. Hyperstead'in `.env` dosyasında
+  `IMAGE_PROVIDER=sdcpp` ve `SDCPP_URL=...` ([kılavuz](docs/laptop-bildrechner.md)), ardından Hyperstead'i yeniden başlatın.
 
 ### Film stüdyosu (kullanılıyorsa)
 
-- **Nerede:** Blender'ın kurulu olduğu bilgisayarda (ör. dizüstü). `film` aracını kullanan şirket **bu** PaperclipLite kurulumunda çalışmalıdır.
-- **Ne zaman:** Blender'ın açık olması gerekmez, PaperclipLite onu her sahne için arka planda başlatır ve yeniden kapatır.
+- **Nerede:** Blender'ın kurulu olduğu bilgisayarda (ör. dizüstü). `film` aracını kullanan şirket **bu** Hyperstead kurulumunda çalışmalıdır.
+- **Ne zaman:** Blender'ın açık olması gerekmez, Hyperstead onu her sahne için arka planda başlatır ve yeniden kapatır.
 - **Kontrol:** `venv\Scripts\python.exe selftest.py film` (Windows) ya da `./venv/bin/python selftest.py film`.
 - **Ne kadar sürer:** 640×360 ve saniyede 12 karede, dizüstüne göre 10 saniyelik film başına yaklaşık 1 ila 5 dakika. Blender hiçbir zaman görsel bilgisayarıyla aynı anda çalışmaz.
 
@@ -181,10 +193,10 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 
 | Eksik | Sistem ne yapar | Siz ne yaparsınız |
 | --- | --- | --- |
-| `.env` | PaperclipLite anahtarsız ve şifresiz başlar; yalnızca bu bilgisayardan erişilebilir. `HOST=0.0.0.0` ile `APP_TOKEN` boş olduğu sürece başlatma iptal edilir. | `./install.sh` (Pi) ya da `install.ps1` (Windows) rastgele şifreli bir tane oluşturur. |
+| `.env` | Hyperstead anahtarsız ve şifresiz başlar; yalnızca bu bilgisayardan erişilebilir. `HOST=0.0.0.0` ile `APP_TOKEN` boş olduğu sürece başlatma iptal edilir. | `./install.sh` (Pi) ya da `install.ps1` (Windows) rastgele şifreli bir tane oluşturur. |
 | `data.db` | Boş olarak yeniden oluşturulur. Şirketler, görevler ve gönderiler kaybolur. | Önce yedekleyin (İşletim bölümüne bakın). Yalnızca bir yedekten geri kopyalayın. |
 | `.env` içindeki API anahtarı | Sağlayıcı selbsttest'te FEHLT olarak gösterilir ve ajanlar kullanmaz. Girilmiş ama geçersizse: HTTP 401 ile FEHLER. | Anahtarı girin ya da satırı `#` ile kapatın. |
-| `SDCPP_URL` (`IMAGE_PROVIDER=sdcpp` ile) | Görsel istekleri „SDCPP_URL fehlt“ (eksik) hatasıyla başarısız olur. `IMAGE_FALLBACK=pollinations` ile referanssız, ücretsiz bir yedek görsel üretilir ve sonuçta bir not yer alır. | `.env` dosyasına satırı ekleyin, PaperclipLite'i yeniden başlatın. |
+| `SDCPP_URL` (`IMAGE_PROVIDER=sdcpp` ile) | Görsel istekleri „SDCPP_URL fehlt“ (eksik) hatasıyla başarısız olur. `IMAGE_FALLBACK=pollinations` ile referanssız, ücretsiz bir yedek görsel üretilir ve sonuçta bir not yer alır. | `.env` dosyasına satırı ekleyin, Hyperstead'i yeniden başlatın. |
 | Görsel bilgisayarına ulaşılamıyor (dizüstü kapalı, güvenlik duvarı, yanlış IP) | Yukarıdaki gibi: „Bildrechner … nicht erreichbar“ (erişilemiyor) hatası; yedekle bir yedek görsel. | Dizüstünü açın, `bildrechner-start.bat` dosyasını başlatın, IP'yi ve güvenlik duvarını kontrol edin. |
 | `sd-server.exe` (Windows, görsel bilgisayarı) | `bildrechner-start.bat` „sd-server.exe fehlt“ (eksik) gösterir ve hiçbir şey başlatmaz. | `deploy\windows\bildrechner-einrichten.ps1` dosyasını çalıştırın. |
 | Model dosyası (Windows, görsel bilgisayarı) | Başlatma dosyası eksik dosyayı adıyla belirtir ve başlamaz. Yalnızca büyük dil modeli (`Qwen3-4B-Q4_K_M.gguf`) eksikse ve daha küçüğü varsa, onu kullanır. | Kurulum betiğini yeniden çalıştırın; yalnızca eksik dosyayı indirir. |
@@ -196,7 +208,7 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | Senaryoda adı geçen görsel, müzik ya da `.blend` dosyası | Kontrol sahneyi, karakteri ve yolu bildirir, hiçbir şey render edilmez. | Dosyayı `assets/` ya da `input/` klasörüne koyun veya senaryodaki yolu düzeltin. |
 | Bir sahnenin klibi (`film/clips/`) | `assemble` eksik sahneleri bildirir ve kurgu yapmaz. `render` yarıda kalırsa (zaman sınırı), biten kareler korunur ve sonraki çağrı oradan devam eder. | Hiçbir şey, ajanlar `render` komutunu yeniden çağırır. |
 | Film için sesli okuma | `voices`/`render`, „Keine Sprachausgabe verfügbar“ (sesli okuma yok) ile durur. Hiç diyaloğu olmayan sahneler yine çalışır. | Yukarıdaki „sesli okuma“ satırındaki gibi (Windows'ta `edge-tts` + `TTS_ENGINE=edge`). |
-| `cargo` (Rust, `rust_project` aracı) | Araç ajanlara gösterilmez; `rustc` varsa `check_code` `.rs` dosyalarını denetlemeye devam eder. Selbsttest (`selftest.py rust`) kurulum komutuyla FEHLT gösterir. | Rust kurun: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Ardından PaperclipLite'ı yeniden başlatın. |
+| `cargo` (Rust, `rust_project` aracı) | Araç ajanlara gösterilmez; `rustc` varsa `check_code` `.rs` dosyalarını denetlemeye devam eder. Selbsttest (`selftest.py rust`) kurulum komutuyla FEHLT gösterir. | Rust kurun: Pi `curl https://sh.rustup.rs -sSf \| sh`, Windows `winget install Rustlang.Rustup`. Ardından Hyperstead'ı yeniden başlatın. |
 | Rust derlerken bubblewrap (Pi/Linux) | `rust_project`, tıpkı `run_code` gibi gizli kalır. | `./install.sh --run` |
 | `PCL_CARGO_UNSAFE=1` (Windows) | Windows'ta yalıtım yoktur, bu yüzden anahtar olmadan `rust_project` gizli kalır. Anahtarla dizüstü bilgisayar yalıtımsız derler. | Yalnızca riski biliyorsanız ayarlayın ([Rust programları](#-rust-programlarını-eksiksiz-derleme)), sonra yeniden başlatın. |
 | Rust klasöründe `Cargo.toml` | `rust_project` "In … fehlt Cargo.toml" bildirir ve ajanın önce oluşturması gereken dosyaları adlandırır. | Hiçbir şey, ajan bunları `write_code` ile oluşturur. |
@@ -217,11 +229,13 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | `GDRIVE_CLIENT_ID`/`GDRIVE_CLIENT_SECRET` veya `ONEDRIVE_CLIENT_ID` | Hizmet "kurulmamış" kalır, "Oturum aç" düğmesi görünmez. | Uygulamayı kaydedin ve satırları girin ([docs/cloud.md](docs/cloud.md)), yeniden başlatın. |
 | Google/Microsoft oturumu (`tokens/` klasörü) | Hizmet "oturum açılmamış" görünür. Yükleme "henüz oturum açılmadı" ya da "oturumun süresi doldu" der ve hiçbir şey yüklemez. | ☁️ Cloud → Oturum aç. Pi'den dizüstüne taşırken dizüstünde yeniden oturum açın. |
 | Telegram için 50 MB üstü dosya | Telegram kabul etmez. `/datei` dosyayı ⚠️ ile işaretler ve göndermez, ajan bir uyarı alır. | Hedef olarak Google Drive, OneDrive veya GitHub seçin. |
-| `cloud_upload.py` (program dosyası) | PaperclipLite başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| `cloud_upload.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 | `PCL_ALLOW_WERKSTATT=1` | “Atölye” onay kutusu gri olur, hiçbir ajan `befehl` veya `nachruesten` almaz. Diğer her şey eskisi gibi çalışır. | Satırı `.env` dosyasına ekleyin, yeniden başlatın, ajanda kutuyu işaretleyin ([docs/werkstatt.md](docs/werkstatt.md)). |
 | Bir ajanın ihtiyaç duyduğu program (ör. Node.js, Remotion, bir Python paketi) | Atölyesi olan ajan bir kurulum talebi oluşturur: CEO kontrol eder, siz Telegram’da ve ✋ Onaylar altında ✅/❌ alırsınız. Onayınızdan sonra sunucu kurar ve görev devam eder. Atölye yoksa ajan yalnızca neyin eksik olduğunu yazar. | Talebi okuyup karar verin. Telegram yoksa yalnızca web üzerinden. |
 | CEO’nun yapay zekâsı (kurulum talebinde) | Talep “Yapay zekâlı CEO yok” veya “CEO’ya ulaşılamıyor” notuyla doğrudan size gelir. | Kendiniz karar verin veya CEO’ya bir yapay zekâ atayın. |
-| `werkstatt.py` (program dosyası) | PaperclipLite başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| `werkstatt.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| `hyperstead` servisi (Pi) | Güncellemeden sonra eski `paperclip-lite` servisi hâlâ çalışır, `systemctl … hyperstead` "not found" der. | `./install.sh --service` komutunu bir kez çalıştırın, eski servisi değiştirir. |
+| `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` yeni dosyayı bulamaz ve pencere hata mesajıyla kapanır. | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 
 ## İnternetten erişim
 
@@ -245,10 +259,10 @@ Tailscale'i telefonunuza/dizüstünüze de kurun, sonra gösterilen `https://dex
 ```bash
 # cloudflared kurun (bkz. developers.cloudflare.com/cloudflare-one/connections/connect-networks)
 cloudflared tunnel login
-cloudflared tunnel create paperclip
-cloudflared tunnel route dns paperclip agents.sizin-alaniniz.de
+cloudflared tunnel create hyperstead
+cloudflared tunnel route dns hyperstead agents.sizin-alaniniz.de
 # ~/.cloudflared/config.yml:  ingress: - hostname: agents.sizin-alaniniz.de  service: http://127.0.0.1:8787
-cloudflared tunnel run paperclip
+cloudflared tunnel run hyperstead
 ```
 
 Buna ek olarak şiddetle önerilir: önüne **Cloudflare Access** (e-posta girişi) koyun.
@@ -350,7 +364,7 @@ tür, görev, ekip rakamları ve sonuçla. Altındaki hak ve rapor zinciri eskis
 
 **Telegram'ı kurma (yaklaşık 2 dakika):**
 1. Telegram'da `@BotFather` → `/newbot` → belirteci kopyalayın → `.env`: `TELEGRAM_BOT_TOKEN=…`
-2. `sudo systemctl restart paperclip-lite`, yeni bota `/start` yazın → sohbet kimliğinizi size söyler.
+2. `sudo systemctl restart hyperstead`, yeni bota `/start` yazın → sohbet kimliğinizi size söyler.
 3. `.env`: `TELEGRAM_CHAT_ID=…` girin, hizmeti yeniden başlatın. Web'de „Post“ altında bir test mesajı vardır.
 
 **Telegram'da kullanım:**
@@ -426,7 +440,7 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
   işe yarayan şeyler). Bunlar ajan panelinde „🧠 Gedächtnis“ altında görünür; değiştirebilir ya da temizleyebilirsiniz. Sınır `PCL_MEMORY_CHARS`
   (4000); en eski kayıtlar önce çıkar. Her yeni not denetim günlüğündedir.
 
-## Hedefler, onaylar, kullanım (Paperclip gibi)
+## Hedefler, onaylar, kullanım
 
 - **🎯 Hedefler**: proje başına hedefler ve alt hedefler. Bir görev atarken isteğe bağlı olarak hedefi seçersiniz; devredilen görevler onu devralır.
   Patronlar hedefleri ilerlemeyle birlikte istemde görür, CEO'nun kontrol turu bunu raporlar. İşaretlenmesi = ulaşıldı.
@@ -454,7 +468,7 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
   **„Bei Post benachrichtigen“** (gönderide bildir), üst düzey bir görevin her biten sonucunu JSON olarak adrese yollar. Zaman sınırı `PCL_CONN_TIMEOUT` (30 sn).
 - **Giriş:** „Aufträge von außen“ (dışarıdan görevler) açılırsa `POST /hook/<proje>/<anahtar>` ile `{"text": "…", "agent": "isteğe bağlı"}` gönderilerek
   patron için bir görev kabul edilir (ör. n8n, iOS kısayollarından ya da DEXTER'dan). Giriş gerektirmez; yalnızca adresteki anahtarla korunur.
-  „Neuen Schlüssel“ (yeni anahtar) eski adresi geçersiz kılar. Adrese yalnızca PaperclipLite'in kendisi kadar erişilebilir (ör. yalnızca tailnet içinde).
+  „Neuen Schlüssel“ (yeni anahtar) eski adresi geçersiz kılar. Adrese yalnızca Hyperstead'in kendisi kadar erişilebilir (ör. yalnızca tailnet içinde).
 
 ## ☁️ Bulut yükleme (GitHub, Google Drive, OneDrive, Telegram)
 
@@ -462,7 +476,7 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
   `ONEDRIVE_CLIENT_ID`), adım adım [docs/cloud.md](docs/cloud.md) içinde (Almanca). Google ve Microsoft için ardından **☁️ Cloud**
   penceresinde oturum açarsınız: bir kod gösterir, bu kodu telefonunuzda Google ya da Microsoft sayfasına girersiniz (HTTPS olmadan çalışır).
   Oturum `.env` dosyasının yanındaki `tokens/` klasöründe durur, asla veritabanında değil.
-- **Hedef klasör:** ☁️ Cloud penceresinde proje ve hizmet başına (varsayılan `PaperclipLite/<proje adı>`). Ajanlar yalnızca bunun altında
+- **Hedef klasör:** ☁️ Cloud penceresinde proje ve hizmet başına (varsayılan `Hyperstead/<proje adı>`). Ajanlar yalnızca bunun altında
   bir alt klasör seçebilir, örneğin siz görevde bir klasör adı verdiğinizde.
 - **Kendiniz yükleme:** 📁 Dosyalar → dosyanın yanındaki ☁️ → hedef ve klasör seçin. Bağlantıyı alırsınız.
 - **Ajanlar:** **"Buluta yükleyebilir"** yetkisi (yalnızca siz verirsiniz). Araç `cloud_upload`; her yükleme ✋ Onaylar altında bekler,
@@ -470,7 +484,7 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
 - **CEO ile kurulum:** 💬 Sohbet'te en üst yöneticiye sorun, örneğin "GitHub'ı kurmama yardım et". Her hizmetin güncel durumunu ve kılavuzu bilir, sizi adım adım yönlendirir. Token'ları asla sohbete yazmazsınız, kendiniz `.env` dosyasına girersiniz.
 - **Telegram:** `/datei` 50 MB'a kadar dosyaları telefonunuza gönderir, yalnızca siz tıkladığınızda ya da onayladığınızda.
 - GitHub: 50 MB'a kadar repoda dosya olarak, daha büyükler `paperclip-ablage` sürümüne ek olarak (2 GB'a kadar). Google Drive: yalnızca
-  PaperclipLite'ın kendisinin oluşturduğu klasör ve dosyalar (`drive.file` yetkisi). OneDrive: her klasör. Yalnızca taklit hizmetlere karşı test edildi.
+  Hyperstead'ın kendisinin oluşturduğu klasör ve dosyalar (`drive.file` yetkisi). OneDrive: her klasör. Yalnızca taklit hizmetlere karşı test edildi.
 
 ## 🌐 Gerçek tarayıcı ve ▶ kod çalıştırma
 
@@ -498,7 +512,7 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
 
 Paketi gelen kutusunda ya da **📁 Dateien** altında (tek dosya ya da proje ZIP'inde) alırsınız. Diğer komutlar: `op=build`, `op=run` (`args`, `stdin` ile).
 
-- **Hangi sistem için?** `programm/` içindeki program, PaperclipLite'ın çalıştığı bilgisayara uyar: Pi'den bir Linux programı (ARM),
+- **Hangi sistem için?** `programm/` içindeki program, Hyperstead'ın çalıştığı bilgisayara uyar: Pi'den bir Linux programı (ARM),
   Windows dizüstünden bir `.exe`. Başka bir sistem için `quelle/` klasöründe kendiniz `cargo build --release` çalıştırın.
 - **Yalıtım (Pi/Linux):** Derleme, test ve çalıştırma `run_code` gibi bubblewrap içinde olur: internet yok, `.env` yok, ev klasörü yok,
   yalnızca projenin derleme klasörü `.rust/` yazılabilir. Yalnızca `cargo fetch` (bağımlılıkları indirir, hiçbir şey çalıştırmaz) internete erişir.
@@ -507,7 +521,7 @@ Paketi gelen kutusunda ya da **📁 Dateien** altında (tek dosya ya da proje ZI
   kodu (testler, `build.rs`) o zaman sizin haklarınızla çalışır ve dizüstündeki dosyaları okuyabilir ya da değiştirebilir. Ortamında API anahtarlarını
   almaz. Yalnızca ajanlara ve modellerine güveniyorsanız açın.
 - **Rust kurulumu:** Pi `curl https://sh.rustup.rs -sSf | sh` (`apt install cargo`'dan daha yeni), Windows `winget install Rustlang.Rustup`
-  ve kurulumda "Visual Studio Build Tools (C++)" seçeneğini de alın. Ardından PaperclipLite'ı yeniden başlatın ve `selftest.py rust` çalıştırın.
+  ve kurulumda "Visual Studio Build Tools (C++)" seçeneğini de alın. Ardından Hyperstead'ı yeniden başlatın ve `selftest.py rust` çalıştırın.
 - **Sınırlar:** `PCL_CARGO_TIMEOUT` (adım başına 900 sn), `PCL_CARGO_MEM_MB` (3072, yalnızca Linux), `PCL_CARGO_JOBS` (2), aynı anda yalnızca
   bir Rust derlemesi. Pi'deki ilk derleme uzun sürer, sonra cargo yalnızca değişenleri yeniden derler. Bir ajanın çalışma başına `PCL_MAX_TOOL_STEPS`
   (varsayılan 6) araç turu vardır; büyük programlar için daha yüksek bir değer, ör. 12, yardımcı olur. Kapatmak: `PCL_CARGO=0`.
@@ -565,7 +579,7 @@ tüm sağlayıcı listelerinde görünür. Sunucu bunları bir kabuk olmadan, bo
 
 ## Model gitti mi? Ajanları değiştirin
 
-PaperclipLite her 6 saatte bir (`PCL_MODEL_CHECK_HOURS`) ajanların modellerinin sağlayıcıda hâlâ var olup olmadığını kontrol eder ve bir çağrı „Modell nicht gefunden“ (model bulunamadı) bildirdiğinde de fark eder. O zaman bir Telegram mesajı gelir, görev açık bir notla başarısız olur ve **⚠ Modelle** (modeller) menüsünde etkilenen tüm ajanları tek tıkla başka bir modele çevirirsiniz.
+Hyperstead her 6 saatte bir (`PCL_MODEL_CHECK_HOURS`) ajanların modellerinin sağlayıcıda hâlâ var olup olmadığını kontrol eder ve bir çağrı „Modell nicht gefunden“ (model bulunamadı) bildirdiğinde de fark eder. O zaman bir Telegram mesajı gelir, görev açık bir notla başarısız olur ve **⚠ Modelle** (modeller) menüsünde etkilenen tüm ajanları tek tıkla başka bir modele çevirirsiniz.
 
 ## Büyük ekipler
 

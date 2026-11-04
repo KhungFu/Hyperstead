@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PaperclipLite - Agenten-Team als Knoten-Editor (Self-hosted, Raspberry-Pi-tauglich)
+Hyperstead - Agenten-Team als Knoten-Editor (Self-hosted, Raspberry-Pi-tauglich)
 
 Start:  python3 app.py        ->  http://127.0.0.1:8787
 Keys:   in .env (siehe .env.example), mehrere Keys pro Anbieter mit Komma = Rotation
@@ -943,7 +943,7 @@ def _conn_headers(c):
 def conn_request(c, data):
     """Fuehrt den Aufruf aus. Adresse und Kopfzeilen legt nur der Besitzer fest, der Agent bestimmt nur data."""
     data = data if isinstance(data, (dict, list)) else ({"text": str(data)} if data not in (None, "") else {})
-    kw = {"headers": {"User-Agent": "PaperclipLite", **_conn_headers(c)}, "timeout": CONN_TIMEOUT, "allow_redirects": False, "stream": True}
+    kw = {"headers": {"User-Agent": "Hyperstead", **_conn_headers(c)}, "timeout": CONN_TIMEOUT, "allow_redirects": False, "stream": True}
     if c["method"] == "GET":
         kw["params"] = {str(k): v if isinstance(v, (str, int, float)) else json.dumps(v, ensure_ascii=False)
                         for k, v in (data.items() if isinstance(data, dict) else [])}
@@ -996,13 +996,13 @@ def cloud_ready():
 
 
 def cloud_folders(pid):
-    """Zielordner je Dienst fuer dieses Projekt (legt nur der Besitzer fest). Standard: PaperclipLite/<Projekt>."""
+    """Zielordner je Dienst fuer dieses Projekt (legt nur der Besitzer fest). Standard: Hyperstead/<Projekt>."""
     try:
         f = json.loads(get_setting(f"cloud:{pid}", "") or "{}")
     except ValueError:
         f = {}
     p = q1("SELECT name, folder FROM projects WHERE id=?", (pid,)) or {"name": str(pid), "folder": ""}
-    dflt = {"gdrive": f"PaperclipLite/{p['name']}", "onedrive": f"PaperclipLite/{p['name']}", "github": p["folder"] or str(pid)}
+    dflt = {"gdrive": f"Hyperstead/{p['name']}", "onedrive": f"Hyperstead/{p['name']}", "github": p["folder"] or str(pid)}
     return {s: cloud.clean_folder(f[s]) if isinstance(f.get(s), str) else cloud.clean_folder(dflt[s]) for s in cloud.LABELS}
 
 
@@ -1709,7 +1709,7 @@ def review_prompt(t, child_tasks):
     return "\n\n".join(parts)
 
 
-# --------------------------------------------- Freigabe-Schranken (wie Paperclip-"Board")
+# --------------------------------------------- Freigabe-Schranken
 GATES_DEFAULT = {"plan": False, "recruit": False}
 
 
@@ -2488,7 +2488,7 @@ def model_check_and_notify():
     lines = [f"• {p} / {m}: {', '.join(n[:3])}{' …' if len(n) > 3 else ''} ({len(n)})" for (p, m), n in groups.items()]
     log("model_gone", "; ".join(f"{p}/{m}" for (p, m) in groups))
     tg_notify("⚠️ Modell nicht mehr verfügbar – diese Agenten können nicht mehr arbeiten:\n" + "\n".join(lines)
-              + "\n\nIn PaperclipLite: Menü „⚠ Modelle“ → auf ein anderes umstellen.")
+              + "\n\nIn Hyperstead: Menü „⚠ Modelle“ → auf ein anderes umstellen.")
 
 
 def inbox_arrived(t):
@@ -2629,7 +2629,7 @@ def tg_notify_post(tid, chats=None):
     tg_notify(text, tid, buttons, chats)
 
 
-HELP_DE = ("PaperclipLite – so geht's:\n"
+HELP_DE = ("Hyperstead – so geht's:\n"
            "• Einfach schreiben = neuer Auftrag an den Chef (mit „@Name text“ an einen bestimmten Agenten)\n"
            "• Auf eine Post-Nachricht antworten = Auftrag neu bearbeiten (dein Text ist die Anweisung)\n"
            "• Antwort „ok“ oder Button ✅ = als erledigt markieren\n"
@@ -2870,7 +2870,7 @@ def tg_handle(u):
     if chat not in TG_CHATS:
         if cmd == "/start":
             tg_send_now(chat, f"Deine Chat-ID ist {chat}.\nTrage sie in .env ein: TELEGRAM_CHAT_ID={chat}\n"
-                              "Danach PaperclipLite neu starten.")
+                              "Danach Hyperstead neu starten.")
         elif _tg_denied.get(chat, 0) < 5:
             _tg_denied[chat] = _tg_denied.get(chat, 0) + 1
             log("telegram_denied", f"unbekannter Chat {chat}")
@@ -3392,14 +3392,14 @@ def is_https():
 _fails = {}  # ip -> [fehlversuche, fensterstart, gesperrt_bis]
 
 LOGIN_HTML = """<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>PaperclipLite – Login</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Hyperstead – Login</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0b0c;color:#e8e8ea;
 font:15px system-ui,sans-serif}form{background:#111113;border:1px solid #27272b;border-radius:14px;padding:28px;width:min(340px,90vw)}
 .logo{width:34px;height:34px;border-radius:10px;background:#f97316;display:grid;place-items:center;font-weight:700;color:#fff;margin-bottom:14px}
 input{width:100%;box-sizing:border-box;margin:10px 0;padding:10px;border-radius:8px;border:1px solid #27272b;background:#0b0b0c;color:inherit;font:inherit}
 button{width:100%;padding:10px;border:0;border-radius:8px;background:#f97316;color:#fff;font:inherit;cursor:pointer}
 .err{color:#ff8a8a;font-size:13px;min-height:18px}</style></head><body>
-<form method="post" action="/login"><div class="logo">P</div><b>PaperclipLite</b>
+<form method="post" action="/login"><div class="logo">H</div><b>Hyperstead</b>
 <input type="password" name="password" placeholder="Passwort" autofocus autocomplete="current-password">
 <div class="err">__MSG__</div><button>Anmelden</button></form></body></html>"""
 
@@ -4094,7 +4094,7 @@ def api_connection_test(cid):
     c = q1("SELECT * FROM connections WHERE id=?", (cid,))
     if not c:
         abort(404)
-    ok, out = conn_request(c, (request.get_json(force=True) or {}).get("data") or {"test": True, "von": "PaperclipLite"})
+    ok, out = conn_request(c, (request.get_json(force=True) or {}).get("data") or {"test": True, "von": "Hyperstead"})
     log("connection_test", f"{c['name']}: {out.splitlines()[0] if out else ''}", c["project_id"])
     return jsonify({"ok": ok, "output": out[:3000]})
 
@@ -4302,7 +4302,7 @@ def api_inbox_rework(tid):
 def api_telegram_test():
     if not (TG_TOKEN and TG_CHATS):
         abort(400, "Telegram ist nicht eingerichtet (TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID in .env).")
-    tg_notify("✅ PaperclipLite ist verbunden. Schreib mir einen Auftrag oder /hilfe.")
+    tg_notify("✅ Hyperstead ist verbunden. Schreib mir einen Auftrag oder /hilfe.")
     return jsonify({"ok": True})
 
 
@@ -4638,13 +4638,13 @@ def chat_attachment_block(pid, files, limit, with_images):
 CLOUD_GUIDE = {
     "github": ("1) github.com: + -> New repository, Name z. B. paperclip-ablage, Private, 'Add a README file' anhaken, Create. "
                "2) Profilbild -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens -> Generate new token: "
-               "Name PaperclipLite, Repository access 'Only select repositories' = das Ablage-Repo, Permissions -> Contents: Read and write. "
+               "Name Hyperstead, Repository access 'Only select repositories' = das Ablage-Repo, Permissions -> Contents: Read and write. "
                "3) In .env: GITHUB_UPLOAD_TOKEN=github_pat_... und GITHUB_UPLOAD_REPO=besitzer/paperclip-ablage. NICHT das Repo paperclip-lite nehmen."),
-    "gdrive": ("1) console.cloud.google.com: neues Projekt PaperclipLite. 2) APIs & Dienste -> Bibliothek -> Google Drive API aktivieren. "
+    "gdrive": ("1) console.cloud.google.com: neues Projekt Hyperstead. 2) APIs & Dienste -> Bibliothek -> Google Drive API aktivieren. "
                "3) OAuth-Zustimmungsbildschirm: Extern, App-Name, E-Mail; danach unter Zielgruppe 'App veroeffentlichen' (sonst laeuft die Anmeldung "
                "nach 7 Tagen ab). 4) Clients -> Client erstellen, Typ 'Fernseher und Geraete mit begrenzter Eingabe'. 5) In .env: GDRIVE_CLIENT_ID und "
                "GDRIVE_CLIENT_SECRET. 6) Neu starten, Fenster ☁️ Cloud -> Google Drive -> Anmelden, Code auf google.com/device eingeben."),
-    "onedrive": ("1) entra.microsoft.com: App-Registrierungen -> Neue Registrierung, Name PaperclipLite, 'Nur persoenliche Microsoft-Konten'. "
+    "onedrive": ("1) entra.microsoft.com: App-Registrierungen -> Neue Registrierung, Name Hyperstead, 'Nur persoenliche Microsoft-Konten'. "
                  "2) Authentifizierung -> 'Oeffentliche Clientflows zulassen' = Ja. 3) Anwendungs-ID (Client) in .env: ONEDRIVE_CLIENT_ID. "
                  "4) Neu starten, ☁️ Cloud -> OneDrive -> Anmelden, Code eingeben."),
     "telegram": "TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID in .env (Bot bei @BotFather anlegen, dem Bot /start schreiben, er nennt die Chat-ID).",
@@ -4667,7 +4667,7 @@ def cloud_setup_block(agent, pid):
     return ("\nCLOUD-UPLOAD (Stand jetzt). Fragt der Besitzer danach, fuehre ihn Schritt fuer Schritt durch die Einrichtung: immer nur EINEN "
             "Schritt nennen, auf seine Rueckmeldung warten, bei Fehlern nachfragen, was genau auf dem Bildschirm steht. Bitte ihn NIE, Tokens, "
             "Schluessel oder Passwoerter in den Chat zu schreiben: die traegt er selbst in die Datei .env ein (Pi: ~/paperclip-lite/.env, "
-            "Laptop: .env im PaperclipLite-Ordner) und startet PaperclipLite danach neu. Ob es geklappt hat, zeigt das Fenster ☁️ Cloud "
+            "Laptop: .env im Hyperstead-Ordner) und startet Hyperstead danach neu. Ob es geklappt hat, zeigt das Fenster ☁️ Cloud "
             "(oder frag ihn, dann siehst du den Stand hier beim naechsten Mal). Zielordner dieses Projekts: "
             + ", ".join(f"{CLOUD_LABELS[k]} {v or 'oberste Ebene'}" for k, v in fold.items()) + ". Ausfuehrliche Anleitung: docs/cloud.md.\n"
             + "\n".join(lines))
@@ -4829,6 +4829,6 @@ if __name__ == "__main__":
                  "oder ist kuerzer als 12 Zeichen. Setze ein langes Passwort in .env.")
     if exposed and ALLOW_SHELL:
         print("WARNUNG: PCL_ALLOW_SHELL=1 bei erreichbarer App - wer das Passwort hat, kann Befehle freigeben.")
-    print(f"PaperclipLite laeuft auf http://{host}:{port}  (Login: {'an' if TOKEN else 'aus'}, "
+    print(f"Hyperstead laeuft auf http://{host}:{port}  (Login: {'an' if TOKEN else 'aus'}, "
           f"Shell: {'an' if ALLOW_SHELL else 'aus'}, Telegram: {'an' if TG_TOKEN and TG_CHATS else 'aus'})")
     app.run(host=host, port=port, threaded=True)

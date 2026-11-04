@@ -1,8 +1,8 @@
-﻿# Bildrechner für PaperclipLite einrichten (Windows 10/11, ohne Grafikkarte)
+﻿# Bildrechner für Hyperstead einrichten (Windows 10/11, ohne Grafikkarte)
 # Laedt stable-diffusion.cpp (sd-server.exe) und die drei Modelldateien nach C:\bildrechner
 # und legt dort bildrechner-start.bat ab. Kann jederzeit erneut laufen: Vorhandenes wird übersprungen.
 #
-# Aufruf in PowerShell im PaperclipLite-Ordner:
+# Aufruf in PowerShell im Hyperstead-Ordner:
 #   powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1
 # Weniger RAM-Verbrauch (kleineres Sprachmodell):  ... bildrechner-einrichten.ps1 -Klein
 param(
@@ -135,6 +135,6 @@ Write-Host ""
 Write-Host "Fertig. So geht es weiter:" -ForegroundColor Green
 Write-Host "  1. Doppelklick auf $Ziel\bildrechner-start.bat  (Fenster offen lassen, erster Start 1-2 Minuten)"
 Write-Host "  2. 1-2 Minuten warten, dann im Browser http://127.0.0.1:1234 öffnen: es muss eine Seite erscheinen"
-Write-Host "  3. In der .env von PaperclipLite:  IMAGE_PROVIDER=sdcpp  und  SDCPP_URL=http://127.0.0.1:1234"
+Write-Host "  3. In der .env von Hyperstead:  IMAGE_PROVIDER=sdcpp  und  SDCPP_URL=http://127.0.0.1:1234"
 Write-Host "     (auf dem Pi stattdessen SDCPP_URL=http://<IP dieses Laptops>:1234, IP mit: ipconfig)"
-Write-Host "  4. PaperclipLite neu starten, dann prüfen:  venv\Scripts\python.exe selftest.py web"
+Write-Host "  4. Hyperstead neu starten, dann prüfen:  venv\Scripts\python.exe selftest.py web"

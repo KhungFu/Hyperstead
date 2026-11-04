@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PaperclipLite</title>
+<title>Hyperstead</title>
 <style>
 :root{
   --bg:#0b0b0c; --panel:#111113; --panel2:#17171a; --line:#27272b; --text:#e8e8ea; --mute:#8b8b93;
@@ -194,7 +194,7 @@ a.btn.pri{color:#fff}
 <body>
 <div id="app">
   <aside id="side">
-    <div class="brand"><div class="logo">P</div><b>PaperclipLite</b></div>
+    <div class="brand"><div class="logo">H</div><b>Hyperstead</b></div>
     <div class="side-sec">
       <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
@@ -820,17 +820,17 @@ $('#btnApprovals').onclick=async()=>{
         :r.kind==='connect'?`<div><b>${esc(r.agent_name||'?')}</b> möchte eine <b>Verbindung aufrufen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Daten gehen an deinen Dienst; prüfe, ob das so raus soll.</div>`
         :r.kind==='upload'?`<div><b>${esc(r.agent_name||'?')}</b> möchte eine <b>Datei hochladen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
-        <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Datei verlässt PaperclipLite. Prüfe Datei und Ziel.</div>`
+        <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Datei verlässt Hyperstead. Prüfe Datei und Ziel.</div>`
         :r.kind==='werkstatt'?(d=>`<div>🛠 <b>${esc(r.agent_name||'?')}</b> möchte <b>nachrüsten</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre style="white-space:pre-wrap">$ ${esc(r.payload)}</pre>
         <div style="font-size:13px">Wofür: ${esc(d.wozu||'—')}${d.groesse?' · Größe: '+esc(d.groesse):''}<br>Warum Antrag: ${esc(d.grund||'—')}</div>
         <div style="font-size:13px;margin-top:4px">💼 ${d.stufe==='ceo'?'<i>Der CEO prüft gerade …</i> (du kannst trotzdem schon entscheiden)':esc(d.ceo||'')}</div>
-        <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der PaperclipLite startet, im Projektordner. Befehl genau prüfen!</div>`)((()=>{try{return JSON.parse(r.data||'{}')}catch(e){return {}}})())
+        <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der Hyperstead startet, im Projektordner. Befehl genau prüfen!</div>`)((()=>{try{return JSON.parse(r.data||'{}')}catch(e){return {}}})())
         :r.kind==='publish'?`<div><b>${esc(r.agent_name||'?')}</b> möchte die <b>Webseite veröffentlichen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">Der Projektordner (ohne <code>input/</code>) wird als Webseite ausgeliefert, standardmäßig nur auf dem Pi selbst (localhost).</div>`
         :`<div><b>${esc(r.agent_name||'?')}</b> will einen <b>${esc(r.kind)}</b>-Befehl ausführen <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre>$ ${esc(r.payload)}</pre>
-        <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der PaperclipLite startet — Befehl genau prüfen!</div>`}
+        <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der Hyperstead startet — Befehl genau prüfen!</div>`}
         <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':r.kind==='connect'?'Freigeben & senden':r.kind==='upload'?'Freigeben & hochladen':r.kind==='werkstatt'?'Ja, installieren':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
       </div>`).join(''):'<div style="color:var(--mute)">Keine offenen Freigaben.</div>');
     if(gates) ['plan','recruit'].forEach(k=>$('#g_'+k).onchange=async e=>{ await api('/projects/'+S.pid+'/gates','PUT',{[k]:e.target.checked}); toast('Gespeichert'); });
@@ -1071,7 +1071,7 @@ async function showCloud(){
   openOv('☁️ Cloud'); const body=$('#ovbody');
   const r=await api('/projects/'+S.pid+'/cloud');
   const help={github:'Token und Repo in .env (GITHUB_UPLOAD_TOKEN, GITHUB_UPLOAD_REPO). Dateien über 50 MB gehen als Release-Anhang.',
-    gdrive:'PaperclipLite sieht nur Dateien und Ordner, die es selbst angelegt hat. Fehlende Ordner legt es an.',
+    gdrive:'Hyperstead sieht nur Dateien und Ordner, die es selbst angelegt hat. Fehlende Ordner legt es an.',
     onedrive:'Ordner im ganzen OneDrive möglich, fehlende Ordner legt OneDrive an.',
     telegram:'Schickt Dateien bis 50 MB an deinen Chat. Am Handy: /datei'};
   body.innerHTML=`<div style="color:var(--mute);font-size:12px;margin-bottom:10px">Hier richtest du ein, wohin Dateien hochgeladen werden. Hochladen kannst du jede Datei unter 📁 Dateien (Knopf ☁️). Agenten mit dem Recht „Darf in die Cloud hochladen“ fragen dich vorher immer unter ✋ Freigaben. Anleitung: <code>docs/cloud.md</code></div>`
@@ -1098,7 +1098,7 @@ async function showCloud(){
     body.querySelector(`[data-cf="${k}"]`).value=x.folders[k]; toast('Gespeichert'); });
   body.querySelectorAll('[data-clogin]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.clogin;
     try{ const p=await api('/cloud/'+k+'/login','POST',{}); $('#cl_'+k).innerHTML=loginHtml(p); watch(k); }catch(_){} });
-  body.querySelectorAll('[data-clogout]').forEach(b=>b.onclick=async()=>{ if(confirm('Abmelden? Danach kann PaperclipLite dort nichts mehr hochladen.')){ await api('/cloud/'+b.dataset.clogout+'/logout','POST',{}); showCloud(); } });
+  body.querySelectorAll('[data-clogout]').forEach(b=>b.onclick=async()=>{ if(confirm('Abmelden? Danach kann Hyperstead dort nichts mehr hochladen.')){ await api('/cloud/'+b.dataset.clogout+'/logout','POST',{}); showCloud(); } });
   Object.entries(r.services).forEach(([k,s])=>{ if(s.pending&&s.pending.state==='pending') watch(k); });
 }
 $('#btnCloud').onclick=showCloud;

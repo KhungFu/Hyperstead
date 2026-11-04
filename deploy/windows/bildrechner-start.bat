@@ -1,10 +1,10 @@
 @echo off
-rem Bildrechner fuer PaperclipLite: stable-diffusion.cpp sd-server mit FLUX.2 klein 4B (nur CPU)
+rem Bildrechner fuer Hyperstead: stable-diffusion.cpp sd-server mit FLUX.2 klein 4B (nur CPU)
 rem Einrichten: deploy\windows\bildrechner-einrichten.ps1 (legt diese Datei nach C:\bildrechner\)
 cd /d "%~dp0"
 if not exist sd-server.exe (
   echo FEHLER: sd-server.exe fehlt in %~dp0
-  echo Erst einrichten, in PowerShell im PaperclipLite-Ordner:
+  echo Erst einrichten, in PowerShell im Hyperstead-Ordner:
   echo   powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1
   pause
   exit /b 1

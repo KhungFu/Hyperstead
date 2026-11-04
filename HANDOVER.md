@@ -1,11 +1,11 @@
-# PaperclipLite – Übergabe an einen anderen Claude-Chat
+# Hyperstead – Übergabe an einen anderen Claude-Chat
 
 Dieses Dokument fasst Projekt, Stand und Entscheidungen zusammen, damit du ohne den ursprünglichen Chat weiterarbeiten kannst.
-Dazu gehört der Quellcode (`paperclip-lite-quellcode.zip`, nur versionierte Dateien, keine Zugangsdaten).
+Dazu gehört der Quellcode (`hyperstead-quellcode.zip`, nur versionierte Dateien, keine Zugangsdaten).
 Sprache der Oberfläche, Doku und der Zusammenarbeit mit dem Besitzer: **Deutsch**, knapp und praktisch.
 
 ## Worum geht es
-PaperclipLite ist ein selbst gehosteter Knoten-Editor für ein **Team aus KI-Agenten** (Idee: paperclip.ing). Der Besitzer baut Firmen
+Hyperstead ist ein selbst gehosteter Knoten-Editor für ein **Team aus KI-Agenten** (früher PaperclipLite). Der Besitzer baut Firmen
 als Organigramm (CEO → Abteilungsleiter → Mitarbeiter), gibt dem CEO Aufträge, das Team arbeitet, der Chef prüft und gibt ggf. zurück,
 das Ergebnis landet in der „Post“ (Web + Telegram). Läuft auf einem **Raspberry Pi 4 (4 GB RAM, Hostname `dexter`)**, Flask + SQLite,
 mehrere Worker-Threads (`PCL_WORKERS`, Standard 2), Oberfläche als eine HTML-Datei (Vanilla JS). Repo: `KhungFu/paperclip-lite` (privat, Branch `main`).
@@ -61,5 +61,5 @@ mehrere Worker-Threads (`PCL_WORKERS`, Standard 2), Oberfläche als eine HTML-Da
 ```
 
 ## Startprompt für den neuen Chat
-> Lies HANDOVER.md und CLAUDE.md und verschaffe dir mit app.py einen Überblick. Wir entwickeln PaperclipLite weiter.
+> Lies HANDOVER.md und CLAUDE.md und verschaffe dir mit app.py einen Überblick. Wir entwickeln Hyperstead weiter.
 > Antworte auf Deutsch, ändere Bestehendes nicht ohne Not und sag mir vor größeren Umbauten kurz, was du vorhast. Mein Ziel für heute: …
