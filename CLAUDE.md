@@ -147,6 +147,22 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   (ABI-Wahl 2026-11-04 statt Repo-Anlegen per Werkzeug). Nie Tokens im Chat erfragen.
 - Tests `tests/test_cloud.py` nur gegen Mocks, Anleitung `docs/cloud.md`.
 
+## Werkstatt (`werkstatt.py`, Recht `werkstatt`, Standard aus, nicht in `RECRUIT_PERMS`, Schalter `PCL_ALLOW_WERKSTATT=1`)
+- ABI-Wunsch 2026-11-04: alle KIs sollen wie am Terminal arbeiten und Werkzeuge nachruesten; jeder Antrag Mitarbeiter -> CEO -> ABI (Web + Telegram) -> zurueck.
+- Stufe je Agent in `perms.werkstatt_stufe` (1 alles Antrag, 2 Std. = `W.classify` 'frei' laeuft sofort, 'antrag' = Installation/Loeschen/Pfad ausserhalb,
+  3 alles frei nur mit `PCL_WERKSTATT_FREI=1`); 'verboten' (.env, tokens/, Keys, printenv) immer. `werkstatt_level(agent)` = 0 ohne Recht/Schalter.
+  `classify` ist Mustererkennung, keine Sandbox (so in Doku gesagt).
+- Werkzeuge `befehl`/`nachruesten` in `run_with_tools` (`werkstatt_tool`), Doku `W.doc` in `build_system`. `W.run`: PowerShell (Windows) bzw. bash,
+  Argumentliste ohne shell=True, `clean_env` (ohne KEY/TOKEN/SECRET/PASSWORD, `npm_config_yes=false`), ein Befehl gleichzeitig (`W._lock`), killpg/taskkill bei Zeitlimit.
+- Antrag: `approvals.kind='werkstatt'`, `data` = cmd/shell/wozu/groesse/grund/stufe(ceo|besitzer|ceo_abgelehnt)/ceo. `werkstatt_ceo` (per `_bg`) fragt `top_agent`
+  per `W.ceo_prompt` (JSON weiterleiten/empfehlung), dann Telegram-Knoepfe `wa:`/`wd:`. `decide_werkstatt` (Web + Telegram, atomar) fuehrt im Hintergrund aus,
+  `W.note_installed` -> `wissen/werkzeuge.md`, `werkstatt_resume` setzt die Aufgabe mit `feedback` = `WERKSTATT_MARK ...` wieder auf queued (work/review_prompt
+  zeigen das als eigenen Block). Laeuft die Aufgabe noch, holt das Ende von `execute_task` es nach (`_werkstatt_notes`). Max `PCL_NACHRUEST_MAX` je Aufgabe.
+- Claude/Codex: `werkstatt_cli_args` in `_call_llm` (auch im Chat): claude ohne `--tools ""`, `--tools/--allowedTools` (Stufe 1 Read/Glob/Grep, ab 2 + Bash/Edit/Write/Web),
+  `--disallowedTools` .env/tokens + Installationsbefehle, Stufe 3 `--permission-mode bypassPermissions`; codex `--sandbox read-only|workspace-write` bzw. bypass, `-C`.
+  cwd = Projektordner, Zeitlimit `PCL_WERKSTATT_TIMEOUT`. Gegen echte CLIs ungetestet. Tests `tests/test_werkstatt.py`, Doku `docs/werkstatt.md`.
+- Nicht gebaut: Stopp-Knopf fuer laufende Befehle, Live-Protokoll eines CLI-Laufs.
+
 ## Post / Telegram
 - `tasks.inbox`: `''` / `new` / `closed`, nur für oberste Aufgaben. `finish()` → `inbox_arrived()` → Telegram-Nachricht.
 - `inbox_close`, `inbox_rework` (setzt feedback/prev_result, passes=0), `inbox_new_order` werden von Web-API und Telegram geteilt.

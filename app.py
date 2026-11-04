@@ -30,6 +30,7 @@ from urllib.parse import quote
 import requests
 import agent_tools as tools
 import cloud_upload as cloud
+import werkstatt as W
 import company_templates
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
 
@@ -213,7 +214,9 @@ PROVIDERS = {
 # web        = Websuche + Webseiten lesen   images = Bilder suchen/speichern/erzeugen   read_files = Projektdateien lesen
 # recruit    = stellt anhand des Auftrags selbst ein Team zusammen (legt Mitarbeiter ohne KI an; der Besitzer weist KI/Modell zu)
 DEFAULT_PERMS = {"delegate": False, "judge": False, "auto_run": True, "write_files": False, "shell": False,
-                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False, "connect": False, "run_code": False, "upload": False}
+                 "web": True, "images": True, "read_files": True, "media": True, "recruit": False, "publish": False, "code": False, "connect": False, "run_code": False, "upload": False,
+                 "werkstatt": False}
+# werkstatt  = arbeitet mit echten Befehlen im Projektordner und beantragt fehlende Programme (Antrag -> CEO -> Besitzer); Stufe 1-3 je Agent
 # code       = Programmieren: Quellcode jeder Sprache schreiben und pruefen/kompilieren (ohne Ausfuehrung)
 # upload     = darf Dateien in die Cloud des Besitzers / per Telegram schicken (immer mit Freigabe)
 # publish    = darf die Webseite (index.html im Projektordner) zur Veroeffentlichung vorschlagen; der Besitzer gibt frei
@@ -394,6 +397,17 @@ def log(event, detail="", project_id=None, agent_id=None, task_id=None):
     )
 
 
+def werkstatt_level(agent):
+    """Werkstatt-Stufe des Agenten (0 = keine Werkstatt). Recht 'werkstatt' + PCL_ALLOW_WERKSTATT=1 noetig."""
+    if not W.enabled() or not agent:
+        return 0
+    try:
+        p = json.loads(agent.get("perms") or "{}")
+    except Exception:
+        p = {}
+    return W.level(p.get("werkstatt_stufe", 2)) if p.get("werkstatt") else 0
+
+
 def perms_of(agent):
     try:
         p = json.loads(agent.get("perms") or "{}")
@@ -458,14 +472,16 @@ def provider_configured(pid):
     return bool(provider_keys(pid))
 
 
-def _run_cli(argv, prompt):
+def _run_cli(argv, prompt, cwd=None, timeout=None):
     """CLI-Anbieter: Prompt per stdin, Antwort von stdout. Laeuft in einem leeren Ordner und ohne unsere Keys/Tokens in der Umgebung
     (sonst wuerde z.B. 'claude' den API-Key statt deines Abos benutzen, und das CLI-Programm bekaeme Zugriff auf alle Zugangsdaten)."""
     env = {k: v for k, v in os.environ.items()
            if not (k.endswith(("_API_KEY", "_TOKEN", "_SECRET")) or k in ("APP_TOKEN", "TELEGRAM_CHAT_ID"))}
-    wd = Path(WORKSPACE) / ".cli-run"
+    wd = Path(cwd) if cwd else Path(WORKSPACE) / ".cli-run"  # Werkstatt: Projektordner, sonst leerer Ordner
     wd.mkdir(parents=True, exist_ok=True)
-    tmo = int(os.environ.get("PCL_CLI_TIMEOUT", "600"))
+    tmo = timeout or int(os.environ.get("PCL_CLI_TIMEOUT", "600"))
+    if cwd:  # Werkstatt: auch Passwoerter/Zugangsdaten anderer Art nicht weitergeben
+        env = {k: v for k, v in env.items() if not re.search(r"(PASSWORD|PASSWD|CREDENTIAL)", k, re.I)}
     exe = shutil.which(argv[0]) if argv else None  # Windows: findet auch claude.cmd/codex.cmd aus npm
     if exe:
         argv = [exe] + list(argv[1:])
@@ -480,12 +496,12 @@ def _run_cli(argv, prompt):
     return r.stdout.strip()
 
 
-def _run_claude_images(argv, prompt, images):
+def _run_claude_images(argv, prompt, images, **run_kw):
     """Claude-CLI mit Bildern: Nachricht als stream-json (Text + Bild-Bloecke), ohne Werkzeuge."""
     msg = {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": prompt}] + [
         {"type": "image", "source": {"type": "base64", "media_type": mt, "data": b64}} for mt, b64 in images]}}
     raw = _run_cli(argv + ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
-                   json.dumps(msg) + "\n")
+                   json.dumps(msg) + "\n", **run_kw)
     for line in reversed(raw.splitlines()):
         try:
             d = json.loads(line)
@@ -621,15 +637,19 @@ def _call_llm(agent, messages, images=None):
                 argv[1:1] = ["--system-prompt", sys_txt[:60000]]
                 messages = [m for m in messages if m["role"] != "system"]
         prompt = "\n\n".join(f"[{m['role']}]\n{m['content']}" for m in messages)
+        ws = werkstatt_cli_args(agent, argv) if pid in ("claude_cli", "codex_cli") else None
+        run_kw = {}
+        if ws:
+            argv, run_kw = ws[0], {"cwd": ws[1], "timeout": ws[2]}
         if images and pid == "claude_cli":
-            out = _run_claude_images(argv, prompt, images)
+            out = _run_claude_images(argv, prompt, images, **run_kw)
         elif images and pid == "codex_cli":
             with _image_files(images) as paths:
                 pos = len(argv) - 1 if argv[-1] == "-" else len(argv)
                 argv[pos:pos] = [x for f in paths for x in ("-i", f)]
-                out = _run_cli(argv, prompt)
+                out = _run_cli(argv, prompt, **run_kw)
         else:
-            out = _run_cli(argv, prompt)
+            out = _run_cli(argv, prompt, **run_kw)
         return out, max(1, (len(prompt) + len(out)) // 4)
 
     cfg = PROVIDERS[pid]
@@ -866,7 +886,7 @@ def team_of(agent):
     return q("SELECT id, name, role FROM agents WHERE parent_id=? ORDER BY id", (agent["id"],))
 
 
-_CAP_LAB = {"write_files": "Dateien schreiben/kopieren", "shell": "Shell", "web": "Web", "read_files": "Dateien lesen", "media": "Medien", "code": "Programmieren", "run_code": "Code ausfuehren", "delegate": "delegiert"}
+_CAP_LAB = {"write_files": "Dateien schreiben/kopieren", "shell": "Shell", "web": "Web", "read_files": "Dateien lesen", "media": "Medien", "code": "Programmieren", "run_code": "Code ausfuehren", "delegate": "delegiert", "werkstatt": "Werkstatt (Befehle, Nachruesten)"}
 
 
 def lab_of(n):
@@ -1105,6 +1125,234 @@ def request_upload(call, pid, aid, tid):
             "Frag dieselbe Datei nicht noch einmal an, mach mit dem Rest weiter.")
 
 
+# ------------------------------------------------------------ Werkstatt (Befehle + Nachruesten)
+WERKSTATT_MARK = "NACHRÜSTUNG"
+
+
+def _bg(fn, *args):
+    """Im Hintergrund ausfuehren (Tests ersetzen das durch einen direkten Aufruf)."""
+    threading.Thread(target=fn, args=args, daemon=True).start()
+
+
+def native_hint(agent, lvl):
+    """Claude-/Codex-CLI arbeiten in der Werkstatt mit ihren eigenen Werkzeugen im Projektordner."""
+    pv = agent.get("provider")
+    if pv == "claude_cli":
+        return ("- Du laeufst als Claude Code MIT deinen eigenen Werkzeugen (Bash, Read, Write, Edit, Glob, Grep"
+                + (", WebFetch, WebSearch" if lvl >= 2 else "") + ") im Projektordner. Nutze sie direkt. "
+                "Installationen sind dir dort gesperrt" + (" (in Stufe 3 nicht)" if lvl >= 3 else "")
+                + ": beantrage sie mit nachruesten. Deine Endantwort bleibt das JSON unten.")
+    if pv == "codex_cli":
+        return ("- Du laeufst als Codex MIT deinen eigenen Werkzeugen im Projektordner ("
+                + {1: "nur lesen", 2: "schreiben im Projekt, ohne Netz", 3: "ohne Einschraenkung"}[lvl]
+                + "). Netz und Installationen beantragst du mit nachruesten. Deine Endantwort bleibt das JSON unten.")
+    return ""
+
+
+def werkstatt_cli_args(agent, argv):
+    """Startzeile der Claude-/Codex-CLI fuer die Werkstatt umbauen. -> (argv, arbeitsordner, zeitlimit) oder None."""
+    lvl = werkstatt_level(agent)
+    if not lvl or not argv:
+        return None
+    root = proj_dir(agent["project_id"])
+    root.mkdir(parents=True, exist_ok=True)
+    tmo = int(os.environ.get("PCL_WERKSTATT_TIMEOUT", "3600"))
+    name = Path(argv[0]).name.lower()
+    if agent.get("provider") == "claude_cli" and name.startswith("claude"):
+        out, i = [], 0
+        while i < len(argv):  # --tools "" (keine Werkzeuge) entfernen
+            if argv[i] == "--tools":
+                i += 2
+                continue
+            if argv[i].startswith("--tools="):
+                i += 1
+                continue
+            out.append(argv[i])
+            i += 1
+        tools_ = ["Read", "Glob", "Grep"] + (["Bash", "Edit", "Write", "MultiEdit", "WebFetch", "WebSearch", "TodoWrite"] if lvl >= 2 else [])
+        deny = [f"Read(//{BASE.as_posix().lstrip('/')}/.env)", f"Edit(//{BASE.as_posix().lstrip('/')}/.env)",
+                f"Read(//{BASE.as_posix().lstrip('/')}/tokens/**)", "Read(**/.env)", "Edit(**/.env)"]
+        if lvl < 3:
+            deny += [f"Bash({c} *)" for c in ("npm install", "npm i", "npm ci", "npm add", "pnpm add", "pnpm install", "yarn add", "yarn install",
+                                               "pip install", "pip3 install", "python -m pip", "python3 -m pip", "py -m pip", "uv pip", "uv add",
+                                               "pipx", "winget", "choco", "scoop", "apt", "apt-get", "sudo", "brew", "cargo install", "go install",
+                                               "gem install", "npx -y", "npx --yes", "rm -rf", "Remove-Item", "git push")]
+        out[1:1] = ["--tools", ",".join(tools_), "--allowedTools", ",".join(tools_), "--disallowedTools", ",".join(deny)]
+        if lvl >= 3:
+            out[1:1] = ["--permission-mode", "bypassPermissions"]
+        return out, root, tmo
+    if agent.get("provider") == "codex_cli" and name.startswith("codex"):
+        out = list(argv)
+        pos = out.index("exec") + 1 if "exec" in out else 1
+        flags = (["--dangerously-bypass-approvals-and-sandbox"] if lvl >= 3
+                 else ["--sandbox", "workspace-write" if lvl == 2 else "read-only"])
+        out[pos:pos] = flags + ["-C", str(root)]
+        return out, root, tmo
+    return None
+
+
+def werkstatt_tool(call, a, pid, tid):
+    lvl = werkstatt_level(a)
+    root = proj_dir(pid)
+    cmd = str(call.get("befehl") or call.get("cmd") or call.get("command") or "").strip()[:4000]
+    art, grund = W.classify(cmd, root)
+    if art == "verboten":
+        log("denied", f"befehl: {cmd[:200]} ({grund})", pid, a["id"], tid)
+        return f"FEHLER: {grund}."
+    if call.get("tool") == "nachruesten" or art == "antrag" and lvl < 3 or lvl == 1:
+        return request_werkstatt(call, a, pid, tid, cmd, grund or "Stufe 1: jeder Befehl braucht Freigabe")
+    if art == "antrag":  # Stufe 3: laeuft, Besitzer bekommt eine Meldung
+        tg_notify(f"🛠 Werkstatt (Stufe 3) · {a['name']}\n$ {cmd[:500]}\n({grund}, ohne Nachfrage ausgefuehrt)")
+    code, out = W.run(cmd, root, call.get("shell"))
+    log("werkstatt_befehl", f"$ {cmd[:300]} -> Exit {code}", pid, a["id"], tid)
+    if art == "antrag" and code == 0:
+        W.note_installed(root, cmd, str(call.get("wozu") or ""), a["name"], code)
+    return f"Exit {code}\n{out}"
+
+
+def request_werkstatt(call, a, pid, tid, cmd, grund):
+    if not cmd:
+        return "FEHLER: befehl fehlt (der genaue Installationsbefehl, z. B. npm install remotion)."
+    if q1("SELECT 1 FROM approvals WHERE task_id=? AND kind='werkstatt' AND status='pending' AND payload=?", (tid, cmd)):
+        return "Dieser Antrag laeuft schon. Nicht noch einmal stellen, arbeite am Rest weiter."
+    mx = int(os.environ.get("PCL_NACHRUEST_MAX", "6"))
+    if q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND kind='werkstatt'", (tid,))["c"] >= mx:
+        return f"FEHLER: Hoechstens {mx} Antraege je Aufgabe. Arbeite mit dem, was da ist, und nenne im result, was noch fehlt."
+    d = {"cmd": cmd, "shell": str(call.get("shell") or ""), "wozu": str(call.get("wozu") or call.get("grund") or "")[:500],
+         "groesse": str(call.get("groesse") or "")[:100], "grund": grund, "stufe": "ceo", "ceo": ""}
+    apid = ex("INSERT INTO approvals(project_id,task_id,agent_id,kind,payload,created,data) VALUES(?,?,?,?,?,?,?)",
+              (pid, tid, a["id"], "werkstatt", cmd, time.time(), json.dumps(d, ensure_ascii=False)))
+    log("approval_requested", f"werkstatt: {cmd[:300]}", pid, a["id"], tid)
+    _bg(werkstatt_ceo, apid)
+    return (f"Antrag #{apid} gestellt ({grund}): geht jetzt an den CEO und danach an den Besitzer. Nach dem Ja wird genau dieser Befehl "
+            "ausgefuehrt und du bekommst die Aufgabe mit dem Ergebnis zurueck. Mach mit dem Rest weiter und schreib im result, worauf du wartest.")
+
+
+def _wdata(ap):
+    try:
+        return json.loads(ap.get("data") or "{}")
+    except ValueError:
+        return {}
+
+
+def werkstatt_ceo(apid):
+    """Der oberste Chef prueft den Antrag und legt ihn dem Besitzer vor (oder lehnt Unnoetiges ab)."""
+    ap = q1("SELECT * FROM approvals WHERE id=?", (apid,))
+    if not ap or ap["status"] != "pending":
+        return
+    d, pid = _wdata(ap), ap["project_id"]
+    req = q1("SELECT * FROM agents WHERE id=?", (ap["agent_id"],)) or {"name": "?", "role": "", "id": None}
+    p = q1("SELECT * FROM projects WHERE id=?", (pid,)) or {"name": "?"}
+    ceo = top_agent(pid)
+    note, fwd = "", True
+    if ceo and ceo["id"] != req.get("id") and ceo.get("provider") and not ceo.get("paused"):
+        try:
+            txt, _ = call_llm(ceo, [{"role": "system", "content": f"Du bist '{ceo['name']}' ({ceo['role'] or 'CEO'}), oberster Chef der Firma."},
+                                    {"role": "user", "content": W.ceo_prompt(req["name"], req.get("role"), d.get("cmd"), d.get("wozu"),
+                                                                             d.get("groesse"), p["name"])}])
+            r = parse_output(txt)
+            fwd = r.get("weiterleiten") is not False and str(r.get("weiterleiten")).lower() not in ("false", "nein", "no")
+            note = str(r.get("empfehlung") or "").strip()[:600] or ("(keine Empfehlung)" if fwd else "")
+        except Exception as e:
+            note = f"CEO nicht erreichbar ({str(e)[:120]}), direkt an dich weitergeleitet."
+        d["ceo"] = f"{ceo['name']}: {note}"
+    else:
+        d["ceo"] = "Antrag kommt vom obersten Chef selbst." if ceo and ceo["id"] == req.get("id") else "Kein CEO mit KI, direkt an dich."
+    if ap_status(apid) != "pending":
+        return  # der Besitzer hat schon entschieden
+    if not fwd:
+        d["stufe"] = "ceo_abgelehnt"
+        ex("UPDATE approvals SET status='denied', data=?, output=? WHERE id=? AND status='pending'",
+           (json.dumps(d, ensure_ascii=False), "Vom CEO abgelehnt: " + note, apid))
+        log("approval_denied", f"werkstatt (CEO): {d.get('cmd', '')[:200]} - {note}", pid, ap["agent_id"], ap["task_id"])
+        tg_notify(f"🛠 Nachrüst-Antrag vom CEO abgelehnt · {req['name']} ({p['name']})\n$ {d.get('cmd', '')[:400]}\n{d['ceo']}")
+        werkstatt_resume(ap["task_id"], f"Dein Antrag `{d.get('cmd')}` wurde vom CEO abgelehnt: {note} Arbeite ohne weiter.")
+        return
+    d["stufe"] = "besitzer"
+    ex("UPDATE approvals SET data=? WHERE id=?", (json.dumps(d, ensure_ascii=False), apid))
+    log("werkstatt_ceo", f"#{apid} an Besitzer: {d['ceo'][:300]}", pid, ap["agent_id"], ap["task_id"])
+    tg_notify(f"🛠 Nachrüsten? · {req['name']} ({p['name']})\n$ {d.get('cmd', '')[:600]}\nWofür: {d.get('wozu') or '—'}"
+              + (f"\nGröße: {d['groesse']}" if d.get("groesse") else "") + f"\n\n💼 {d['ceo']}",
+              buttons=[[{"text": "✅ Ja, installieren", "callback_data": f"wa:{apid}"}, {"text": "❌ Nein", "callback_data": f"wd:{apid}"}]])
+
+
+def ap_status(apid):
+    r = q1("SELECT status FROM approvals WHERE id=?", (apid,))
+    return r["status"] if r else None
+
+
+def decide_werkstatt(ap, approve, why=""):
+    """Besitzer entscheidet (Web oder Telegram). Ja -> Befehl laeuft im Hintergrund, danach geht die Aufgabe weiter."""
+    with closing(conn()) as c:  # atomar: Web und Telegram gleichzeitig loesen nur einmal aus
+        n = c.execute("UPDATE approvals SET status=?, output=? WHERE id=? AND status='pending'",
+                      ("approved" if approve else "denied", "läuft …" if approve else ("Abgelehnt" + (f": {why}" if why else "")), ap["id"])).rowcount
+        c.commit()
+    if not n:
+        return "Schon entschieden."
+    d, pid = _wdata(ap), ap["project_id"]
+    who = (q1("SELECT name FROM agents WHERE id=?", (ap["agent_id"],)) or {"name": "?"})["name"]
+    ceo = (top_agent(pid) or {"name": "CEO"})["name"]
+    if not approve:
+        log("approval_denied", f"werkstatt: {d.get('cmd', '')[:200]}", pid, ap["agent_id"], ap["task_id"])
+        werkstatt_resume(ap["task_id"], f"{ceo} meldet: Der Besitzer hat `{d.get('cmd')}` abgelehnt" + (f" ({why})" if why else "")
+                         + ". Arbeite ohne dieses Werkzeug weiter.")
+        return "Abgelehnt."
+    log("approval_granted", f"werkstatt: {d.get('cmd', '')[:200]}", pid, ap["agent_id"], ap["task_id"])
+
+    def job():
+        root = proj_dir(pid)
+        try:
+            code, out = W.run(d.get("cmd", ""), root, d.get("shell"), W.install_timeout())
+        except Exception as e:
+            code, out = 1, f"Fehler: {e}"
+        ex("UPDATE approvals SET output=? WHERE id=?", (f"Exit {code}\n{out}"[-4000:], ap["id"]))
+        log("werkstatt_installiert", f"$ {d.get('cmd', '')[:200]} -> Exit {code}", pid, ap["agent_id"], ap["task_id"])
+        try:
+            W.note_installed(root, d.get("cmd", ""), d.get("wozu", ""), who, code)
+        except OSError:
+            pass
+        tg_notify(("✅ Nachgerüstet" if code == 0 else f"❌ Nachrüsten fehlgeschlagen (Exit {code})") + f" · {who}\n$ {d.get('cmd', '')[:300]}\n"
+                  + W.clip(out, 600))
+        werkstatt_resume(ap["task_id"], f"{ceo} meldet: Der Besitzer hat deinen Antrag freigegeben. Ausgefuehrt: `{d.get('cmd')}`\n"
+                         f"Ergebnis (Exit {code}):\n{W.clip(out, 2500)}\n"
+                         + ("Pruefe kurz, ob es funktioniert, und mach mit deiner Aufgabe weiter." if code == 0
+                            else "Das hat nicht geklappt. Pruefe die Ausgabe; brauchst du einen anderen Befehl, stell einen neuen Antrag, sonst arbeite ohne weiter."))
+    _bg(job)
+    return "Freigegeben, wird installiert."
+
+
+_werkstatt_notes = {}
+_wres_lock = threading.Lock()
+
+
+def werkstatt_open(tid):
+    return q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND kind='werkstatt' AND (status='pending' OR output='läuft …')", (tid,))["c"]
+
+
+def werkstatt_resume(tid, note=None):
+    """Antwort auf einen Antrag sammeln; sind alle Antraege der Aufgabe entschieden, arbeitet der Mitarbeiter weiter.
+    Laeuft die Aufgabe gerade noch, holt execute_task das am Ende nach."""
+    if not tid:
+        return
+    with _wres_lock:
+        if note:
+            _werkstatt_notes.setdefault(tid, []).append(note)
+        t = q1("SELECT * FROM tasks WHERE id=?", (tid,))
+        if not t:
+            _werkstatt_notes.pop(tid, None)
+            return
+        if werkstatt_open(tid) or not _werkstatt_notes.get(tid) or t["status"] in ("running", "queued"):
+            return
+        notes = _werkstatt_notes.pop(tid, [])
+        txt = WERKSTATT_MARK + " (Antwort auf deine Antraege):\n" + "\n\n".join(notes)
+        others = q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending'", (tid,))["c"]
+        if t["status"] == "waiting_approval" and not others:
+            set_task(tid, "queued", feedback=txt[:6000], prev_result=t["result"] or "")
+            log("werkstatt_weiter", "Aufgabe geht nach Nachruest-Antrag weiter", t["project_id"], t["agent_id"], tid)
+        else:  # Aufgabe laeuft noch oder wartet auf anderes: nur anhaengen
+            set_task(tid, result=((t["result"] or "") + "\n\n🛠 " + txt)[:20000])
+
+
 def notify_connections_post(t):
     """Fertige Post zusaetzlich an Verbindungen mit 'Bei Post benachrichtigen' schicken (im Hintergrund)."""
     cs = [c for c in project_connections(t["project_id"]) if c["on_post"]]
@@ -1268,7 +1516,8 @@ def build_system(agent, project, mode, final_only=False, team_change_ok=False):
             k = q1("SELECT * FROM agents WHERE id=?", (k["id"],)) or k
             kp = perms_of(k)
             can = [n for n, lab in (("write_files", "Dateien schreiben/kopieren"), ("shell", "Shell"), ("web", "Web"), ("read_files", "Dateien lesen"),
-                                    ("media", "Medien"), ("code", "Programmieren"), ("run_code", "Code ausfuehren"), ("delegate", "delegiert")) if kp.get(n)]
+                                    ("media", "Medien"), ("code", "Programmieren"), ("run_code", "Code ausfuehren"), ("werkstatt", "Werkstatt (Befehle, Nachruesten)"),
+                                    ("delegate", "delegiert")) if kp.get(n) and (n != "werkstatt" or W.enabled())]
             below = sorted({n for d in descendants(k["id"]) for n in ("write_files", "media", "web", "read_files", "code", "run_code") if perms_of(d).get(n)} - set(can))
             sub = f"; sein Team darunter kann zusaetzlich: {', '.join(lab_of(n) for n in below)}" if below else ""
             return f"{k['name']} ({k['role']}; kann: {', '.join(lab_of(n) for n in can) or 'nur Text antworten'}{sub})"
@@ -1371,6 +1620,9 @@ def build_system(agent, project, mode, final_only=False, team_change_ok=False):
                "zu planen, und pruefst danach mit list_files, dass es in output/ liegt.\n" if "write_file" in tool_names else "") +
             "- Du fuehrst KEINE echten Geschaefte aus (keine Kaeufe, Orders, Zahlungen, E-Mails): dafuer hast du keine Werkzeuge. "
             "Liefere Entwuerfe, Analysen und Empfehlungen.")
+    wl = werkstatt_level(agent)
+    if wl:
+        s.append(W.doc(wl, native_hint(agent, wl)))
     s.append("\nARBEITSWEISE: Sieh dir zuerst alle Eingaben an (Bilder als Bilder). Rueckfragen nur, wenn ohne Antwort wirklich nichts geht, "
              "hoechstens 2. Sonst triff sinnvolle Annahmen, markiere sie sichtbar (\"ANNAHME: ...\") und arbeite weiter. Doppelte Dateien, "
              "fehlende Details oder offene Formate sind kein Grund, die Arbeit zu stoppen. Erfinde nichts ueber reale Orte oder Personen: was du "
@@ -1429,7 +1681,9 @@ def work_prompt(t):
                 (t["parent_task_id"],))
         if pt:
             parts.append(f"Auftraggeber: {pt['name']} ({pt['role']}). Dessen uebergeordnete Aufgabe: {pt['title']}")
-    if t.get("feedback"):
+    if str(t.get("feedback") or "").startswith(WERKSTATT_MARK):
+        parts.append(t["feedback"] + "\n\nDein bisheriger Stand (mach von hier aus weiter):\n" + clip(t.get("prev_result", ""), 6000))
+    elif t.get("feedback"):
         parts.append("ÜBERARBEITUNGSAUFTRAG deines Vorgesetzten:\n" + t["feedback"]
                      + "\n\nDein bisheriges Ergebnis (verbessere es gezielt):\n" + clip(t.get("prev_result", ""), 6000))
     return "\n\n".join(parts)
@@ -1440,7 +1694,9 @@ def review_prompt(t, child_tasks):
              f"Urspruengliche Aufgabe: {t['title']}\n{t['description']}".strip()]
     if goal_line(t):
         parts.append(goal_line(t))
-    if t.get("feedback"):
+    if str(t.get("feedback") or "").startswith(WERKSTATT_MARK):
+        parts.append(t["feedback"] + "\n\nDein bisheriger Stand (mach von hier aus weiter):\n" + clip(t.get("prev_result", ""), 6000))
+    elif t.get("feedback"):
         parts.append("ÜBERARBEITUNGSAUFTRAG deines Vorgesetzten an dich:\n" + t["feedback"]
                      + "\n\nDein bisheriges Gesamtergebnis (verbessere es gezielt, Mitarbeiter darfst du bei Bedarf erneut einbeziehen):\n"
                      + clip(t.get("prev_result", ""), 6000))
@@ -1618,7 +1874,8 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
     Gibt (endgueltiger_text, tokens, erzeugte_dateien) zurueck."""
     pid, aid, tid = ids
     allowed = (tools.available(perms) + (["call_connection"] if connections_doc(pid, perms) else [])
-               + (["cloud_upload"] if cloud_doc(pid, perms) else []))
+               + (["cloud_upload"] if cloud_doc(pid, perms) else [])
+               + (["befehl", "nachruesten"] if werkstatt_level(a) else []))
     seen = list(images or [])[:RUN_MAX_IMAGES]  # Bilder dieses Laufs gehen in jeder Runde mit (Nr. = Position)
     text, total, hint = call_llm_img(a, messages, seen)
     if hint:
@@ -1666,6 +1923,10 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
                 elif c.get("tool") == "cloud_upload":
                     out = request_upload(c, pid, aid, tid) if "cloud_upload" in allowed else "FEHLER: Hochladen nicht erlaubt"
                     made_file = None
+                elif c.get("tool") in ("befehl", "nachruesten"):
+                    out = (werkstatt_tool(c, a, pid, tid) if c.get("tool") in allowed
+                           else "FEHLER: Keine Werkstatt (Recht 'werkstatt' fehlt oder PCL_ALLOW_WERKSTATT ist aus)")
+                    made_file = None
                 else:
                     out, made_file = tools.run_tool(c, root, perms)
                     if (c.get("tool") == "film" and str(made_file or "").endswith(".png") and "view_image" in allowed
@@ -1677,7 +1938,7 @@ def run_with_tools(a, perms, messages, final_only, root, ids, images=None, want=
                             pass
                 if made_file:
                     made.append(made_file)
-                arg = str(c.get("query") or c.get("url") or c.get("prompt") or c.get("path") or c.get("name") or "")[:120]
+                arg = str(c.get("query") or c.get("url") or c.get("prompt") or c.get("path") or c.get("name") or c.get("befehl") or "")[:120]
                 log("tool", f"{c.get('tool')}: {arg} -> {out[:150]!r}", pid, aid, tid)
                 outs.append(f"### {c.get('tool')} {arg}\n{clip(out, TOOL_RESULT_CHARS)}")
             # aeltere Werkzeugergebnisse kuerzen, damit kleine Modelle nicht ueberlaufen
@@ -2117,9 +2378,13 @@ def execute_task(tid):
             tg_notify(f"🌐 Freigabe nötig · {a['name']} ({p['name']})\nWebseite veröffentlichen (Auftrag #{tid}: {t['title']})\n\nBitte im Web unter „Freigaben“ entscheiden.")
 
     final = result + ("\n\n" + "\n".join(notes) if notes else "")
-    pending += q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending' AND kind IN ('connect','upload')", (tid,))["c"]
-    if pending:
-        set_task(tid, "waiting_approval", final)
+    pending += q1("SELECT COUNT(*) c FROM approvals WHERE task_id=? AND status='pending' AND kind IN ('connect','upload','werkstatt')", (tid,))["c"]
+    wopen = werkstatt_open(tid)
+    pending += wopen
+    if pending or _werkstatt_notes.get(tid):  # Nachruest-Antraege offen oder schon beantwortet: Aufgabe geht danach weiter
+        set_task(tid, "waiting_approval", final + ("\n\n🛠 Wartet auf Nachrüst-Antrag (CEO, dann du)." if wopen else ""))
+        if _werkstatt_notes.get(tid):
+            werkstatt_resume(tid)
     else:
         finish(tid, "done", final)
         log("task_done", f"{t['title']} [{mode}]", pid, aid, tid)
@@ -2435,6 +2700,12 @@ def tg_callback(cb):
     if action in ("ga", "gd"):  # Plan-/Team-Freigabe; Shell-Freigaben bewusst nie ueber Telegram
         ap = q1("SELECT * FROM approvals WHERE id=?", (tid,))
         msg = decide_gate(ap, action == "ga") if ap and ap["kind"] in ("plan", "recruit") else "Unbekannte Freigabe."
+        tg("answerCallbackQuery", callback_query_id=cb["id"], text=msg[:190])
+        tg_unbutton(cb)
+        return
+    if action in ("wa", "wd"):  # Nachruest-Antrag (Werkstatt): Besitzer bestaetigt per Knopf
+        ap = q1("SELECT * FROM approvals WHERE id=?", (tid,))
+        msg = decide_werkstatt(ap, action == "wa") if ap and ap["kind"] == "werkstatt" else "Unbekannter Antrag."
         tg("answerCallbackQuery", callback_query_id=cb["id"], text=msg[:190])
         tg_unbutton(cb)
         return
@@ -3207,7 +3478,7 @@ def index():
 
 @app.get("/api/info")
 def api_info():
-    return jsonify({"auth": bool(TOKEN), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI, "allow_run": tools.run_enabled() or tools.cargo_enabled(), "run_code": tools.run_enabled(),
+    return jsonify({"auth": bool(TOKEN), "werkstatt": W.enabled(), "werkstatt_frei": W.free_allowed(), "allow_shell": ALLOW_SHELL, "allow_cli": ALLOW_CLI, "allow_run": tools.run_enabled() or tools.cargo_enabled(), "run_code": tools.run_enabled(),
                     "rust": __import__("rust_builder").sandbox_mode(), "browser": tools.browser_enabled(),
                     "telegram": bool(TG_TOKEN and TG_CHATS), "workers": WORKERS, "cloud": cloud_ready()})
 
@@ -3354,7 +3625,12 @@ def api_graph(pid):
     for r in q("SELECT agent_id, status, COUNT(*) c FROM tasks WHERE project_id=? GROUP BY agent_id, status", (pid,)):
         counts.setdefault(r["agent_id"], {})[r["status"]] = r["c"]
     for a in agents:
+        try:
+            st = int(json.loads(a.get("perms") or "{}").get("werkstatt_stufe", 2))
+        except (ValueError, TypeError, AttributeError):
+            st = 2
         a["perms"] = perms_of(a)
+        a["perms"]["werkstatt_stufe"] = st
         a["used_tokens"] = used_tokens(a["id"])
         a["counts"] = counts.get(a["id"], {})
     pend = q1("SELECT COUNT(*) c FROM approvals WHERE status='pending'")["c"]
@@ -3428,6 +3704,15 @@ def api_agent_put(aid):
     if "perms" in d:
         p = dict(DEFAULT_PERMS)
         p.update({k: bool(v) for k, v in (d["perms"] or {}).items() if k in DEFAULT_PERMS})
+        try:
+            old = json.loads(a.get("perms") or "{}")
+        except ValueError:
+            old = {}
+        st = (d["perms"] or {}).get("werkstatt_stufe", old.get("werkstatt_stufe", 2))
+        try:
+            p["werkstatt_stufe"] = min(3, max(1, int(st)))
+        except (TypeError, ValueError):
+            p["werkstatt_stufe"] = 2
         ex("UPDATE agents SET perms=? WHERE id=?", (json.dumps(p), aid))
         changed.append("perms=" + json.dumps(p))
     if changed:
@@ -3905,6 +4190,10 @@ def api_approval_decide(aid):
         if decision not in ("approve", "deny"):
             abort(400)
         return jsonify({"ok": True, "message": decide_gate(ap, decision == "approve")})
+    if ap["kind"] == "werkstatt":
+        if decision not in ("approve", "deny"):
+            abort(400)
+        return jsonify({"ok": True, "message": decide_werkstatt(ap, decision == "approve", str(request.get_json(force=True).get("why") or "")[:300])})
     t = q1("SELECT * FROM tasks WHERE id=?", (ap["task_id"],))
     pid = ap["project_id"]
     if decision == "deny":

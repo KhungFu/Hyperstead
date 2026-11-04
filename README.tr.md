@@ -218,6 +218,10 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | Google/Microsoft oturumu (`tokens/` klasörü) | Hizmet "oturum açılmamış" görünür. Yükleme "henüz oturum açılmadı" ya da "oturumun süresi doldu" der ve hiçbir şey yüklemez. | ☁️ Cloud → Oturum aç. Pi'den dizüstüne taşırken dizüstünde yeniden oturum açın. |
 | Telegram için 50 MB üstü dosya | Telegram kabul etmez. `/datei` dosyayı ⚠️ ile işaretler ve göndermez, ajan bir uyarı alır. | Hedef olarak Google Drive, OneDrive veya GitHub seçin. |
 | `cloud_upload.py` (program dosyası) | PaperclipLite başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| `PCL_ALLOW_WERKSTATT=1` | “Atölye” onay kutusu gri olur, hiçbir ajan `befehl` veya `nachruesten` almaz. Diğer her şey eskisi gibi çalışır. | Satırı `.env` dosyasına ekleyin, yeniden başlatın, ajanda kutuyu işaretleyin ([docs/werkstatt.md](docs/werkstatt.md)). |
+| Bir ajanın ihtiyaç duyduğu program (ör. Node.js, Remotion, bir Python paketi) | Atölyesi olan ajan bir kurulum talebi oluşturur: CEO kontrol eder, siz Telegram’da ve ✋ Onaylar altında ✅/❌ alırsınız. Onayınızdan sonra sunucu kurar ve görev devam eder. Atölye yoksa ajan yalnızca neyin eksik olduğunu yazar. | Talebi okuyup karar verin. Telegram yoksa yalnızca web üzerinden. |
+| CEO’nun yapay zekâsı (kurulum talebinde) | Talep “Yapay zekâlı CEO yok” veya “CEO’ya ulaşılamıyor” notuyla doğrudan size gelir. | Kendiniz karar verin veya CEO’ya bir yapay zekâ atayın. |
+| `werkstatt.py` (program dosyası) | PaperclipLite başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 
 ## İnternetten erişim
 
@@ -375,6 +379,7 @@ Telegram üzerinden **geçmez**; orada yalnızca bir uyarı gelir.
   Buna `rust_project` de dahildir: Rust programlarını derler, test eder ve bitmiş paket olarak teslim eder ([Rust programları](#-rust-programlarını-eksiksiz-derleme)).
 - **Buluta yükleme** (varsayılan kapalı): bitmiş dosyaları GitHub, Google Drive, OneDrive'a ya da Telegram ile size gönderir, her zaman ancak sizin onayınızdan sonra ([☁️ Bulut yükleme](#️-bulut-yükleme-github-google-drive-onedrive-telegram)).
 - **Kabuk önerme**: yalnızca sunucuda `PCL_ALLOW_SHELL=1` varsa ve ancak onaydan sonra.
+- **Atölye** (varsayılan olarak kapalı, yalnızca `PCL_ALLOW_WERKSTATT=1` ile): proje klasöründe gerçek komutlarla çalışır ve eksik programları CEO üzerinden sizden ister ([docs/werkstatt.md](docs/werkstatt.md), Almanca). CEO bu yetkiyi başkasına veremez.
 - **Duraklatma**: ajanın tüm yeni görevlerini engeller.
 
 Haklar **sunucuda** denetlenir. Bir model yanıtına izin verilmeyen bir eylem yazarsa, bu yok sayılır ve geçmişte kaydedilir.
@@ -506,6 +511,19 @@ Paketi gelen kutusunda ya da **📁 Dateien** altında (tek dosya ya da proje ZI
 - **Sınırlar:** `PCL_CARGO_TIMEOUT` (adım başına 900 sn), `PCL_CARGO_MEM_MB` (3072, yalnızca Linux), `PCL_CARGO_JOBS` (2), aynı anda yalnızca
   bir Rust derlemesi. Pi'deki ilk derleme uzun sürer, sonra cargo yalnızca değişenleri yeniden derler. Bir ajanın çalışma başına `PCL_MAX_TOOL_STEPS`
   (varsayılan 6) araç turu vardır; büyük programlar için daha yüksek bir değer, ör. 12, yardımcı olur. Kapatmak: `PCL_CARGO=0`.
+
+## 🛠 Atölye: ajanlar kendilerini donatır
+
+**“Atölye”** yetkisiyle bir ajan, her yapay zekâ için ve her şirkette gerçek bir bilgisayardaymış gibi çalışır. Claude (abonelik CLI)
+proje klasöründe kendi Claude Code araçlarını, Codex kendi araçlarını, tüm API yapay zekâları ve Ollama `befehl` aracını alır. Bir program
+eksikse ajan bir **kurulum talebi** oluşturur: CEO kontrol eder, siz Telegram düğmesiyle veya ✋ Onaylar altında onaylarsınız, ardından
+sunucu tam olarak bu komutu çalıştırır ve görev devam eder. Kurulanlar `wissen/werkzeuge.md` dosyasında listelenir.
+
+- **Açma:** `.env` içine `PCL_ALLOW_WERKSTATT=1`, yeniden başlatın, ajanda kutuyu işaretleyip bir seviye seçin.
+- **Seviyeler:** 1 = her komut sorar, 2 = proje içindeki işler serbest, kurulum ve silme sorar (varsayılan), 3 = her şey serbest
+  (yalnızca `PCL_WERKSTATT_FREI=1` ile). Erişim bilgileri (`.env`, token’lar, anahtarlar) her zaman engellidir.
+- **Dikkat:** Komutlar yalıtım olmadan sizin kullanıcı haklarınızla çalışır. Seviye 2 kurulumları biçimlerinden tanır, bir sanal alan (sandbox) değildir.
+- Diğer her şey, Remotion ve sorunlar dahil: [docs/werkstatt.md](docs/werkstatt.md) (Almanca).
 
 ## Paralel çalışma
 
