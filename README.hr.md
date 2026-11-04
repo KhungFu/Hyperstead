@@ -219,6 +219,10 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | Prijava kod Googlea/Microsofta (mapa `tokens/`) | Usluga stoji na „nije prijavljeno”. Prijenos javlja „još niste prijavljeni” odnosno „prijava je istekla” i ništa ne prenosi. | ☁️ Cloud → Prijava. Pri selidbi s Pi-ja na laptop jednostavno se ponovno prijavite na laptopu. |
 | Datoteka veća od 50 MB za Telegram | Telegram je ne prima. `/datei` je označava s ⚠️ i ne šalje je, agent dobiva napomenu. | Kao cilj odaberite Google Drive, OneDrive ili GitHub. |
 | `cloud_upload.py` (programska datoteka) | PaperclipLite se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
+| `PCL_ALLOW_WERKSTATT=1` | Polje „Radionica” je sivo, nijedan agent ne dobiva `befehl` ni `nachruesten`. Sve ostalo radi kao i prije. | Dodajte redak u `.env`, ponovno pokrenite, označite polje kod agenta ([docs/werkstatt.md](docs/werkstatt.md)). |
+| Program koji je agentu potreban (npr. Node.js, Remotion, Python paket) | Agent s radionicom podnosi zahtjev za nadogradnju: CEO ga provjerava, vi dobivate ✅/❌ preko Telegrama i pod ✋ Odobrenja. Nakon vašeg „da” poslužitelj instalira i zadatak se nastavlja. Bez radionice agent samo navodi što nedostaje. | Pročitajte zahtjev i odlučite. Bez Telegrama samo preko weba. |
+| AI CEO-a (kod zahtjeva za nadogradnju) | Zahtjev stiže izravno vama uz napomenu „Nema CEO-a s AI” ili „CEO nije dostupan”. | Odlučite sami ili dodijelite CEO-u AI. |
+| `werkstatt.py` (programska datoteka) | PaperclipLite se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 
 ## Pristup s interneta
 
@@ -381,6 +385,7 @@ Aplikacija Telegram samo pita izvana, ne otvara se nijedan port (radi i iza CGNA
   Tu spada i `rust_project`: gradi i testira Rust programe i isporučuje gotov paket ([Rust programi](#-potpuna-izrada-rust-programa)).
 - **Prijenos u oblak** (zadano isključeno): gotove datoteke na GitHub, Google Drive, OneDrive ili vama preko Telegrama, uvijek tek nakon vašeg odobrenja ([☁️ Prijenos u oblak](#️-prijenos-u-oblak-github-google-drive-onedrive-telegram)).
 - **Predlaganje shella**: samo ako poslužitelj ima `PCL_ALLOW_SHELL=1`, i tada uvijek tek nakon odobrenja.
+- **Radionica** (zadano isključena, samo uz `PCL_ALLOW_WERKSTATT=1`): radi sa stvarnim naredbama u mapi projekta i preko CEO-a traži od vas programe koji nedostaju ([docs/werkstatt.md](docs/werkstatt.md), na njemačkom). CEO ovo pravo ne može prenijeti dalje.
 - **Pauza**: blokira sve nove zadatke agenta.
 
 Prava se provjeravaju **na poslužitelju**. Ako model u svom odgovoru napiše nedopuštenu radnju, ona se zanemaruje i bilježi u povijesti.
@@ -513,6 +518,19 @@ Paket dobivate u pošti ili pod **📁 Dateien** (pojedinačno ili u ZIP-u proje
 - **Granice:** `PCL_CARGO_TIMEOUT` (900 s po koraku), `PCL_CARGO_MEM_MB` (3072, samo Linux), `PCL_CARGO_JOBS` (2), uvijek samo jedna
   Rust izrada istovremeno. Prva izrada na Pi-ju traje dugo, nakon toga cargo ponovno gradi samo ono što se promijenilo. Agent ima
   `PCL_MAX_TOOL_STEPS` (zadano 6) krugova alata po pokretanju; za veće programe pomaže veća vrijednost, npr. 12. Isključeno: `PCL_CARGO=0`.
+
+## 🛠 Radionica: agenti se sami nadograđuju
+
+S pravom **„Radionica”** agent radi kao na stvarnom računalu, za svaku AI i u svakoj tvrtki. Claude (CLI uz pretplatu) dobiva svoje
+Claude Code alate u mapi projekta, Codex svoje, a sve API AI i Ollama alat `befehl`. Ako program nedostaje, agent podnosi
+**zahtjev za nadogradnju**: CEO ga provjerava, vi potvrđujete Telegram gumbom ili pod ✋ Odobrenja, zatim poslužitelj instalira točno tu
+naredbu i zadatak se nastavlja. Ono što je instalirano navedeno je u `wissen/werkzeuge.md`.
+
+- **Uključivanje:** `PCL_ALLOW_WERKSTATT=1` u `.env`, ponovno pokrenite, kod agenta označite polje i odaberite razinu.
+- **Razine:** 1 = svaka naredba pita, 2 = rad u projektu je slobodan, instalacije i brisanje pitaju (zadano), 3 = sve slobodno
+  (samo uz `PCL_WERKSTATT_FREI=1`). Pristupni podaci (`.env`, tokeni, ključevi) uvijek su blokirani.
+- **Pozor:** naredbe se izvršavaju bez izolacije s vašim korisničkim pravima. Razina 2 prepoznaje instalacije po obliku, to nije sandbox.
+- Sve ostalo, uključujući Remotion i probleme: [docs/werkstatt.md](docs/werkstatt.md) (na njemačkom).
 
 ## Paralelni rad
 

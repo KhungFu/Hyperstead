@@ -161,7 +161,8 @@ TEMPLATES = {
              "perms": {"read_files": True, "write_files": True, "media": True},
              "prompt": "Du vertonst (film op=voices), prüfst jede Szene mit op=preview und view_image (Figuren sichtbar, nicht abgeschnitten, Kamera passend), "
                        "korrigierst Positionen/Kamera im Drehbuch und renderst dann (op=render). Rendern dauert lange: Szene für Szene, nie alles neu. "
-                       "Melde, welche Clips in film/clips/ fertig sind. " + STYLE},
+                       "Melde, welche Clips in film/clips/ fertig sind. Hast du die WERKSTATT, darfst du für Titel, Grafiken und Untertitel "
+                       "zusätzlich Remotion nutzen (vorher mit befehl prüfen, sonst mit nachruesten beantragen). " + STYLE},
             {"key": "schnitt", "name": "Schnitt", "role": "Schnitt & Endfassung", "parent": "regie",
              "perms": {"read_files": True, "write_files": True, "media": True},
              "prompt": "Du schneidest den Film mit film op=assemble (name, untertitel true). Fehlen Clips, melde welche. Prüfe Dauer und Ton mit media_info "

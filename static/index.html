@@ -589,6 +589,12 @@ function drawSettings(a){
     <div class="chk"><input type="checkbox" id="p_publish" ${pm.publish?'checked':''}><div>Darf die Webseite zur Veröffentlichung vorschlagen<small>„veröffentlichen“ legt dir eine Freigabe vor; erst nach deinem Klick geht der Ordner www/ des Projekts online</small></div></div>
     <div class="chk"><input type="checkbox" id="p_connect" ${pm.connect?'checked':''}><div>Darf Verbindungen nutzen<small>Webhooks aus 🔌 Verbindungen aufrufen (n8n, Zapier, eigene Dienste); Verbindungen mit Freigabe laufen erst nach deinem Klick</small></div></div>
     <div class="chk"><input type="checkbox" id="p_upload" ${pm.upload?'checked':''}><div>Darf in die Cloud hochladen<small>Fertige Dateien zu GitHub, Google Drive, OneDrive oder per Telegram an dich (eingerichtet unter ☁️ Cloud). Jeder Upload wartet auf deine Freigabe</small></div></div>
+    <div class="chk"><input type="checkbox" id="p_werkstatt" ${pm.werkstatt?'checked':''} ${S.info.werkstatt?'':'disabled'}><div>Werkstatt: arbeitet wie an einem echten Rechner<small>${S.info.werkstatt?'Führt Befehle im Projektordner aus (Claude und Codex mit ihren eigenen Werkzeugen) und beantragt fehlende Programme. Jeder Antrag geht über den CEO an dich (Web oder Telegram).':'auf dem Server aus (PCL_ALLOW_WERKSTATT=1 in .env)'}</small>
+      <select id="p_wstufe" style="margin-top:6px;max-width:100%" ${S.info.werkstatt?'':'disabled'}>
+        <option value="1" ${pm.werkstatt_stufe==1?'selected':''}>Stufe 1 · vorsichtig (jeder Befehl fragt)</option>
+        <option value="2" ${(pm.werkstatt_stufe||2)==2?'selected':''}>Stufe 2 · normal (Installationen fragen)</option>
+        <option value="3" ${pm.werkstatt_stufe==3?'selected':''} ${S.info.werkstatt_frei?'':'disabled'}>Stufe 3 · frei${S.info.werkstatt_frei?' (ohne Nachfrage)':' (PCL_WERKSTATT_FREI=1 nötig)'}</option>
+      </select></div></div>
     <div class="chk"><input type="checkbox" id="p_shell" ${pm.shell?'checked':''} ${S.info.allow_shell?'':'disabled'}><div>Darf Shell-Befehle vorschlagen<small>${S.info.allow_shell?'läuft erst nach deiner Freigabe (Sidebar „Freigaben“)':'auf dem Server deaktiviert (PCL_ALLOW_SHELL=1 in .env)'}</small></div></div>
     <small style="color:var(--mute)">${(a.used_tokens||0).toLocaleString('de-AT')} Tokens diesen Monat verbraucht (nur zur Info, kein Limit).</small>
     <div class="chk" style="margin-top:12px"><input type="checkbox" id="f_pause" ${a.paused?'checked':''}><div>Agent pausiert</div></div>
@@ -631,7 +637,7 @@ function drawSettings(a){
   $('#saveAg').onclick=async()=>{
     const body={name:$('#f_name').value.trim()||'Agent',role:$('#f_role').value,...($('#f_prov').value?{provider:$('#f_prov').value}:{}),model:$('#f_model').value.trim(),
       system_prompt:$('#f_sys').value,...($('#f_mem').value!==(a.memory||'')?{memory:$('#f_mem').value}:{}),paused:$('#f_pause').checked,
-      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,publish:$('#p_publish').checked,code:$('#p_code').checked,run_code:$('#p_run_code').checked,connect:$('#p_connect').checked,upload:$('#p_upload').checked,shell:$('#p_shell').checked}};
+      perms:{delegate:$('#p_delegate').checked,judge:$('#p_judge').checked,auto_run:$('#p_auto').checked,write_files:$('#p_files').checked,web:$('#p_web').checked,media:$('#p_media').checked,images:$('#p_images').checked,read_files:$('#p_read').checked,recruit:$('#p_recruit').checked,publish:$('#p_publish').checked,code:$('#p_code').checked,run_code:$('#p_run_code').checked,connect:$('#p_connect').checked,upload:$('#p_upload').checked,shell:$('#p_shell').checked,werkstatt:$('#p_werkstatt').checked,werkstatt_stufe:+$('#p_wstufe').value}};
     if($('#cliwrap').style.display!=='none') body.cli_command=$('#f_cli').value;
     const np=$('#f_parent').value; body.parent_id=np?+np:null;
     await api('/agents/'+a.id,'PUT',body); toast('Gespeichert'); $('#toast').style.borderColor='var(--green)';
@@ -815,12 +821,17 @@ $('#btnApprovals').onclick=async()=>{
         <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Daten gehen an deinen Dienst; prüfe, ob das so raus soll.</div>`
         :r.kind==='upload'?`<div><b>${esc(r.agent_name||'?')}</b> möchte eine <b>Datei hochladen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre style="white-space:pre-wrap">${esc(r.payload)}</pre><div style="color:var(--mute);font-size:12px">Die Datei verlässt PaperclipLite. Prüfe Datei und Ziel.</div>`
+        :r.kind==='werkstatt'?(d=>`<div>🛠 <b>${esc(r.agent_name||'?')}</b> möchte <b>nachrüsten</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
+        <pre style="white-space:pre-wrap">$ ${esc(r.payload)}</pre>
+        <div style="font-size:13px">Wofür: ${esc(d.wozu||'—')}${d.groesse?' · Größe: '+esc(d.groesse):''}<br>Warum Antrag: ${esc(d.grund||'—')}</div>
+        <div style="font-size:13px;margin-top:4px">💼 ${d.stufe==='ceo'?'<i>Der CEO prüft gerade …</i> (du kannst trotzdem schon entscheiden)':esc(d.ceo||'')}</div>
+        <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der PaperclipLite startet, im Projektordner. Befehl genau prüfen!</div>`)((()=>{try{return JSON.parse(r.data||'{}')}catch(e){return {}}})())
         :r.kind==='publish'?`<div><b>${esc(r.agent_name||'?')}</b> möchte die <b>Webseite veröffentlichen</b> <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <div style="color:var(--mute);font-size:12px;margin:4px 0">Der Projektordner (ohne <code>input/</code>) wird als Webseite ausgeliefert, standardmäßig nur auf dem Pi selbst (localhost).</div>`
         :`<div><b>${esc(r.agent_name||'?')}</b> will einen <b>${esc(r.kind)}</b>-Befehl ausführen <span style="color:var(--mute)">(Aufgabe: ${esc(r.task_title||'—')})</span></div>
         <pre>$ ${esc(r.payload)}</pre>
         <div style="color:var(--mute);font-size:12px">Läuft mit den Rechten des Benutzers, der PaperclipLite startet — Befehl genau prüfen!</div>`}
-        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':r.kind==='connect'?'Freigeben & senden':r.kind==='upload'?'Freigeben & hochladen':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
+        <div class="row"><button class="btn pri sm" data-ok="${r.id}">${r.kind==='publish'?'Freigeben & veröffentlichen':(r.kind==='plan'||r.kind==='recruit')?'Freigeben':r.kind==='connect'?'Freigeben & senden':r.kind==='upload'?'Freigeben & hochladen':r.kind==='werkstatt'?'Ja, installieren':'Freigeben & ausführen'}</button><button class="btn danger sm" data-no="${r.id}">Ablehnen</button></div>
       </div>`).join(''):'<div style="color:var(--mute)">Keine offenen Freigaben.</div>');
     if(gates) ['plan','recruit'].forEach(k=>$('#g_'+k).onchange=async e=>{ await api('/projects/'+S.pid+'/gates','PUT',{[k]:e.target.checked}); toast('Gespeichert'); });
     body.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await api('/approvals/'+b.dataset.ok,'POST',{decision:'approve'}); await load(); refresh(true); });

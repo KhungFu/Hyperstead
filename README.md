@@ -219,6 +219,10 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Anmeldung bei Google/Microsoft (Ordner `tokens/`) | Der Dienst steht auf „nicht angemeldet“. Ein Upload meldet „noch nicht angemeldet“ bzw. „Anmeldung abgelaufen“ und lädt nichts hoch. | ☁️ Cloud → Anmelden. Beim Umzug Pi → Laptop einfach auf dem Laptop neu anmelden. |
 | Datei über 50 MB für Telegram | Telegram nimmt sie nicht. `/datei` markiert sie mit ⚠️ und schickt sie nicht, der Agent bekommt den Hinweis. | Google Drive, OneDrive oder GitHub als Ziel nehmen. |
 | `cloud_upload.py` (Programmdatei) | PaperclipLite startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
+| `PCL_ALLOW_WERKSTATT=1` | Das Häkchen „Werkstatt“ ist grau, kein Agent bekommt `befehl` oder `nachruesten`. Alles andere läuft wie bisher. | Zeile in `.env` eintragen, neu starten, beim Agenten das Häkchen setzen ([docs/werkstatt.md](docs/werkstatt.md)). |
+| Ein Programm, das ein Agent braucht (z. B. Node.js, Remotion, ein Python-Paket) | Mit Werkstatt stellt der Agent einen Nachrüst-Antrag: CEO prüft, du bekommst ✅/❌ per Telegram und unter ✋ Freigaben. Nach deinem Ja installiert der Server, die Aufgabe geht weiter. Ohne Werkstatt nennt der Agent nur, was fehlt. | Antrag lesen und entscheiden. Ohne Telegram nur im Web. |
+| KI des CEO (bei einem Nachrüst-Antrag) | Der Antrag kommt mit dem Hinweis „Kein CEO mit KI“ bzw. „CEO nicht erreichbar“ direkt zu dir. | Selbst entscheiden oder dem CEO eine KI zuweisen. |
+| `werkstatt.py` (Programmdatei) | PaperclipLite startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 
 ## Zugriff aus dem Internet
 
@@ -381,6 +385,7 @@ Die App fragt Telegram nur nach außen ab, es wird kein Port geöffnet (geht auc
   Dazu gehört `rust_project`: Rust-Programme bauen, testen und als fertiges Paket abliefern ([Rust-Programme](#-rust-programme-komplett-bauen)).
 - **In die Cloud hochladen** (Standard aus): fertige Dateien zu GitHub, Google Drive, OneDrive oder per Telegram an dich, immer erst nach deiner Freigabe ([☁️ Cloud-Upload](#️-cloud-upload-github-google-drive-onedrive-telegram)).
 - **Shell vorschlagen**: nur wenn der Server `PCL_ALLOW_SHELL=1` hat, und dann immer erst nach Freigabe.
+- **Werkstatt** (Standard aus, nur mit `PCL_ALLOW_WERKSTATT=1`): arbeitet mit echten Befehlen im Projektordner und beantragt fehlende Programme über den CEO bei dir ([docs/werkstatt.md](docs/werkstatt.md)). Ein CEO kann dieses Recht nicht weitergeben.
 - **Pause**: blockiert alle neuen Aufgaben des Agenten.
 
 Die Rechte werden **serverseitig** geprüft. Schreibt ein Modell eine nicht erlaubte Aktion in seine
@@ -514,6 +519,19 @@ Du bekommst das Paket in der Post bzw. unter **📁 Dateien** (einzeln oder im P
 - **Grenzen:** `PCL_CARGO_TIMEOUT` (900 s je Schritt), `PCL_CARGO_MEM_MB` (3072, nur Linux), `PCL_CARGO_JOBS` (2), immer nur ein Rust-Bau
   gleichzeitig. Der erste Bau auf dem Pi dauert lange, danach baut cargo nur Geändertes neu. Ein Agent hat `PCL_MAX_TOOL_STEPS`
   (Standard 6) Werkzeug-Runden je Lauf; für größere Programme hilft ein höherer Wert, z. B. 12. Aus: `PCL_CARGO=0`.
+
+## 🛠 Werkstatt: Agenten rüsten selbst nach
+
+Mit dem Recht **„Werkstatt“** arbeitet ein Agent wie an einem echten Rechner, für jede KI und in jeder Firma. Claude (Abo-CLI) bekommt
+seine Claude-Code-Werkzeuge im Projektordner, Codex seine eigenen, alle API-KIs und Ollama das Werkzeug `befehl`. Fehlt ein Programm,
+stellt der Agent einen **Nachrüst-Antrag**: Der CEO prüft ihn, du bestätigst per Telegram-Knopf oder unter ✋ Freigaben, danach
+installiert der Server genau diesen Befehl und die Aufgabe geht weiter. Was installiert ist, steht in `wissen/werkzeuge.md`.
+
+- **Einschalten:** `PCL_ALLOW_WERKSTATT=1` in `.env`, neu starten, beim Agenten das Häkchen setzen und eine Stufe wählen.
+- **Stufen:** 1 = jeder Befehl fragt, 2 = Arbeit im Projekt frei, Installationen und Löschen fragen (Standard), 3 = alles frei
+  (nur mit `PCL_WERKSTATT_FREI=1`). Zugangsdaten (`.env`, Tokens, Keys) sind immer gesperrt.
+- **Achtung:** Befehle laufen ohne Abschottung mit deinen Benutzerrechten. Stufe 2 erkennt Installationen an ihrer Form, sie ist keine Sandbox.
+- Alles Weitere, auch Remotion und Probleme: [docs/werkstatt.md](docs/werkstatt.md).
 
 ## Parallele Arbeit
 

@@ -219,6 +219,10 @@ This list is extended with every change to the program. Each row says what the s
 | Sign-in at Google/Microsoft (folder `tokens/`) | The service shows "not signed in". An upload reports "not signed in yet" or "sign-in expired" and uploads nothing. | ☁️ Cloud → Sign in. When moving from Pi to laptop, simply sign in again on the laptop. |
 | File over 50 MB for Telegram | Telegram does not accept it. `/datei` marks it with ⚠️ and does not send it, the agent gets a notice. | Choose Google Drive, OneDrive or GitHub as the target. |
 | `cloud_upload.py` (program file) | PaperclipLite does not start (import error). | Run `git pull` again, the file is part of the program. |
+| `PCL_ALLOW_WERKSTATT=1` | The “Workshop” checkbox is grey, no agent gets `befehl` or `nachruesten`. Everything else works as before. | Add the line to `.env`, restart, tick the box for the agent ([docs/werkstatt.md](docs/werkstatt.md)). |
+| A program an agent needs (e.g. Node.js, Remotion, a Python package) | With the workshop the agent files an upgrade request: the CEO checks it, you get ✅/❌ via Telegram and under ✋ Approvals. After your yes the server installs it and the task continues. Without the workshop the agent only names what is missing. | Read the request and decide. Without Telegram only on the web. |
+| The CEO's AI (for an upgrade request) | The request comes straight to you with the note “no CEO with AI” or “CEO not reachable”. | Decide yourself or assign an AI to the CEO. |
+| `werkstatt.py` (program file) | PaperclipLite does not start (import error). | Run `git pull` again, the file is part of the program. |
 
 ## Access from the internet
 
@@ -381,6 +385,7 @@ The app only polls Telegram outwards, no port is opened (works behind CGNAT too)
   This includes `rust_project`: build and test Rust programs and deliver a finished package ([Rust programs](#-building-complete-rust-programs)).
 - **Upload to the cloud** (off by default): finished files to GitHub, Google Drive, OneDrive or to you via Telegram, always only after your approval ([☁️ Cloud upload](#️-cloud-upload-github-google-drive-onedrive-telegram)).
 - **Suggest shell**: only if the server has `PCL_ALLOW_SHELL=1`, and then always only after approval.
+- **Workshop** (off by default, only with `PCL_ALLOW_WERKSTATT=1`): works with real commands in the project folder and requests missing programs from you through the CEO ([docs/werkstatt.md](docs/werkstatt.md), German). A CEO cannot pass this right on.
 - **Pause**: blocks all new tasks of the agent.
 
 The rights are checked **on the server**. If a model writes a forbidden action into its
@@ -514,6 +519,19 @@ You get the package in the inbox or under **📁 Dateien** (single file or in th
 - **Limits:** `PCL_CARGO_TIMEOUT` (900 s per step), `PCL_CARGO_MEM_MB` (3072, Linux only), `PCL_CARGO_JOBS` (2), only one Rust build
   at a time. The first build on the Pi takes long, after that cargo only rebuilds what changed. An agent has `PCL_MAX_TOOL_STEPS`
   (default 6) tool rounds per run; for bigger programs a higher value helps, e.g. 12. Off: `PCL_CARGO=0`.
+
+## 🛠 Workshop: agents upgrade themselves
+
+With the **“Workshop”** right an agent works like on a real computer, for every AI and in every company. Claude (subscription CLI)
+gets its Claude Code tools in the project folder, Codex its own, all API AIs and Ollama the `befehl` tool. If a program is missing,
+the agent files an **upgrade request**: the CEO checks it, you confirm with the Telegram button or under ✋ Approvals, then the
+server installs exactly that command and the task continues. What is installed is listed in `wissen/werkzeuge.md`.
+
+- **Switch on:** `PCL_ALLOW_WERKSTATT=1` in `.env`, restart, tick the box for the agent and choose a level.
+- **Levels:** 1 = every command asks, 2 = work in the project is free, installing and deleting ask (default), 3 = everything free
+  (only with `PCL_WERKSTATT_FREI=1`). Credentials (`.env`, tokens, keys) are always blocked.
+- **Caution:** commands run without isolation with your user rights. Level 2 recognises installations by their form, it is not a sandbox.
+- Everything else, including Remotion and troubleshooting: [docs/werkstatt.md](docs/werkstatt.md) (German).
 
 ## Parallel work
 
