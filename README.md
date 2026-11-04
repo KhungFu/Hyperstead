@@ -302,6 +302,8 @@ der Oberfläche. Die Agenten arbeiten immer mit klaren Begriffen (Auftrag, Beric
 | Tycoon (Standard) | Gründer:in | Boss | Räume | 🛠️ Garage → 🏚️ Werkstatt → 🏪 Laden → 🏢 Firmensitz → 🏙️ Konzern |
 | Gizmo-Stadt | Stadtgründer:in | Bürgermeister:in | Gebäude | ⛺ Lager → 🏡 Dorf → 🏘️ Kleinstadt → 🏛️ Stadt → 🌆 Metropole |
 
+**Bedienung:** Die Leiste über der Fläche zeigt Stufe, Fortschritt zur nächsten Stufe und die wichtigsten Zahlen. Rechts wählst du die Welt, schaltest zwischen Hell und Dunkel um (🌓) und öffnest mit ⓘ die Übersicht über Stufen, Punkte und Ränge. Der Rang jedes Agenten steht als Symbol auf seiner Karte.
+
 **Punkte:** Lieferung beim ersten Mal abgenommen +10, nach Überarbeitung +5, Auftrag in der Post als erledigt markiert +20,
 fehlgeschlagen −3, Nacharbeit angefordert −5. Stufen ab 0 / 100 / 300 / 700 / 1500 Punkten. Bestehende Projekte bekommen
 ihre bisherigen Erfolge automatisch angerechnet. Ein Aufstieg kommt einmal per Telegram.

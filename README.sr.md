@@ -304,6 +304,8 @@ interfejsa. Agenti uvek rade sa jasnim pojmovima (zadatak, izveštaj, tim), tako
 
 Interfejs prikazuje nazive na nemačkom.
 
+**Upotreba:** Traka iznad površine prikazuje nivo, napredak do sledećeg nivoa i najvažnije brojeve. Desno birate svet, prebacujete između svetlog i tamnog prikaza (🌓) i sa ⓘ otvarate pregled nivoa, poena i rangova. Rang svakog agenta je prikazan kao ikona na njegovoj kartici.
+
 **Poeni:** isporuka prihvaćena iz prve +10, posle ispravke +5, zadatak označen kao završen u pošti +20,
 neuspešno −3, zatražena dorada −5. Nivoi od 0 / 100 / 300 / 700 / 1500 poena. Postojeći projekti automatski
 dobijaju svoje dosadašnje uspehe. Prelazak na viši nivo se jednom javlja preko Telegrama.

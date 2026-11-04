@@ -3673,7 +3673,15 @@ def api_provider_test():
 
 @app.get("/api/projects")
 def api_projects():
-    return jsonify(q("SELECT * FROM projects ORDER BY id"))
+    out = []
+    for p in q("SELECT * FROM projects ORDER BY id"):
+        try:
+            g = project_growth(p["id"])
+            p.update({"world": g["world"], "stage": g["stage"], "stage_icon": g["icon"], "stage_name": g["name"]})
+        except Exception:
+            pass
+        out.append(p)
+    return jsonify(out)
 
 
 @app.post("/api/projects")

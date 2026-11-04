@@ -7,7 +7,19 @@
 <style>
 :root{
   --bg:#0b0b0c; --panel:#111113; --panel2:#17171a; --line:#27272b; --text:#e8e8ea; --mute:#8b8b93;
-  --accent:#f97316; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; --yellow:#eab308; --orange:#f59e0b;
+  --accent:#f97316; --accent2:#7c3aed; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; --yellow:#eab308; --orange:#f59e0b;
+  --chip:var(--chip); --dotgrid:var(--dotgrid); --edge:var(--edge); --hover:var(--hover); --toastbg:var(--toastbg); --ground:#0f1a26;
+}
+/* Helles Design (Schalter in der Kopfleiste, Standard folgt dem Geraet) */
+:root[data-theme="light"]{
+  --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --line:#dde1e7; --text:#1b1f27; --mute:#667085;
+  --chip:#e8ebf0; --dotgrid:#d5dae2; --edge:#9aa3b2; --hover:#b8c0cc; --toastbg:#fdecec;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --line:#dde1e7; --text:#1b1f27; --mute:#667085;
+    --chip:#e8ebf0; --dotgrid:#d5dae2; --edge:#9aa3b2; --hover:#b8c0cc; --toastbg:#fdecec;
+  }
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
@@ -23,7 +35,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .side-h{font-size:11px;letter-spacing:.08em;color:var(--mute);text-transform:uppercase;padding:10px 6px 4px;display:flex;justify-content:space-between;align-items:center}
 .side-btn{width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;gap:8px;align-items:center;color:var(--text)}
 .side-btn:hover{background:var(--panel2)}
-.side-btn.active{background:#26262b}
+.side-btn.active{background:var(--chip)}
 .badge{margin-left:auto;background:var(--accent);color:#fff;border-radius:10px;padding:0 7px;font-size:11px}
 .icon-btn{background:none;border:0;color:var(--mute);cursor:pointer;font-size:16px;padding:0 4px}
 .icon-btn:hover{color:var(--text)}
@@ -41,20 +53,20 @@ button,input,select,textarea{font:inherit;color:inherit}
 .pal:hover{border-color:var(--accent)}
 .hint{color:var(--mute);font-size:12px;margin-left:6px}
 #vp{position:relative;flex:1;overflow:hidden;cursor:grab;touch-action:none;
-  background-image:radial-gradient(#2a2a2f 1px,transparent 1px);background-size:24px 24px}
+  background-image:radial-gradient(var(--dotgrid) 1px,transparent 1px);background-size:24px 24px}
 #vp.panning{cursor:grabbing}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
 #edges{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
-#edges path.e{stroke:#5a5a63;stroke-width:1.6;fill:none}
+#edges path.e{stroke:var(--edge);stroke-width:1.6;fill:none}
 #edges path.hit{stroke:transparent;stroke-width:14;fill:none;pointer-events:stroke;cursor:pointer}
 #edges path.hit:hover + path.e{stroke:var(--red)}
 #edges path.tmp{stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4;fill:none}
 .node{position:absolute;width:200px;height:86px;background:var(--panel);border:1px solid var(--line);
   border-radius:12px;padding:10px 12px;cursor:move;user-select:none}
-.node:hover{border-color:#44444b}
-.node.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(249,115,22,.25)}
+.node:hover{border-color:var(--hover)}
+.node.sel{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
 .n-head{display:flex;gap:10px;align-items:flex-start}
-.n-ico{width:30px;height:30px;border-radius:9px;background:#26262b;display:grid;place-items:center;font-weight:700;flex:none}
+.n-ico{width:30px;height:30px;border-radius:9px;background:var(--chip);display:grid;place-items:center;font-weight:700;flex:none}
 .n-txt{min-width:0;flex:1}
 .n-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .n-role,.n-prov{color:var(--mute);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -65,10 +77,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .dot.wait{background:var(--orange)}
 @keyframes pulse{50%{opacity:.35}}
 .n-foot{position:absolute;left:12px;right:12px;bottom:8px;display:flex;gap:8px;align-items:center;font-size:11px;color:var(--mute)}
-.n-bar{flex:1;height:3px;background:#26262b;border-radius:2px;overflow:hidden}
+.n-bar{flex:1;height:3px;background:var(--chip);border-radius:2px;overflow:hidden}
 .n-bar i{display:block;height:100%;background:var(--accent)}
 .port{position:absolute;left:50%;width:14px;height:14px;margin-left:-7px;border-radius:50%;
-  background:#26262b;border:2px solid #5a5a63}
+  background:var(--chip);border:2px solid var(--edge)}
 .port.top{top:-8px}
 .port.bot{bottom:-8px;cursor:crosshair}
 .port.bot:hover{border-color:var(--accent);background:var(--accent)}
@@ -76,6 +88,21 @@ button,input,select,textarea{font:inherit;color:inherit}
 .zoom button{width:34px;height:30px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;cursor:pointer}
 .zoom button:hover{border-color:var(--accent)}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);pointer-events:none;text-align:center}
+/* Wachstumsleiste (Hyperstead) */
+#growth{display:none;gap:12px;align-items:center;padding:7px 14px;border-bottom:1px solid var(--line);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 14%,var(--panel)),var(--panel) 70%)}
+#growth.on{display:flex}
+.g-stage{display:flex;align-items:center;gap:8px;min-width:0}
+.g-ico{font-size:22px;line-height:1}
+.g-name{font-weight:700;white-space:nowrap}
+.g-sub{font-size:11px;color:var(--mute);white-space:nowrap}
+.g-bar{flex:1 1 140px;min-width:80px;max-width:320px;height:8px;background:var(--chip);border-radius:5px;overflow:hidden}
+.g-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .6s}
+.g-stats{display:flex;gap:10px;font-size:12px;color:var(--mute);white-space:nowrap}
+.g-stats b{color:var(--text)}
+.g-tools{margin-left:auto;display:flex;gap:6px;align-items:center}
+.g-tools select{width:auto;padding:4px 8px}
+.n-rank{font-size:12px;cursor:help}
 /* Panel */
 #panel{background:var(--panel);border-left:1px solid var(--line);overflow:hidden;display:none;flex-direction:column;min-height:0}
 #app.panel-open #panel{display:flex}
@@ -93,7 +120,7 @@ textarea{resize:vertical;min-height:110px}
 .chk{display:flex;gap:8px;align-items:flex-start;margin:8px 0;color:var(--text);font-size:13px}
 .chk small{display:block;color:var(--mute)}
 .btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
-.btn:hover{border-color:#55555d}
+.btn:hover{border-color:var(--hover)}
 #chatlog{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 330px);overflow:auto;margin-bottom:10px}
 .bub{padding:8px 11px;border-radius:12px;max-width:92%;white-space:pre-wrap;word-wrap:break-word;line-height:1.45;font-size:13px}
 .bub.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:3px}
@@ -101,7 +128,7 @@ textarea{resize:vertical;min-height:110px}
 .bub.wait{opacity:.6;font-style:italic}
 #chatbox{position:relative}
 #chatbox.drop::after{content:'Dateien hier ablegen → input/';position:absolute;inset:0;display:grid;place-items:center;
-  border:2px dashed var(--accent);border-radius:10px;background:rgba(249,115,22,.12);color:var(--text);font-weight:600;pointer-events:none}
+  border:2px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--text);font-weight:600;pointer-events:none}
 #chatatt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 #chatatt:empty{display:none}
 #chatpick{border:1px solid var(--line);border-radius:10px;background:var(--panel2);margin-bottom:6px;max-height:220px;overflow:auto;padding:4px}
@@ -122,7 +149,7 @@ a.btn.pri{color:#fff}
 .btn.danger{color:var(--red)}
 .btn.sm{padding:3px 8px;font-size:12px}
 .row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-.bud{height:6px;background:#26262b;border-radius:3px;overflow:hidden;margin-top:6px}
+.bud{height:6px;background:var(--chip);border-radius:3px;overflow:hidden;margin-top:6px}
 .bud i{display:block;height:100%;background:var(--accent)}
 .task{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--panel2)}
 .task summary{padding:8px 10px;cursor:pointer;display:flex;gap:8px;align-items:center}
@@ -134,7 +161,7 @@ a.btn.pri{color:#fff}
 .task pre,.res pre{user-select:text;-webkit-user-select:text}
 .res pre{padding-top:30px}
 .task pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0;max-height:300px;overflow:auto;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace}
-.chip{font-size:11px;border-radius:10px;padding:1px 8px;background:#26262b;color:var(--mute);white-space:nowrap}
+.chip{font-size:11px;border-radius:10px;padding:1px 8px;background:var(--chip);color:var(--mute);white-space:nowrap}
 .chip.running{background:rgba(59,130,246,.2);color:#7db0ff}
 .chip.done{background:rgba(34,197,94,.18);color:#6fdc98}
 .chip.failed,.chip.blocked{background:rgba(239,68,68,.2);color:#ff8a8a}
@@ -157,7 +184,7 @@ a.btn.pri{color:#fff}
 #ovbox header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center}
 #ovbox header b{flex:1}
 #ovbody{padding:14px 16px;overflow:auto}
-#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2a1212;border:1px solid var(--red);
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--toastbg);border:1px solid var(--red);
   padding:8px 14px;border-radius:10px;display:none;z-index:99;max-width:80vw}
 @media (max-width:1100px) and (min-width:821px){
   #app{grid-template-columns:200px 1fr 0}
@@ -165,6 +192,9 @@ a.btn.pri{color:#fff}
   #pname{flex-basis:150px}
 }
 @media (max-width:820px){
+  #growth{flex-wrap:wrap;padding:6px 10px;gap:8px}
+  .g-bar{flex:1 1 100%;max-width:none;order:3}
+  .g-stats{display:none}
   #app,#app.panel-open{grid-template-columns:1fr;height:100dvh}
   #main{grid-column:1;grid-row:1}
   #side{display:none}
@@ -221,6 +251,16 @@ a.btn.pri{color:#fff}
       <input id="pname" type="text" placeholder="Projektname" disabled>
       <input id="pgoal" type="text" placeholder="Ziel des Projekts (alle Agenten kennen es)" disabled>
       <button class="btn danger sm" id="btnDelProj" style="display:none">Projekt löschen</button>
+    </div>
+    <div id="growth" aria-live="polite">
+      <div class="g-stage"><span class="g-ico" id="gIco"></span><div><div class="g-name" id="gName"></div><div class="g-sub" id="gSub"></div></div></div>
+      <div class="g-bar" title="Fortschritt bis zur nächsten Stufe"><i id="gBar"></i></div>
+      <div class="g-stats" id="gStats"></div>
+      <div class="g-tools">
+        <select id="gWorld" title="Welt dieses Projekts (ändert nur das Aussehen)"></select>
+        <button class="icon-btn" id="gTheme" title="Hell / Dunkel">🌓</button>
+        <button class="icon-btn" id="gInfo" title="Wie das Wachstum funktioniert">ⓘ</button>
+      </div>
     </div>
     <div id="palette">
       <span style="color:var(--mute)">Agent hinzufügen (ziehen oder klicken):</span>
@@ -293,13 +333,13 @@ async function loadProjects(){
   S.projects.forEach((p,i)=>{
     const b = document.createElement('button');
     b.className = 'side-btn'+(p.id===S.pid?' active':'');
-    b.innerHTML = `<span class="pdot" style="background:${COLORS[i%COLORS.length]}"></span><span>${esc(p.name)}</span>`;
+    b.innerHTML = `<span class="pdot" style="background:${COLORS[i%COLORS.length]}"></span><span>${esc(p.name)}</span>${p.stage_icon?`<span style="margin-left:auto" title="${esc(p.stage_name||'')}">${p.stage_icon}</span>`:''}`;
     b.onclick = ()=>openProject(p.id);
     el.appendChild(b);
   });
 }
 async function openProject(id){
-  S.pid = id; S.sel = null; closePanel();
+  S.pid = id; S.sel = null; closePanel(); WORLD.g = null; WORLD.at = 0;
   await loadProjects(); await refresh(true);
   fit();
 }
@@ -328,7 +368,7 @@ async function refresh(force){
   const nm = S.graph.model_problems||0;
   const mb = $('#mdbadge'); mb.textContent = nm; mb.style.display = nm? '' : 'none';
   $('#schbadge').style.display = S.graph.closed ? '' : 'none';
-  render();
+  render(); renderGrowth(); loadGrowth(force);
   if(S.sel && S.tab==='tasks') loadTasks();
 }
 function agentById(id){ return S.graph && S.graph.agents.find(a=>a.id===id); }
@@ -338,7 +378,7 @@ function render(){
   $('#empty').style.display = g ? 'none' : 'grid';
   $('#pname').disabled = $('#pgoal').disabled = !g;
   $('#btnDelProj').style.display = g ? '' : 'none';
-  if(!g){ $('#nodes').innerHTML=''; $('#edges').innerHTML=''; $('#pname').value=''; $('#pgoal').value=''; return; }
+  if(!g){ $('#growth').classList.remove('on'); $('#nodes').innerHTML=''; $('#edges').innerHTML=''; $('#pname').value=''; $('#pgoal').value=''; return; }
   if(document.activeElement!==$('#pname')) $('#pname').value = g.project.name;
   if(document.activeElement!==$('#pgoal')) $('#pgoal').value = g.project.goal;
   const nodes = $('#nodes'); nodes.innerHTML='';
@@ -353,7 +393,7 @@ function render(){
       <div class="n-head"><div class="n-ico">${esc((a.name||'?')[0].toUpperCase())}</div>
         <div class="n-txt"><div class="n-name">${esc(a.name)}</div><div class="n-role">${esc(a.role||'—')}</div><div class="n-prov">${esc(prov)}</div></div>
         <span class="dot ${cls}"></span></div>
-      <div class="n-foot"><span>▶${running} ✓${c.done||0}${c.todo?` ·${c.todo} offen`:''}${c.failed?` ·${c.failed} ✗`:''}</span><span style="margin-left:auto">${fmtTok(a.used_tokens||0)}</span></div>
+      <div class="n-foot"><span>${rankBadge(a)} ▶${running} ✓${c.done||0}${c.todo?` ·${c.todo} offen`:''}${c.failed?` ·${c.failed} ✗`:''}</span><span style="margin-left:auto">${fmtTok(a.used_tokens||0)}</span></div>
       <div class="port bot" title="Ziehen, um einen Mitarbeiter zu verbinden"></div>`;
     nodes.appendChild(el);
   });
@@ -1258,6 +1298,76 @@ $('#btnAudit').onclick=async()=>{
   const rows=await api('/audit?limit=200'+(S.pid?'&project_id='+S.pid:''));
   $('#ovbody').innerHTML=rows.length?rows.map(r=>`<div class="logrow"><span class="ts">${fmt(r.ts)}</span> <b>${esc(r.event)}</b> ${r.agent_name?'· '+esc(r.agent_name):''}<br>${esc(r.detail)}</div>`).join(''):'<div style="color:var(--mute)">Leer.</div>';
 };
+
+
+/* ---------- Welten und Wachstum (Hyperstead) ---------- */
+const WORLD = {list:null, g:null, at:0};
+function wdef(){ return (WORLD.list && WORLD.g && WORLD.list.worlds[WORLD.g.world]) || null; }
+function wword(k, dflt){ const w=wdef(); return (w && w.words[k]) || dflt; }
+function applyWorldColors(){
+  const w = wdef(), r = document.documentElement.style;
+  if(!w){ r.removeProperty('--accent'); r.removeProperty('--accent2'); r.removeProperty('--ground'); return; }
+  r.setProperty('--accent', w.colors.accent); r.setProperty('--accent2', w.colors.accent2);
+  const light = document.documentElement.dataset.theme==='light' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: light)').matches);
+  r.setProperty('--ground', light ? w.colors.ground : w.colors.ground_dark);
+}
+async function loadGrowth(force){
+  if(!S.pid){ WORLD.g=null; renderGrowth(); return; }
+  if(!force && Date.now()-WORLD.at < 10000) return;
+  WORLD.at = Date.now();
+  try{
+    if(!WORLD.list) WORLD.list = await api('/worlds');
+    const pid = S.pid, g = await api('/projects/'+pid+'/growth');
+    if(pid!==S.pid) return;
+    const before = WORLD.g && WORLD.g.pid===pid ? WORLD.g.stage : null;
+    WORLD.g = {...g, pid};
+    if(before!==null && g.stage>before && typeof celebrate==='function') celebrate(g);
+  }catch(e){ return; }
+  renderGrowth(); render();
+}
+function renderGrowth(){
+  const el=$('#growth'), g=WORLD.g, w=wdef();
+  el.classList.toggle('on', !!(g && w && S.graph));
+  applyWorldColors();
+  if(!g || !w) return;
+  $('#gIco').textContent = g.icon;
+  $('#gName').textContent = g.name+' · Stufe '+(g.stage+1)+'/'+g.stage_count;
+  $('#gSub').textContent = g.next!==null ? `${g.points} ${w.words.points} · noch ${g.next-g.points} bis ${g.next_icon} ${g.next_name}` : `${g.points} ${w.words.points} · höchste Stufe erreicht`;
+  $('#gBar').style.width = Math.round(g.progress*100)+'%';
+  const ags=(S.graph&&S.graph.agents)||[]; let run=0, done=0;
+  ags.forEach(a=>{ const c=a.counts||{}; run+=(c.running||0)+(c.queued||0)+(c.waiting_subtasks||0); done+=(c.done||0); });
+  $('#gStats').innerHTML = `<span>👥 <b>${ags.length}</b>${g.limits&&g.team_limit?' / '+g.team_limit:''}</span><span>▶ <b>${run}</b> läuft</span><span>✓ <b>${done}</b> ${esc(w.words.done)}</span><span>✋ <b>${(S.graph&&S.graph.pending_approvals)||0}</b> Freigaben</span>`;
+  const sel=$('#gWorld');
+  if(sel.options.length!==Object.keys(WORLD.list.worlds).length)
+    sel.innerHTML = Object.entries(WORLD.list.worlds).map(([k,v])=>`<option value="${k}">${esc(v.stages[0][0]+' '+v.name)}</option>`).join('');
+  if(document.activeElement!==sel) sel.value = g.world;
+}
+$('#gWorld').onchange = async e=>{ if(!S.pid) return; await api('/projects/'+S.pid+'/world','PUT',{world:e.target.value}); await loadGrowth(true); loadProjects(); };
+$('#gTheme').onclick = ()=>{
+  const d=document.documentElement, cur=d.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  d.dataset.theme = cur==='light'?'dark':'light';
+  try{ localStorage.setItem('hs-theme', d.dataset.theme); }catch(e){}
+  applyWorldColors();
+};
+try{ const t=localStorage.getItem('hs-theme'); if(t) document.documentElement.dataset.theme=t; }catch(e){}
+$('#gInfo').onclick = ()=>{
+  const g=WORLD.g, w=wdef(), L=WORLD.list; if(!g||!w) return;
+  openOv(`${w.stages[0][0]} Welt „${w.name}“ und Wachstum`);
+  const P=L.points;
+  $('#ovbody').innerHTML = `<div style="color:var(--mute);font-size:12px;margin-bottom:10px">${esc(w.tagline)} Die Welt ändert nur Aussehen und Begriffe. Die Agenten arbeiten weiter mit klaren Begriffen, ihre Qualität bleibt gleich.</div>
+    <div class="tlabel">Stufen</div>
+    ${w.stages.map((st,i)=>`<div class="logrow" style="${i===g.stage?'font-weight:700':''}">${st[0]} ${esc(st[1])} <span class="ts">ab ${L.stage_points[i]} ${esc(w.words.points)} · Führung wirbt selbst bis ${L.stage_team[i]??'beliebig viele'} Agenten an, ${L.stage_depth[i]??'volle'} Ebenen</span>${i===g.stage?' ← jetzt':''}</div>`).join('')}
+    <div class="tlabel">Punkte</div>
+    <div class="logrow">Lieferung beim ersten Mal ${esc(w.words.done)}: +${P.done_first} · nach Überarbeitung: +${P.done_revised} · Auftrag in der Post erledigt: +${P.inbox_closed} · fehlgeschlagen: ${P.task_failed} · Nacharbeit angefordert: ${P.inbox_rework}</div>
+    <div class="tlabel">Ränge der Agenten</div>
+    <div class="logrow">${w.ranks.map((r,i)=>`${r[0]} ${esc(r[1])} (ab ${L.rank_at[i]})`).join(' · ')}</div>
+    <div class="chk" style="margin-top:12px"><input type="checkbox" id="gLim" ${g.limits?'checked':''}><div>Stufe begrenzt das Selbst-Anwerben der Führung<small>Du selbst kannst immer alles anlegen. Aus = die Führung darf so viele anwerben wie bisher.</small></div></div>`;
+  $('#gLim').onchange = async e=>{ await api('/projects/'+S.pid+'/world','PUT',{limits:e.target.checked}); loadGrowth(true); };
+};
+function rankBadge(a){
+  const r = WORLD.g && WORLD.g.ranks && WORLD.g.ranks[a.id]; if(!r) return '';
+  return `<span class="n-rank" title="${esc(r.name)}: ${r.done} ${esc(wword('done','abgenommen'))}${r.next?' · nächster Rang ab '+r.next:''}">${r.icon}</span>`;
+}
 
 /* ---------- Start ---------- */
 (async function init(){
