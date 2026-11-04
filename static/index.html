@@ -278,6 +278,23 @@ a.btn.pri{color:#fff}
 .ops-err{margin-top:3px;font-size:12px;color:var(--mute);white-space:pre-wrap;max-height:4.5em;overflow:hidden}
 .ops-empty{color:var(--mute);font-size:12px}
 #gStats{cursor:pointer}
+
+/* Feier beim Aufstieg */
+#party{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);overflow:hidden;padding:16px}
+#party.on{display:flex}
+#party i{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;opacity:.9;animation:fall 2.8s ease-in forwards}
+@keyframes fall{to{transform:translate(var(--dx),105vh) rotate(540deg);opacity:.6}}
+.party-card{position:relative;max-width:340px;width:100%;text-align:center;background:var(--panel);color:var(--text);border:2px solid var(--accent);border-radius:16px;padding:20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:8px;align-items:center;animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+.party-card b{font-size:18px}.party-card div{color:var(--mute);font-size:13px}
+.party-card .party-ico{font-size:56px;line-height:1;color:inherit}
+@keyframes pop{from{transform:scale(.6);opacity:0}}
+@media (prefers-reduced-motion: reduce){#party i{display:none}.party-card{animation:none}#growth .g-bar i{transition:none}}
+:root[data-motion="off"] #party i{display:none}
+:root[data-motion="off"] .party-card{animation:none}
+:root[data-motion="off"] #growth .g-bar i{transition:none}
+/* Barrierefreiheit: sichtbarer Tastatur-Fokus */
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible,select:focus-visible,input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#map .bld:focus-visible,#map .fig:focus-visible{outline:none;filter:drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 6px var(--accent))}
 </style>
 </head>
 <body>
@@ -327,7 +344,7 @@ a.btn.pri{color:#fff}
       <span style="color:var(--mute)">Agent hinzufügen (ziehen oder klicken):</span>
     </div>
     <div id="vp">
-      <div class="zoom"><button id="zin">+</button><button id="zout">−</button><button id="zfit">Fit</button></div>
+      <div class="zoom"><button id="zin" title="Hineinzoomen" aria-label="Hineinzoomen">+</button><button id="zout" title="Herauszoomen" aria-label="Herauszoomen">−</button><button id="zfit">Fit</button></div>
       <div id="world"><svg id="map" width="1" height="1"></svg><svg id="edges"></svg><div id="nodes"></div></div>
       <div id="bcard" role="dialog" aria-label="Gebäude"></div>
       <div id="wlist"></div>
@@ -347,8 +364,9 @@ a.btn.pri{color:#fff}
   </aside>
 </div>
 
-<div id="ov"><div id="ovbox"><header><b id="ovtitle"></b><button class="icon-btn" id="ovclose">✕</button></header><div id="ovbody"></div></div></div>
-<div id="toast"></div>
+<div id="ov"><div id="ovbox" role="dialog" aria-modal="true" aria-labelledby="ovtitle"><header><b id="ovtitle"></b><button class="icon-btn" id="ovclose" title="Schließen" aria-label="Schließen">✕</button></header><div id="ovbody"></div></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="party" role="alert" aria-live="assertive"></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -908,9 +926,17 @@ async function drawLog(a){
 }
 
 /* ---------- Overlays: Freigaben + Audit ---------- */
-function openOv(title){ $('#ovtitle').textContent=title; $('#ov').classList.add('on'); }
-$('#ovclose').onclick=()=>$('#ov').classList.remove('on');
-$('#ov').onclick=e=>{ if(e.target.id==='ov') $('#ov').classList.remove('on'); };
+let ovBack=null;
+function openOv(title){ if(!$('#ov').classList.contains('on')) ovBack=document.activeElement; $('#ovtitle').textContent=title; $('#ov').classList.add('on'); setTimeout(()=>{ const c=$('#ovclose'); if(c && !$('#ovbox').contains(document.activeElement)) c.focus({preventScroll:true}); },0); }
+function closeOv(){ $('#ov').classList.remove('on'); if(ovBack && document.contains(ovBack)) try{ ovBack.focus({preventScroll:true}); }catch(e){} ovBack=null; }
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  if($('#party').classList.contains('on')){ hideParty(); return; }
+  if($('#ov').classList.contains('on')){ e.preventDefault(); closeOv(); return; }
+  if(typeof hideBcard==='function' && $('#bcard') && $('#bcard').classList.contains('on')) hideBcard();
+});
+$('#ovclose').onclick=closeOv;
+$('#ov').onclick=e=>{ if(e.target.id==='ov') closeOv(); };
 $('#btnApprovals').onclick=async()=>{
   openOv('Freigaben'); const body=$('#ovbody');
   async function load(){
@@ -1431,9 +1457,12 @@ async function loadGrowth(force){
     if(pid!==S.pid) return;
     const before = WORLD.g && WORLD.g.pid===pid ? WORLD.g.stage : null;
     const first = !WORLD.g || WORLD.g.pid!==pid;
+    const oldRanks = !first && WORLD.g.ranks || null;
     WORLD.g = {...g, pid};
+    if(oldRanks) Object.entries(g.ranks||{}).forEach(([id,r])=>{ const o=oldRanks[id];
+      if(o && r.rank>o.rank){ const a=((S.graph&&S.graph.agents)||[]).find(x=>x.id===+id); toast(`🎉 ${a?a.name:'Ein Agent'} ist jetzt ${r.icon} ${r.name}`); } });
     if(first){ renderGrowth(); render(); fit(); }
-    if(before!==null && g.stage>before && typeof celebrate==='function') celebrate(g);
+    if(before!==null && g.stage>before) celebrate(g);
   }catch(e){ return; }
   renderGrowth(); render();
 }
@@ -1476,14 +1505,36 @@ $('#gInfo').onclick = ()=>{
     <div class="logrow">Lieferung beim ersten Mal ${esc(w.words.done)}: +${P.done_first} · nach Überarbeitung: +${P.done_revised} · Auftrag in der Post erledigt: +${P.inbox_closed} · fehlgeschlagen: ${P.task_failed} · Nacharbeit angefordert: ${P.inbox_rework}</div>
     <div class="tlabel">Ränge der Agenten</div>
     <div class="logrow">${w.ranks.map((r,i)=>`${r[0]} ${esc(r[1])} (ab ${L.rank_at[i]})`).join(' · ')}</div>
-    <div class="chk" style="margin-top:12px"><input type="checkbox" id="gLim" ${g.limits?'checked':''}><div>Stufe begrenzt das Selbst-Anwerben der Führung<small>Du selbst kannst immer alles anlegen. Aus = die Führung darf so viele anwerben wie bisher.</small></div></div>`;
+    <div class="chk" style="margin-top:12px"><input type="checkbox" id="gLim" ${g.limits?'checked':''}><div>Stufe begrenzt das Selbst-Anwerben der Führung<small>Du selbst kannst immer alles anlegen. Aus = die Führung darf so viele anwerben wie bisher.</small></div></div>
+    <div class="chk"><input type="checkbox" id="gMot" ${document.documentElement.dataset.motion==='off'?'':'checked'}><div>Bewegung und Feier-Effekte<small>Rauch, Lichter, Wege und Konfetti. Gilt für dieses Gerät. Verlangt das Gerät „Bewegung reduzieren“, bleibt alles ruhig.</small></div></div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" id="gParty">🎉 Feier ansehen</button></div>`;
   $('#gLim').onchange = async e=>{ await api('/projects/'+S.pid+'/world','PUT',{limits:e.target.checked}); loadGrowth(true); };
+  $('#gMot').onchange = e=>setMotion(e.target.checked);
+  $('#gParty').onclick = ()=>{ closeOv(); celebrate(WORLD.g); };
 };
 function rankBadge(a){
   const r = WORLD.g && WORLD.g.ranks && WORLD.g.ranks[a.id]; if(!r) return '';
   return `<span class="n-rank" title="${esc(r.name)}: ${r.done} ${esc(wword('done','abgenommen'))}${r.next?' · nächster Rang ab '+r.next:''}">${r.icon}</span>`;
 }
 
+
+/* ---------- Feinschliff: Feier beim Aufstieg, Bewegung an/aus ---------- */
+function motionOff(){ return document.documentElement.dataset.motion==='off' || matchMedia('(prefers-reduced-motion: reduce)').matches; }
+function setMotion(on){ if(on) delete document.documentElement.dataset.motion; else document.documentElement.dataset.motion='off'; try{ localStorage.setItem('hs-motion', on?'on':'off'); }catch(e){} }
+try{ if(localStorage.getItem('hs-motion')==='off') document.documentElement.dataset.motion='off'; }catch(e){}
+let partyT=null;
+function hideParty(){ const p=$('#party'); p.classList.remove('on'); p.innerHTML=''; clearTimeout(partyT); }
+function celebrate(g){
+  const w=wdef(); if(!w) return;
+  const p=$('#party'), cols=[w.colors.accent, w.colors.accent2, '#facc15', '#f472b6', '#60a5fa'];
+  const bits = motionOff() ? '' : Array.from({length:36},(_,i)=>`<i style="left:${(i*97)%100}%;background:${cols[i%cols.length]};animation-delay:${(i%12)*0.08}s;--dx:${((i*37)%60)-30}px"></i>`).join('');
+  const nxt = g.next!==null ? `Nächstes Ziel: ${g.next_icon} ${esc(g.next_name)} ab ${g.next} ${esc(w.words.points)}.` : 'Das ist die höchste Stufe.';
+  const lim = g.limits && g.team_limit ? ` Die Führung darf jetzt selbst bis zu ${g.team_limit} Agenten anwerben.` : '';
+  p.innerHTML = `${bits}<div class="party-card"><div class="party-ico">${g.icon}</div><b>${esc(w.words.project)} gewachsen: ${esc(g.name)}!</b><div>${nxt}${lim}</div><button class="btn pri sm" id="partyOk">Weiter</button></div>`;
+  p.classList.add('on'); $('#partyOk').onclick=hideParty; p.onclick=e=>{ if(e.target===p) hideParty(); };
+  setTimeout(()=>{ const b=$('#partyOk'); if(b) b.focus({preventScroll:true}); },50);
+  clearTimeout(partyT); partyT=setTimeout(hideParty, 9000);
+}
 
 /* ---------- Welt-Karte (isometrisch, aus echten Daten) ---------- */
 const MAP = {TW:128, TH:64, teams:[], box:null, down:null};

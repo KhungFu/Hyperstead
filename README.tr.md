@@ -238,6 +238,7 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` yeni dosyayı bulamaz ve pencere hata mesajıyla kapanır. | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 | `growth.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 | Bugün yapay zekâ çağrısı yok (operasyon merkezi, çubukta 💶) | 0 $ veya „keine Aufrufe“ gösterir. | Yapılacak bir şey yok. Maliyetler tahminidir, kendi fiyatlarınızı `.env` içinde `PCL_PRICES` ile belirleyin. |
+| Tarayıcı hiçbir şey kaydetmiyor (gizli pencere) | Açık/koyu, dünya/plan ve hareket her yüklemede varsayılana döner. | Normal pencere kullanın; proje verileri bundan etkilenmez. |
 
 ## İnternetten erişim
 
@@ -309,6 +310,8 @@ Arayüz adları Almanca gösterir.
 **Dünya haritası:** Çubuktaki 🗺 / 📐 ile dünya haritası ve plan (düğüm editörü) arasında geçiş yaparsınız. Haritada her yönetici ekibiyle birlikte bir binadır, ajanlar önünde figür olarak durur, yollar kimin kime rapor verdiğini gösterir. Duman ve ışık "çalışıyor", 🔧 başarısız, ✋ onayınızı bekliyor, ⏳ alt görevleri bekliyor, 📦 teslim edildi demektir. Bir binaya dokunmak ekibi ve işlemleri gösterir, bir figüre dokunmak ajanı açar. Telefonda harita yerine binaların listesi görünür. Cihaz azaltılmış hareket isterse animasyonlar durur.
 
 **Operasyon merkezi:** Kenar çubuğundaki 🛰 (veya büyüme çubuğundaki sayılara dokunmak) şu anda neyin çalıştığını ve beklediğini, hangi onayların açık olduğunu, son 7 günde neyin başarısız olduğunu (↻ Neu ile), zaman planlarını (▶ Jetzt ile), hata mesajlarını ve son olayları bir bakışta gösterir. Ayrıca bugünün ve son 7 günün tahmini yapay zekâ maliyetlerini gösterir; bugünkü maliyet çubukta 💶 olarak da görünür. Tüm sayılar mevcut görevlerden, onaylardan, zaman planlarından ve geçmişten gelir, hiçbir şey uydurulmaz.
+
+**Yükselme ve kullanım:** Bir proje yeni bir aşamaya ulaştığında, yeni aşamayı ve bir sonraki hedefi gösteren kısa bir kutlama görünür (Telegram aynı mesajı gönderir). Bir ajan rütbe atladığında kısa bir bildirim çıkar. Çubuktaki ⓘ altında bu cihaz için hareket ve kutlama efektlerini kapatabilirsiniz; cihaz „hareketi azalt“ isterse zaten her şey durağan kalır. Tüm pencereler Esc ile kapanır, haritadaki binalar ve figürler Tab ve Enter ile kullanılabilir.
 
 **Puanlar:** teslimat ilk seferde kabul +10, düzeltmeden sonra +5, görev postada tamamlandı olarak işaretlendi +20,
 başarısız −3, yeniden çalışma istendi −5. Aşamalar 0 / 100 / 300 / 700 / 1500 puandan başlar. Mevcut projelerin
