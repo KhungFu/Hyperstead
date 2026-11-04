@@ -239,6 +239,7 @@ Ova lista se dopunjava pri svakoj promjeni programa. Svaki red kaže šta sistem
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` ne pronalazi novi fajl i prozor se zatvara sa greškom. | Ponovo pokrenite `git pull`, fajl je dio programa. |
 | `growth.py` (programski fajl) | Hyperstead se ne pokreće (greška pri uvozu). | Ponovo pokrenite `git pull`, fajl je dio programa. |
 | Danas nema poziva vještačke inteligencije (operativni centar, 💶 u traci) | Prikazuje 0 $ odnosno „keine Aufrufe“. | Ništa ne treba raditi. Troškovi su procjene, vlastite cijene preko `PCL_PRICES` u `.env`. |
+| Preglednik ništa ne čuva (privatni prozor) | Svijetlo/tamno, svijet/nacrt i pokreti se pri svakom učitavanju vraćaju na zadano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
 
 ## Pristup sa interneta
 
@@ -310,6 +311,8 @@ Interfejs prikazuje nazive na njemačkom.
 **Mapa svijeta:** Sa 🗺 / 📐 u traci prelazite između mape svijeta i nacrta (uređivač čvorova). Na mapi je svaki rukovodilac sa svojim timom jedna zgrada, agenti stoje ispred nje kao figure, putevi pokazuju ko kome podnosi izvještaj. Dim i svjetlo znače "radi", 🔧 neuspješno, ✋ čeka vaše odobrenje, ⏳ čeka podzadatke, 📦 isporučeno. Dodir na zgradu prikazuje tim i radnje, dodir na figuru otvara agenta. Na telefonu se umjesto mape prikazuje lista zgrada. Animacije se zaustavljaju kada uređaj traži smanjeno kretanje.
 
 **Operativni centar:** 🛰 u bočnoj traci (ili dodir na brojeve u traci rasta) na prvi pogled prikazuje šta trenutno radi i čeka, koja odobrenja su otvorena, šta nije uspjelo u posljednjih 7 dana (sa ↻ Neu), rasporede (sa ▶ Jetzt), poruke o greškama i posljednje događaje. Uz to prikazuje procijenjene troškove vještačke inteligencije za danas i posljednjih 7 dana; današnji trošak stoji i kao 💶 u traci. Svi brojevi dolaze iz postojećih zadataka, odobrenja, rasporeda i historije, ništa nije izmišljeno.
+
+**Napredovanje i rukovanje:** Kada projekat dostigne novi stepen, pojavi se kratka proslava s novim stepenom i sljedećim ciljem (Telegram šalje istu poruku). Kada agent napreduje u rangu, pojavi se kratko obavještenje. Pod ⓘ u traci možete za ovaj uređaj isključiti pokrete i efekte proslave; ako uređaj traži „smanji pokrete“, sve ionako ostaje mirno. Svi prozori se zatvaraju tipkom Esc, zgrade i figure na mapi mogu se koristiti tipkama Tab i Enter.
 
 **Bodovi:** isporuka prihvaćena iz prve +10, nakon ispravke +5, zadatak označen kao završen u pošti +20,
 neuspješno −3, zatražena dorada −5. Nivoi od 0 / 100 / 300 / 700 / 1500 bodova. Postojeći projekti automatski

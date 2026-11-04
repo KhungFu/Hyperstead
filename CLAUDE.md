@@ -141,6 +141,9 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (früher PaperclipL
 - Betriebszentrale: `project_ops(pid)` / `GET /api/projects/<id>/ops` (aktive + fehlgeschlagene Aufgaben 7 Tage, offene Freigaben, Zeitplaene,
   Kosten heute/7 Tage aus `llm_calls`, Fehler-Ereignisse und letzte Ereignisse aus `audit`, `open` = `is_open`). UI `showOps` (🛰, Klick auf `#gStats`),
   Knoepfe nutzen vorhandene APIs (`/tasks/<id>/run`, `/schedules/<id>/run`). Growth-API liefert zusaetzlich `cost_today`/`calls_today` (💶 in der Leiste).
+- Feinschliff: `celebrate(g)` (`#party`, Konfetti nur ohne `motionOff()`), Rang-Aufstieg als Toast (Vergleich alter `WORLD.g.ranks`), Schalter Bewegung
+  im ⓘ-Fenster (`setMotion`, localStorage `hs-motion`, `data-motion=off`). `#ov` ist `role=dialog`, `openOv`/`closeOv` setzen den Fokus, Esc schliesst
+  Feier/Fenster/Gebaeudekarte, `:focus-visible`-Rahmen. Pruefskript (nicht im Repo): alle sichtbaren Bedienelemente brauchen Text, title oder aria-label.
 
 ## Verbindungen (Webhooks)
 - Tabelle `connections` (Besitzer legt URL/Methode/Kopfzeilen fest, `${ENV}` in Kopfzeilen aus .env, `confirm`, `on_post`). Recht `connect`
