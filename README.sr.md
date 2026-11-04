@@ -468,6 +468,7 @@ Radi bez interneta i bez ključeva (dobavljač `mock`, sopstvena baza).
 - **Sami otpremite:** 📁 Fajlovi → ☁️ pored fajla → izaberite cilj i folder. Dobijate link.
 - **Agenti:** pravo **„Sme da otprema u cloud”** (postavljate samo vi). Alat `cloud_upload`; svako otpremanje čeka pod ✋ Odobrenja,
   uz to stiže Telegram poruka. Posle otpremanja link stoji u zadatku.
+- **Podešavanje sa CEO-om:** pitajte glavnog šefa u 💬 Chatu, npr. „Pomozi mi da podesim GitHub”. On zna trenutno stanje svakog servisa i uputstvo i vodi vas korak po korak. Tokene nikad ne pišete u chat, nego ih sami unosite u `.env`.
 - **Telegram:** `/datei` vam šalje fajlove do 50 MB na telefon, samo kada kliknete ili odobrite.
 - GitHub: do 50 MB kao fajl u repou, veći kao prilog izdanju `paperclip-ablage` (do 2 GB). Google Drive: samo folderi i fajlovi koje je
   PaperclipLite sam napravio (pravo `drive.file`). OneDrive: bilo koji folder. Testirano samo na simuliranim servisima.

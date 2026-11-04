@@ -143,6 +143,8 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (Idee: paperclip.in
   legt IMMER `approvals.kind='upload'` an (Wunsch ABI), Agent waehlt nur Unterordner. Freigabe startet den Upload im Thread, `approval_add_result`
   haengt den Link an und beendet die Aufgabe erst, wenn kein Upload mehr laeuft. Web: Fenster ☁️ Cloud, Knopf ☁️ je Datei (Ordner aus dem Dialog
   gilt absolut). Telegram `/datei [suche]` + Knoepfe `sf:<n>` (`_tg_filelist`), `tg_send_file` (sendDocument, max. 50 MB).
+- `cloud_setup_block` (nur oberster Chef, nur im Chat): Status je Dienst + Kurzanleitung `CLOUD_GUIDE`, damit der CEO ABI durch die Einrichtung fuehrt
+  (ABI-Wahl 2026-11-04 statt Repo-Anlegen per Werkzeug). Nie Tokens im Chat erfragen.
 - Tests `tests/test_cloud.py` nur gegen Mocks, Anleitung `docs/cloud.md`.
 
 ## Post / Telegram

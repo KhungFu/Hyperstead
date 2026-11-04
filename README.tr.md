@@ -462,6 +462,7 @@ maliyet doğabilir; belirteçleri düğümde ajan başına görürsünüz.
 - **Kendiniz yükleme:** 📁 Dosyalar → dosyanın yanındaki ☁️ → hedef ve klasör seçin. Bağlantıyı alırsınız.
 - **Ajanlar:** **"Buluta yükleyebilir"** yetkisi (yalnızca siz verirsiniz). Araç `cloud_upload`; her yükleme ✋ Onaylar altında bekler,
   ayrıca bir Telegram mesajı gelir. Yüklemeden sonra bağlantı görevde yer alır.
+- **CEO ile kurulum:** 💬 Sohbet'te en üst yöneticiye sorun, örneğin "GitHub'ı kurmama yardım et". Her hizmetin güncel durumunu ve kılavuzu bilir, sizi adım adım yönlendirir. Token'ları asla sohbete yazmazsınız, kendiniz `.env` dosyasına girersiniz.
 - **Telegram:** `/datei` 50 MB'a kadar dosyaları telefonunuza gönderir, yalnızca siz tıkladığınızda ya da onayladığınızda.
 - GitHub: 50 MB'a kadar repoda dosya olarak, daha büyükler `paperclip-ablage` sürümüne ek olarak (2 GB'a kadar). Google Drive: yalnızca
   PaperclipLite'ın kendisinin oluşturduğu klasör ve dosyalar (`drive.file` yetkisi). OneDrive: her klasör. Yalnızca taklit hizmetlere karşı test edildi.

@@ -468,6 +468,7 @@ Radi bez interneta i bez ključeva (pružatelj `mock`, vlastita baza).
 - **Sami prenesite:** 📁 Datoteke → ☁️ pokraj datoteke → odaberite cilj i mapu. Dobivate poveznicu.
 - **Agenti:** pravo **„Smije prenositi u oblak”** (postavljate samo vi). Alat `cloud_upload`; svaki prijenos čeka pod ✋ Odobrenja,
   uz to stiže Telegram poruka. Nakon prijenosa poveznica stoji u zadatku.
+- **Postavljanje s CEO-om:** pitajte glavnog šefa u 💬 Chatu, npr. „Pomozi mi postaviti GitHub”. On zna trenutačno stanje svake usluge i upute te vas vodi korak po korak. Tokene nikad ne pišete u chat, nego ih sami unosite u `.env`.
 - **Telegram:** `/datei` vam šalje datoteke do 50 MB na mobitel, samo kada kliknete ili odobrite.
 - GitHub: do 50 MB kao datoteka u repozitoriju, veće kao privitak izdanju `paperclip-ablage` (do 2 GB). Google Drive: samo mape i datoteke koje je
   PaperclipLite sam napravio (pravo `drive.file`). OneDrive: bilo koja mapa. Testirano samo na simuliranim uslugama.
