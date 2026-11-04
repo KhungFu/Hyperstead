@@ -245,7 +245,7 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | Git-Adresse zeigt noch auf `KhungFu/paperclip-lite` | `git pull` klappt weiter, weil GitHub umleitet. Legt jemand ein neues Repo mit dem alten Namen an, endet die Umleitung und `git pull` schlägt fehl. | Einmal `git remote set-url origin https://github.com/KhungFu/hyperstead.git` im Programmordner ausführen. |
 | `growth.py` (Programmdatei) | Hyperstead startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 | Keine KI-Aufrufe heute (Betriebszentrale, 💶 in der Leiste) | Zeigt 0 $ bzw. „keine Aufrufe“. | Nichts zu tun. Kosten sind Schätzungen, eigene Preise per `PCL_PRICES` in `.env`. |
-| Browser speichert nichts (privates Fenster) | Hell/Dunkel, Welt/Bauplan und Bewegung fallen bei jedem Laden auf den Standard zurück. | Normales Fenster verwenden; die Daten der Projekte sind davon nicht betroffen. |
+| Browser speichert nichts (privates Fenster) | Hell/Dunkel, Welt/Bauplan, Bewegung und Hilfe-Modus fallen bei jedem Laden auf den Standard zurück. | Normales Fenster verwenden; die Daten der Projekte sind davon nicht betroffen. |
 
 ## Zugriff aus dem Internet
 
@@ -317,6 +317,8 @@ der Oberfläche. Die Agenten arbeiten immer mit klaren Begriffen (Auftrag, Beric
 **Betriebszentrale:** 🛰 in der Seitenleiste (oder ein Tipp auf die Zahlen in der Wachstumsleiste) zeigt auf einen Blick, was gerade läuft und wartet, welche Freigaben offen sind, was in den letzten 7 Tagen fehlgeschlagen ist (mit ↻ Neu), die Zeitpläne (mit ▶ Jetzt), Fehlermeldungen und die letzten Ereignisse. Dazu die geschätzten KI-Kosten von heute und den letzten 7 Tagen; heute steht auch als 💶 in der Leiste. Alle Zahlen kommen aus den vorhandenen Aufgaben, Freigaben, Zeitplänen und dem Verlauf, nichts wird erfunden.
 
 **Aufstieg und Bedienung:** Erreicht ein Projekt eine neue Stufe, erscheint eine kurze Feier mit der neuen Stufe und dem nächsten Ziel (per Telegram kommt dieselbe Nachricht). Steigt ein Agent im Rang auf, meldet das eine kurze Einblendung. Unter ⓘ in der Leiste lassen sich Bewegung und Feier-Effekte für dieses Gerät abschalten; verlangt das Gerät „Bewegung reduzieren“, bleibt ohnehin alles ruhig. Alle Fenster schließen mit Esc, Gebäude und Figuren auf der Karte lassen sich mit Tab und Enter bedienen.
+
+**Anleitung und Hilfe:** 📖 Anleitung ganz oben in der Seitenleiste öffnet die Bedienungsanleitung direkt im Dashboard (Kapitel zum Aufklappen, mit Suche, ohne Download, auch offline). ⓘ oben in einem Fenster springt zum passenden Kapitel. Jeder Knopf zeigt beim Draufzeigen mit der Maus eine kurze Erklärung. Auf dem Handy schaltest du in der Anleitung den Hilfe-Modus ein: Das erste Tippen auf einen Knopf erklärt ihn, das zweite führt ihn aus.
 
 **Punkte:** Lieferung beim ersten Mal abgenommen +10, nach Überarbeitung +5, Auftrag in der Post als erledigt markiert +20,
 fehlgeschlagen −3, Nacharbeit angefordert −5. Stufen ab 0 / 100 / 300 / 700 / 1500 Punkten. Bestehende Projekte bekommen

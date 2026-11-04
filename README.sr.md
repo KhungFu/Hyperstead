@@ -245,7 +245,7 @@ Ova lista se dopunjuje pri svakoj promeni programa. Svaki red kaže šta sistem 
 | Git adresa i dalje pokazuje na `KhungFu/paperclip-lite` | `git pull` i dalje radi jer GitHub preusmerava. Ako neko napravi novi repo sa starim imenom, preusmeravanje prestaje i `git pull` ne uspeva. | Jednom pokrenite `git remote set-url origin https://github.com/KhungFu/hyperstead.git` u folderu programa. |
 | `growth.py` (programski fajl) | Hyperstead se ne pokreće (greška pri uvozu). | Ponovo pokrenite `git pull`, fajl je deo programa. |
 | Danas nema poziva veštačke inteligencije (operativni centar, 💶 u traci) | Prikazuje 0 $ odnosno „keine Aufrufe“. | Ništa ne treba raditi. Troškovi su procene, sopstvene cene preko `PCL_PRICES` u `.env`. |
-| Pregledač ništa ne čuva (privatni prozor) | Svetlo/tamno, svet/nacrt i pokreti se pri svakom učitavanju vraćaju na podrazumevano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
+| Pregledač ništa ne čuva (privatni prozor) | Svetlo/tamno, svet/nacrt, pokreti i režim pomoći se pri svakom učitavanju vraćaju na podrazumevano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
 
 ## Pristup sa interneta
 
@@ -319,6 +319,8 @@ Interfejs prikazuje nazive na nemačkom.
 **Operativni centar:** 🛰 u bočnoj traci (ili dodir na brojeve u traci rasta) na prvi pogled prikazuje šta trenutno radi i čeka, koja odobrenja su otvorena, šta nije uspelo u poslednjih 7 dana (sa ↻ Neu), rasporede (sa ▶ Jetzt), poruke o greškama i poslednje događaje. Uz to prikazuje procenjene troškove veštačke inteligencije za danas i poslednjih 7 dana; današnji trošak stoji i kao 💶 u traci. Svi brojevi dolaze iz postojećih zadataka, odobrenja, rasporeda i istorije, ništa nije izmišljeno.
 
 **Napredovanje i rukovanje:** Kada projekat dostigne novi stepen, pojavi se kratka proslava sa novim stepenom i sledećim ciljem (Telegram šalje istu poruku). Kada agent napreduje u rangu, pojavi se kratko obaveštenje. Pod ⓘ u traci možete za ovaj uređaj isključiti pokrete i efekte proslave; ako uređaj traži „smanji pokrete“, sve ionako ostaje mirno. Svi prozori se zatvaraju tasterom Esc, zgrade i figure na mapi mogu se koristiti tasterima Tab i Enter.
+
+**Uputstvo i pomoć:** 📖 Anleitung na vrhu bočne trake otvara uputstvo za upotrebu direktno u kontrolnoj tabli (poglavlja na rasklapanje, sa pretragom, bez preuzimanja, radi i oflajn). ⓘ na vrhu prozora vodi do odgovarajućeg poglavlja. Svako dugme pokazuje kratko objašnjenje kada pokažete mišem na njega. Na telefonu u uputstvu uključite režim pomoći: prvi dodir dugmeta ga objašnjava, drugi ga izvršava.
 
 **Poeni:** isporuka prihvaćena iz prve +10, posle ispravke +5, zadatak označen kao završen u pošti +20,
 neuspešno −3, zatražena dorada −5. Nivoi od 0 / 100 / 300 / 700 / 1500 poena. Postojeći projekti automatski

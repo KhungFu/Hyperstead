@@ -245,7 +245,7 @@ This list is extended with every change to the program. Each row says what the s
 | Git address still points to `KhungFu/paperclip-lite` | `git pull` keeps working because GitHub redirects. If someone creates a new repo with the old name, the redirect ends and `git pull` fails. | Run `git remote set-url origin https://github.com/KhungFu/hyperstead.git` once in the program folder. |
 | `growth.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
 | No AI calls today (operations centre, 💶 in the bar) | Shows 0 $ or “keine Aufrufe”. | Nothing to do. Costs are estimates, set your own prices with `PCL_PRICES` in `.env`. |
-| Browser stores nothing (private window) | Light/dark, world/blueprint and motion fall back to the default on every load. | Use a normal window; the project data is not affected. |
+| Browser stores nothing (private window) | Light/dark, world/blueprint, motion and help mode fall back to the default on every load. | Use a normal window; the project data is not affected. |
 
 ## Access from the internet
 
@@ -319,6 +319,8 @@ The interface shows the names in German.
 **Operations centre:** 🛰 in the sidebar (or a tap on the numbers in the growth bar) shows at a glance what is running and waiting, which approvals are open, what failed in the last 7 days (with ↻ Neu), the schedules (with ▶ Jetzt), error messages and the latest events. It also shows the estimated AI costs for today and the last 7 days; today's cost also appears as 💶 in the bar. All numbers come from the existing tasks, approvals, schedules and the history, nothing is made up.
 
 **Level-ups and controls:** When a project reaches a new stage, a short celebration shows the new stage and the next goal (Telegram sends the same message). When an agent rises in rank, a short notice appears. Under ⓘ in the bar you can turn off motion and celebration effects for this device; if the device asks for “reduce motion”, everything stays still anyway. All windows close with Esc, buildings and figures on the map can be used with Tab and Enter.
+
+**Guide and help:** 📖 Anleitung at the top of the sidebar opens the user guide right in the dashboard (expandable chapters, with search, no download, works offline). ⓘ at the top of a window jumps to the matching chapter. Every button shows a short explanation when you point at it with the mouse. On the phone, turn on help mode in the guide: the first tap on a button explains it, the second runs it.
 
 **Points:** delivery accepted the first time +10, after revision +5, task marked as done in the mail +20,
 failed −3, rework requested −5. Stages from 0 / 100 / 300 / 700 / 1500 points. Existing projects get

@@ -245,7 +245,7 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | Git adresa i dalje pokazuje na `KhungFu/paperclip-lite` | `git pull` i dalje radi jer GitHub preusmjerava. Ako netko napravi novi repozitorij sa starim imenom, preusmjeravanje prestaje i `git pull` ne uspijeva. | Jednom pokrenite `git remote set-url origin https://github.com/KhungFu/hyperstead.git` u mapi programa. |
 | `growth.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 | Danas nema poziva umjetne inteligencije (operativni centar, 💶 u traci) | Prikazuje 0 $ odnosno „keine Aufrufe“. | Ništa nije potrebno. Troškovi su procjene, vlastite cijene putem `PCL_PRICES` u `.env`. |
-| Preglednik ništa ne sprema (privatni prozor) | Svijetlo/tamno, svijet/nacrt i pokreti pri svakom se učitavanju vraćaju na zadano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
+| Preglednik ništa ne sprema (privatni prozor) | Svijetlo/tamno, svijet/nacrt, pokreti i način pomoći pri svakom se učitavanju vraćaju na zadano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
 
 ## Pristup s interneta
 
@@ -319,6 +319,8 @@ Sučelje prikazuje nazive na njemačkom.
 **Operativni centar:** 🛰 u bočnoj traci (ili dodir na brojeve u traci rasta) na prvi pogled prikazuje što trenutačno radi i čeka, koja su odobrenja otvorena, što nije uspjelo u posljednjih 7 dana (s ↻ Neu), rasporede (s ▶ Jetzt), poruke o pogreškama i posljednje događaje. Uz to prikazuje procijenjene troškove umjetne inteligencije za danas i posljednjih 7 dana; današnji trošak stoji i kao 💶 u traci. Svi brojevi dolaze iz postojećih zadataka, odobrenja, rasporeda i povijesti, ništa nije izmišljeno.
 
 **Napredovanje i upravljanje:** Kad projekt dosegne novi stupanj, pojavi se kratka proslava s novim stupnjem i sljedećim ciljem (Telegram šalje istu poruku). Kad agent napreduje u rangu, pojavi se kratka obavijest. Pod ⓘ u traci možete za ovaj uređaj isključiti pokrete i efekte proslave; ako uređaj traži „smanji pokrete“, sve ionako ostaje mirno. Svi se prozori zatvaraju tipkom Esc, zgrade i figure na karti mogu se koristiti tipkama Tab i Enter.
+
+**Upute i pomoć:** 📖 Anleitung na vrhu bočne trake otvara upute za uporabu izravno na nadzornoj ploči (poglavlja na rasklapanje, s pretraživanjem, bez preuzimanja, radi i izvanmrežno). ⓘ na vrhu prozora vodi do odgovarajućeg poglavlja. Svaki gumb prikazuje kratko objašnjenje kad mišem pokažete na njega. Na mobitelu u uputama uključite način pomoći: prvi dodir gumba ga objašnjava, drugi ga izvršava.
 
 **Bodovi:** isporuka prihvaćena iz prve +10, nakon ispravka +5, zadatak označen kao završen u pošti +20,
 neuspješno −3, zatražena dorada −5. Razine od 0 / 100 / 300 / 700 / 1500 bodova. Postojeći projekti automatski
