@@ -25,7 +25,7 @@ Selidba s jednog računala na drugo: zaustavite Hyperstead i kopirajte `data.db`
 ### Raspberry Pi / Linux
 
 ```bash
-git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead && cd hyperstead
 ./install.sh --service     # venv, ovisnosti, .env s nasumičnom lozinkom, systemd servis
 nano .env                  # unesite API ključeve, zatim: sudo systemctl restart hyperstead
 ```
@@ -39,7 +39,7 @@ Više funkcija (video, OCR, prevoditelji, preglednik): `./install.sh --all`.
 PowerShell u mapi Hyperstead:
 
 ```powershell
-git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead; cd hyperstead
 powershell -ExecutionPolicy Bypass -File install.ps1
 notepad .env
 deploy\windows\hyperstead-start.bat
@@ -51,7 +51,7 @@ Kasnije ažuriranje: `git pull`, pa ponovno pokrenite.
 ### macOS (nije testirano)
 
 ```bash
-git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead && cd hyperstead
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 cp .env.example .env       # upišite APP_TOKEN=<duga lozinka>, dodajte API ključeve
 ./venv/bin/python app.py   # http://127.0.0.1:8787
@@ -87,8 +87,8 @@ Upute i format scenarija (na njemačkom): [docs/filmstudio.md](docs/filmstudio.m
 ## Rad: tko što, gdje, kada i kako
 
 **Tko:** sve ovo radi vlasnik računala (vi), a ne agenti. Naredbe se izvršavaju u
-mapi Hyperstead: na Pi-ju u terminalu (`cd ~/paperclip-lite`), na Windowsu u PowerShellu
-(`cd $HOME\paperclip-lite`, ili gdje god ste stavili mapu).
+mapi Hyperstead: na Pi-ju u terminalu (`cd ~/hyperstead`), na Windowsu u PowerShellu
+(`cd $HOME\hyperstead`, ili gdje god ste stavili mapu).
 
 ### Kratki pregled
 
@@ -109,7 +109,7 @@ mapi Hyperstead: na Pi-ju u terminalu (`cd ~/paperclip-lite`), na Windowsu u Pow
 **Raspberry Pi / Linux**, u terminalu:
 
 ```bash
-cd ~/paperclip-lite
+cd ~/hyperstead
 git pull
 ./install.sh               # potrebno samo ako se requirements.txt promijenio; .env ostaje nepromijenjen
 sudo systemctl restart hyperstead
@@ -118,7 +118,7 @@ sudo systemctl restart hyperstead
 
 **Windows**, u PowerShellu:
 
-1. `cd $HOME\paperclip-lite`
+1. `cd $HOME\hyperstead`
 2. `git pull`
 3. Samo ako su se paketi promijenili (ili kada niste sigurni): `powershell -ExecutionPolicy Bypass -File install.ps1`
    (postojeći `.env` ostaje nepromijenjen).
@@ -135,11 +135,16 @@ nikada nisu ugroženi, jer ih Git ne poznaje.
 Program se sada zove **Hyperstead**. Podaci, `.env`, mape i sve `PCL_*` postavke ostaju kakve jesu.
 Samo servis i datoteka za pokretanje imaju nova imena.
 
-- **Pi:** `cd ~/paperclip-lite && git pull && ./install.sh --service`. Instalacijska skripta zaustavlja stari servis
+- **Pi:** `cd ~/paperclip-lite && git remote set-url origin https://github.com/KhungFu/hyperstead.git && git pull && ./install.sh --service`. Instalacijska skripta zaustavlja stari servis
   `paperclip-lite`, uklanja ga i pokreće `hyperstead`. Od tada koristite naredbe s `hyperstead`.
 - **Windows:** `git pull`, zatim pokrenite `deploy\windows\hyperstead-start.bat`. Stari prečaci na
   `paperclip-start.bat` i dalje rade, datoteka sada poziva `hyperstead-start.bat`.
-- Mapa se može i dalje zvati `paperclip-lite`. Ako preimenujete GitHub repozitorij, GitHub preusmjerava staru adresu.
+- **GitHub adresa:** Repozitorij se sada zove `KhungFu/hyperstead`. GitHub preusmjerava staru adresu, ipak je
+  jednom promijenite u mapi programa (isto na Pi-ju i Windowsu): `git remote set-url origin https://github.com/KhungFu/hyperstead.git`.
+  Naredba za Pi iznad to već sadrži.
+- **Mapa:** Postojeće instalacije mogu ostati u mapi `paperclip-lite`. Gdje u ovim uputama piše
+  `~/hyperstead` odnosno `$HOME\hyperstead`, koristite `~/paperclip-lite` odnosno `$HOME\paperclip-lite`.
+  Nove instalacije idu u mapu `hyperstead`.
 - Prijenos u oblak: novi projekti prema zadanim postavkama prenose u `Hyperstead/<projekt>`. Ciljne mape koje ste sami postavili ostaju.
 
 ### Automatsko pokretanje
@@ -237,6 +242,7 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | `werkstatt.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 | Servis `hyperstead` (Pi) | Nakon ažuriranja i dalje radi stari servis `paperclip-lite`, `systemctl … hyperstead` javlja "not found". | Jednom pokrenite `./install.sh --service`, on zamjenjuje stari servis. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` ne pronalazi novu datoteku i prozor se zatvara s pogreškom. | Ponovno pokrenite `git pull`, datoteka je dio programa. |
+| Git adresa i dalje pokazuje na `KhungFu/paperclip-lite` | `git pull` i dalje radi jer GitHub preusmjerava. Ako netko napravi novi repozitorij sa starim imenom, preusmjeravanje prestaje i `git pull` ne uspijeva. | Jednom pokrenite `git remote set-url origin https://github.com/KhungFu/hyperstead.git` u mapi programa. |
 | `growth.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 | Danas nema poziva umjetne inteligencije (operativni centar, 💶 u traci) | Prikazuje 0 $ odnosno „keine Aufrufe“. | Ništa nije potrebno. Troškovi su procjene, vlastite cijene putem `PCL_PRICES` u `.env`. |
 | Preglednik ništa ne sprema (privatni prozor) | Svijetlo/tamno, svijet/nacrt i pokreti pri svakom se učitavanju vraćaju na zadano. | Koristite običan prozor; podaci projekata nisu pogođeni. |

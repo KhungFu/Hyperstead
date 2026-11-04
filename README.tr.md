@@ -25,7 +25,7 @@ Bir bilgisayardan diğerine taşıma: Hyperstead'i durdurun ve `data.db`, `works
 ### Raspberry Pi / Linux
 
 ```bash
-git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead && cd hyperstead
 ./install.sh --service     # venv, bağımlılıklar, rastgele şifreli .env, systemd hizmeti
 nano .env                  # API anahtarlarını girin, ardından: sudo systemctl restart hyperstead
 ```
@@ -39,7 +39,7 @@ Daha fazla özellik (video, OCR, derleyiciler, tarayıcı): `./install.sh --all`
 Hyperstead klasöründe PowerShell:
 
 ```powershell
-git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead; cd hyperstead
 powershell -ExecutionPolicy Bypass -File install.ps1
 notepad .env
 deploy\windows\hyperstead-start.bat
@@ -51,7 +51,7 @@ Sonradan güncelleme: `git pull`, ardından yeniden başlatın.
 ### macOS (test edilmedi)
 
 ```bash
-git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead && cd hyperstead
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 cp .env.example .env       # APP_TOKEN=<uzun şifre> girin, API anahtarlarını ekleyin
 ./venv/bin/python app.py   # http://127.0.0.1:8787
@@ -86,8 +86,8 @@ Kılavuz ve senaryo biçimi (Almanca): [docs/filmstudio.md](docs/filmstudio.md).
 
 ## İşletim: kim neyi, nerede, ne zaman, nasıl yapar
 
-**Kim:** Bunların hepsini bilgisayarın sahibi (siz) yapar, ajanlar değil. Komutlar Hyperstead klasöründe çalışır: Pi'de terminalde (`cd ~/paperclip-lite`), Windows'ta PowerShell'de
-(`cd $HOME\paperclip-lite`, ya da klasörü nereye koyduysanız orada).
+**Kim:** Bunların hepsini bilgisayarın sahibi (siz) yapar, ajanlar değil. Komutlar Hyperstead klasöründe çalışır: Pi'de terminalde (`cd ~/hyperstead`), Windows'ta PowerShell'de
+(`cd $HOME\hyperstead`, ya da klasörü nereye koyduysanız orada).
 
 ### Kısa genel bakış
 
@@ -108,7 +108,7 @@ Kılavuz ve senaryo biçimi (Almanca): [docs/filmstudio.md](docs/filmstudio.md).
 **Raspberry Pi / Linux**, terminalde:
 
 ```bash
-cd ~/paperclip-lite
+cd ~/hyperstead
 git pull
 ./install.sh               # yalnızca requirements.txt değiştiyse gerekir; .env değişmez
 sudo systemctl restart hyperstead
@@ -117,7 +117,7 @@ sudo systemctl restart hyperstead
 
 **Windows**, PowerShell'de:
 
-1. `cd $HOME\paperclip-lite`
+1. `cd $HOME\hyperstead`
 2. `git pull`
 3. Yalnızca paketler değiştiyse (ya da emin değilseniz): `powershell -ExecutionPolicy Bypass -File install.ps1`
    (mevcut `.env` değişmez).
@@ -134,11 +134,16 @@ bundan asla etkilenmez, çünkü Git bunları bilmez.
 Programın adı artık **Hyperstead**. Veriler, `.env`, klasörler ve tüm `PCL_*` ayarları olduğu gibi kalır.
 Yalnızca servisin ve başlatma dosyasının adı değişti.
 
-- **Pi:** `cd ~/paperclip-lite && git pull && ./install.sh --service`. Kurulum betiği eski `paperclip-lite`
+- **Pi:** `cd ~/paperclip-lite && git remote set-url origin https://github.com/KhungFu/hyperstead.git && git pull && ./install.sh --service`. Kurulum betiği eski `paperclip-lite`
   servisini durdurur, kaldırır ve `hyperstead` servisini başlatır. Bundan sonra komutları `hyperstead` ile kullanın.
 - **Windows:** `git pull`, ardından `deploy\windows\hyperstead-start.bat` dosyasını başlatın. `paperclip-start.bat`
   için eski kısayollar çalışmaya devam eder, dosya artık `hyperstead-start.bat` dosyasını çağırır.
-- Klasörün adı `paperclip-lite` olarak kalabilir. GitHub reposunu yeniden adlandırırsanız GitHub eski adresi yönlendirir.
+- **GitHub adresi:** Reponun adı artık `KhungFu/hyperstead`. GitHub eski adresi yönlendirir, yine de
+  program klasöründe bir kez değiştirin (Pi ve Windows'ta aynı): `git remote set-url origin https://github.com/KhungFu/hyperstead.git`.
+  Yukarıdaki Pi komutu bunu zaten içerir.
+- **Klasör:** Mevcut kurulumlar `paperclip-lite` klasöründe kalabilir. Bu kılavuzda `~/hyperstead` veya
+  `$HOME\hyperstead` yazıyorsa, bunun yerine `~/paperclip-lite` veya `$HOME\paperclip-lite` kullanın.
+  Yeni kurulumlar `hyperstead` klasörüne gider.
 - Bulut yükleme: yeni projeler varsayılan olarak `Hyperstead/<proje>` klasörüne yükler. Kendi belirlediğiniz hedef klasörler kalır.
 
 ### Otomatik başlatma
@@ -236,6 +241,7 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | `werkstatt.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 | `hyperstead` servisi (Pi) | Güncellemeden sonra eski `paperclip-lite` servisi hâlâ çalışır, `systemctl … hyperstead` "not found" der. | `./install.sh --service` komutunu bir kez çalıştırın, eski servisi değiştirir. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` yeni dosyayı bulamaz ve pencere hata mesajıyla kapanır. | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| Git adresi hâlâ `KhungFu/paperclip-lite` gösteriyor | GitHub yönlendirdiği için `git pull` çalışmaya devam eder. Biri eski adla yeni bir repo oluşturursa yönlendirme biter ve `git pull` başarısız olur. | Program klasöründe bir kez `git remote set-url origin https://github.com/KhungFu/hyperstead.git` çalıştırın. |
 | `growth.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 | Bugün yapay zekâ çağrısı yok (operasyon merkezi, çubukta 💶) | 0 $ veya „keine Aufrufe“ gösterir. | Yapılacak bir şey yok. Maliyetler tahminidir, kendi fiyatlarınızı `.env` içinde `PCL_PRICES` ile belirleyin. |
 | Tarayıcı hiçbir şey kaydetmiyor (gizli pencere) | Açık/koyu, dünya/plan ve hareket her yüklemede varsayılana döner. | Normal pencere kullanın; proje verileri bundan etkilenmez. |

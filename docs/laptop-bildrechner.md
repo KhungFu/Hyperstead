@@ -10,7 +10,7 @@ Modell: FLUX.2 klein 4B (Apache 2.0, auch kommerziell nutzbar), auf 4 Bit verkle
 ## Was du brauchst
 
 - Windows 10/11, 64 Bit, mindestens 8 GB RAM, etwa 6 GB freier Platz auf `C:`
-- Hyperstead-Ordner auf dem Laptop (für das Einrichtungsskript), z. B. `C:\Users\<Name>\paperclip-lite`
+- Hyperstead-Ordner auf dem Laptop (für das Einrichtungsskript), z. B. `C:\Users\<Name>\hyperstead` (ältere Installationen: `paperclip-lite`)
 - Laptop am Strom, Energiesparen aus
 
 Wichtig: Auf der GitHub-Seite von stable-diffusion.cpp **nicht** die Ordner (`assets`, `docs`, `examples`) anklicken.
@@ -23,7 +23,7 @@ von selbst.
 2. Diese Zeilen eingeben, jeweils mit Enter:
 
    ```powershell
-   cd $HOME\paperclip-lite
+   cd $HOME\hyperstead
    git pull
    powershell -ExecutionPolicy Bypass -File deploy\windows\bildrechner-einrichten.ps1
    ```

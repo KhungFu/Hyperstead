@@ -27,10 +27,11 @@ einem echten Windows-Rechner.
    Am einfachsten in PowerShell auf dem Laptop (Benutzer und Pfad auf dem Pi anpassen):
 
    ```powershell
-   cd $HOME\paperclip-lite
-   scp pi@dexter:~/paperclip-lite/data.db .
-   scp pi@dexter:~/paperclip-lite/.env .
-   scp -r pi@dexter:~/paperclip-lite/workspace .
+   cd $HOME\hyperstead
+   # auf dem Pi liegt eine ältere Installation oft noch in ~/paperclip-lite, dann den Pfad hier anpassen
+   scp pi@dexter:~/hyperstead/data.db .
+   scp pi@dexter:~/hyperstead/.env .
+   scp -r pi@dexter:~/hyperstead/workspace .
    ```
 
 4. In der kopierten `.env` prüfen:
@@ -54,11 +55,11 @@ Mit Git (PowerShell):
 
 ```powershell
 cd $HOME
-git clone https://github.com/KhungFu/paperclip-lite
-cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead
+cd hyperstead
 ```
 
-Ohne Git: auf GitHub (angemeldet) **Code → Download ZIP**, entpacken, z. B. nach `C:\paperclip-lite`.
+Ohne Git: auf GitHub (angemeldet) **Code → Download ZIP**, entpacken, z. B. nach `C:\hyperstead`. Eine ältere Installation im Ordner `paperclip-lite` darf dort bleiben.
 
 ## 2. Installieren
 

@@ -38,7 +38,7 @@ einmal selbst an. Nach jeder Änderung an `.env` Hyperstead neu starten.
 Dateien bis 50 MB landen als Datei im Repo (gleicher Name = neue Version, die alte bleibt in der Historie).
 Größere Dateien (Filme) hängt Hyperstead an ein Release namens `paperclip-ablage` (bis 2 GB je Datei).
 
-Bitte **nicht** das Repo `paperclip-lite` selbst nehmen, sonst landen Ergebnisse zwischen dem Programmcode.
+Bitte **nicht** das Programm-Repo `hyperstead` (früher `paperclip-lite`) selbst nehmen, sonst landen Ergebnisse zwischen dem Programmcode.
 
 ## Google Drive (ca. 10 Minuten, einmalig)
 

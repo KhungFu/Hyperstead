@@ -25,7 +25,7 @@ Moving from one computer to another: stop Hyperstead and copy `data.db`, the fol
 ### Raspberry Pi / Linux
 
 ```bash
-git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead && cd hyperstead
 ./install.sh --service     # venv, dependencies, .env with a random password, systemd service
 nano .env                  # enter API keys, then: sudo systemctl restart hyperstead
 ```
@@ -39,7 +39,7 @@ More features (video, OCR, compilers, browser): `./install.sh --all`.
 PowerShell in the Hyperstead folder:
 
 ```powershell
-git clone https://github.com/KhungFu/paperclip-lite; cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead; cd hyperstead
 powershell -ExecutionPolicy Bypass -File install.ps1
 notepad .env
 deploy\windows\hyperstead-start.bat
@@ -51,7 +51,7 @@ Update later: `git pull`, then restart.
 ### macOS (untested)
 
 ```bash
-git clone https://github.com/KhungFu/paperclip-lite && cd paperclip-lite
+git clone https://github.com/KhungFu/hyperstead && cd hyperstead
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 cp .env.example .env       # set APP_TOKEN=<long password>, add API keys
 ./venv/bin/python app.py   # http://127.0.0.1:8787
@@ -87,8 +87,8 @@ Guide and script format (German): [docs/filmstudio.md](docs/filmstudio.md).
 ## Operations: who does what, where, when, how
 
 **Who:** the owner of the computer (you) does all of this, not the agents. The commands run in the
-Hyperstead folder: on the Pi in the terminal (`cd ~/paperclip-lite`), on Windows in PowerShell
-(`cd $HOME\paperclip-lite`, or wherever you put the folder).
+Hyperstead folder: on the Pi in the terminal (`cd ~/hyperstead`), on Windows in PowerShell
+(`cd $HOME\hyperstead`, or wherever you put the folder).
 
 ### Quick overview
 
@@ -109,7 +109,7 @@ Hyperstead folder: on the Pi in the terminal (`cd ~/paperclip-lite`), on Windows
 **Raspberry Pi / Linux**, in the terminal:
 
 ```bash
-cd ~/paperclip-lite
+cd ~/hyperstead
 git pull
 ./install.sh               # only needed if requirements.txt changed; .env stays unchanged
 sudo systemctl restart hyperstead
@@ -118,7 +118,7 @@ sudo systemctl restart hyperstead
 
 **Windows**, in PowerShell:
 
-1. `cd $HOME\paperclip-lite`
+1. `cd $HOME\hyperstead`
 2. `git pull`
 3. Only if packages changed (or when in doubt): `powershell -ExecutionPolicy Bypass -File install.ps1`
    (the existing `.env` stays unchanged).
@@ -135,11 +135,16 @@ is never affected, because Git does not know them.
 The program is now called **Hyperstead**. Data, `.env`, folders and all `PCL_*` settings stay as they are.
 Only the service and the start file have new names.
 
-- **Pi:** `cd ~/paperclip-lite && git pull && ./install.sh --service`. The installer stops the old service
+- **Pi:** `cd ~/paperclip-lite && git remote set-url origin https://github.com/KhungFu/hyperstead.git && git pull && ./install.sh --service`. The installer stops the old service
   `paperclip-lite`, removes it and starts `hyperstead`. From then on use the commands with `hyperstead`.
 - **Windows:** `git pull`, then start `deploy\windows\hyperstead-start.bat`. Old shortcuts to
   `paperclip-start.bat` keep working, the file now calls `hyperstead-start.bat`.
-- The folder may keep the name `paperclip-lite`. If you rename the GitHub repo, GitHub redirects the old address.
+- **GitHub address:** The repo is now called `KhungFu/hyperstead`. GitHub redirects the old address, still
+  switch it once in the program folder (same on Pi and Windows): `git remote set-url origin https://github.com/KhungFu/hyperstead.git`.
+  The Pi command above already includes this.
+- **Folder:** Existing installations may stay in the folder `paperclip-lite`. Where this guide says
+  `~/hyperstead` or `$HOME\hyperstead`, use `~/paperclip-lite` or `$HOME\paperclip-lite` instead.
+  New installations go into the folder `hyperstead`.
 - Cloud upload: new projects upload to `Hyperstead/<project>` by default. Target folders you set yourself stay.
 
 ### Start automatically
@@ -237,6 +242,7 @@ This list is extended with every change to the program. Each row says what the s
 | `werkstatt.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
 | Service `hyperstead` (Pi) | After the update the old service `paperclip-lite` is still running, `systemctl … hyperstead` reports "not found". | Run `./install.sh --service` once, it replaces the old service. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` cannot find the new file and the window closes with an error. | Run `git pull` again, the file is part of the program. |
+| Git address still points to `KhungFu/paperclip-lite` | `git pull` keeps working because GitHub redirects. If someone creates a new repo with the old name, the redirect ends and `git pull` fails. | Run `git remote set-url origin https://github.com/KhungFu/hyperstead.git` once in the program folder. |
 | `growth.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
 | No AI calls today (operations centre, 💶 in the bar) | Shows 0 $ or “keine Aufrufe”. | Nothing to do. Costs are estimates, set your own prices with `PCL_PRICES` in `.env`. |
 | Browser stores nothing (private window) | Light/dark, world/blueprint and motion fall back to the default on every load. | Use a normal window; the project data is not affected. |
