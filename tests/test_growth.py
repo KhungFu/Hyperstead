@@ -123,3 +123,27 @@ def test_prompts_ohne_spielbegriffe():
 
 def q_proj(pid):
     return A.q1("SELECT * FROM projects WHERE id=?", (pid,))
+
+
+def test_betriebszentrale(client):
+    """Betriebszentrale zeigt nur vorhandene Daten: laufend, Fehler, Freigaben, Zeitplaene, Kosten."""
+    pid = make_project()
+    ceo = make_agent(pid, "CEO")
+    make_task(pid, ceo, status="running")
+    bad = make_task(pid, ceo, status="failed")
+    A.ex("UPDATE tasks SET result='Zeitlimit', updated=? WHERE id=?", (A.time.time(), bad))
+    A.ex("INSERT INTO approvals(project_id,task_id,agent_id,kind,payload,created) VALUES(?,?,?,'publish','',?)",
+         (pid, bad, ceo, A.time.time()))
+    A.ex("INSERT INTO schedules(project_id,agent_id,title,at,created) VALUES(?,?,'Morgenrunde','09:00',0)", (pid, ceo))
+    A.ex("INSERT INTO llm_calls(ts,project_id,agent_id,provider,model,tokens,cost) VALUES(?,?,?,'openai','x',100,0.5)",
+         (A.time.time(), pid, ceo))
+    A.log("task_failed", "kaputt", pid, ceo, bad)
+    r = client.get(f"/api/projects/{pid}/ops").json
+    assert [t["status"] for t in r["active"]] == ["running"]
+    assert r["failed"][0]["error"] == "Zeitlimit" and r["approvals"][0]["kind"] == "publish"
+    assert r["schedules"][0]["title"] == "Morgenrunde"
+    assert r["cost_today"]["cost"] == 0.5 and r["cost_week"]["calls"] == 1
+    assert r["errors"][0]["event"] == "task_failed" and r["open"] is True
+    g = client.get(f"/api/projects/{pid}/growth").json
+    assert g["cost_today"] == 0.5 and g["calls_today"] == 1
+    assert client.get("/api/projects/99999/ops").status_code == 404

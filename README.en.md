@@ -238,6 +238,7 @@ This list is extended with every change to the program. Each row says what the s
 | Service `hyperstead` (Pi) | After the update the old service `paperclip-lite` is still running, `systemctl … hyperstead` reports "not found". | Run `./install.sh --service` once, it replaces the old service. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` cannot find the new file and the window closes with an error. | Run `git pull` again, the file is part of the program. |
 | `growth.py` (program file) | Hyperstead does not start (import error). | Run `git pull` again, the file is part of the program. |
+| No AI calls today (operations centre, 💶 in the bar) | Shows 0 $ or “keine Aufrufe”. | Nothing to do. Costs are estimates, set your own prices with `PCL_PRICES` in `.env`. |
 
 ## Access from the internet
 
@@ -307,6 +308,8 @@ The interface shows the names in German.
 **Usage:** The bar above the canvas shows the stage, progress to the next stage and the key numbers. On the right you pick the world, switch between light and dark (🌓) and open the overview of stages, points and ranks with ⓘ. Each agent's rank is shown as an icon on its card.
 
 **World map:** With 🗺 / 📐 in the bar you switch between the world map and the blueprint (node editor). On the map every manager with their team is a building, the agents stand in front of it as figures, roads show who reports to whom. Smoke and light mean "working", 🔧 failed, ✋ waiting for your approval, ⏳ waiting for subtasks, 📦 delivered. Tapping a building shows the team and actions, tapping a figure opens the agent. On a phone a list of buildings replaces the map. Animations stop when the device asks for reduced motion.
+
+**Operations centre:** 🛰 in the sidebar (or a tap on the numbers in the growth bar) shows at a glance what is running and waiting, which approvals are open, what failed in the last 7 days (with ↻ Neu), the schedules (with ▶ Jetzt), error messages and the latest events. It also shows the estimated AI costs for today and the last 7 days; today's cost also appears as 💶 in the bar. All numbers come from the existing tasks, approvals, schedules and the history, nothing is made up.
 
 **Points:** delivery accepted the first time +10, after revision +5, task marked as done in the mail +20,
 failed −3, rework requested −5. Stages from 0 / 100 / 300 / 700 / 1500 points. Existing projects get
