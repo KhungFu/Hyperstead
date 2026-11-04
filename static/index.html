@@ -7,7 +7,19 @@
 <style>
 :root{
   --bg:#0b0b0c; --panel:#111113; --panel2:#17171a; --line:#27272b; --text:#e8e8ea; --mute:#8b8b93;
-  --accent:#f97316; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; --yellow:#eab308; --orange:#f59e0b;
+  --accent:#f97316; --accent2:#7c3aed; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; --yellow:#eab308; --orange:#f59e0b;
+  --chip:var(--chip); --dotgrid:var(--dotgrid); --edge:var(--edge); --hover:var(--hover); --toastbg:var(--toastbg); --ground:#0f1a26;
+}
+/* Helles Design (Schalter in der Kopfleiste, Standard folgt dem Geraet) */
+:root[data-theme="light"]{
+  --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --line:#dde1e7; --text:#1b1f27; --mute:#667085;
+  --chip:#e8ebf0; --dotgrid:#d5dae2; --edge:#9aa3b2; --hover:#b8c0cc; --toastbg:#fdecec;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --line:#dde1e7; --text:#1b1f27; --mute:#667085;
+    --chip:#e8ebf0; --dotgrid:#d5dae2; --edge:#9aa3b2; --hover:#b8c0cc; --toastbg:#fdecec;
+  }
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
@@ -23,7 +35,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .side-h{font-size:11px;letter-spacing:.08em;color:var(--mute);text-transform:uppercase;padding:10px 6px 4px;display:flex;justify-content:space-between;align-items:center}
 .side-btn{width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;gap:8px;align-items:center;color:var(--text)}
 .side-btn:hover{background:var(--panel2)}
-.side-btn.active{background:#26262b}
+.side-btn.active{background:var(--chip)}
 .badge{margin-left:auto;background:var(--accent);color:#fff;border-radius:10px;padding:0 7px;font-size:11px}
 .icon-btn{background:none;border:0;color:var(--mute);cursor:pointer;font-size:16px;padding:0 4px}
 .icon-btn:hover{color:var(--text)}
@@ -41,20 +53,20 @@ button,input,select,textarea{font:inherit;color:inherit}
 .pal:hover{border-color:var(--accent)}
 .hint{color:var(--mute);font-size:12px;margin-left:6px}
 #vp{position:relative;flex:1;overflow:hidden;cursor:grab;touch-action:none;
-  background-image:radial-gradient(#2a2a2f 1px,transparent 1px);background-size:24px 24px}
+  background-image:radial-gradient(var(--dotgrid) 1px,transparent 1px);background-size:24px 24px}
 #vp.panning{cursor:grabbing}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
 #edges{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
-#edges path.e{stroke:#5a5a63;stroke-width:1.6;fill:none}
+#edges path.e{stroke:var(--edge);stroke-width:1.6;fill:none}
 #edges path.hit{stroke:transparent;stroke-width:14;fill:none;pointer-events:stroke;cursor:pointer}
 #edges path.hit:hover + path.e{stroke:var(--red)}
 #edges path.tmp{stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4;fill:none}
 .node{position:absolute;width:200px;height:86px;background:var(--panel);border:1px solid var(--line);
   border-radius:12px;padding:10px 12px;cursor:move;user-select:none}
-.node:hover{border-color:#44444b}
-.node.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(249,115,22,.25)}
+.node:hover{border-color:var(--hover)}
+.node.sel{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
 .n-head{display:flex;gap:10px;align-items:flex-start}
-.n-ico{width:30px;height:30px;border-radius:9px;background:#26262b;display:grid;place-items:center;font-weight:700;flex:none}
+.n-ico{width:30px;height:30px;border-radius:9px;background:var(--chip);display:grid;place-items:center;font-weight:700;flex:none}
 .n-txt{min-width:0;flex:1}
 .n-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .n-role,.n-prov{color:var(--mute);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -65,10 +77,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .dot.wait{background:var(--orange)}
 @keyframes pulse{50%{opacity:.35}}
 .n-foot{position:absolute;left:12px;right:12px;bottom:8px;display:flex;gap:8px;align-items:center;font-size:11px;color:var(--mute)}
-.n-bar{flex:1;height:3px;background:#26262b;border-radius:2px;overflow:hidden}
+.n-bar{flex:1;height:3px;background:var(--chip);border-radius:2px;overflow:hidden}
 .n-bar i{display:block;height:100%;background:var(--accent)}
 .port{position:absolute;left:50%;width:14px;height:14px;margin-left:-7px;border-radius:50%;
-  background:#26262b;border:2px solid #5a5a63}
+  background:var(--chip);border:2px solid var(--edge)}
 .port.top{top:-8px}
 .port.bot{bottom:-8px;cursor:crosshair}
 .port.bot:hover{border-color:var(--accent);background:var(--accent)}
@@ -76,6 +88,62 @@ button,input,select,textarea{font:inherit;color:inherit}
 .zoom button{width:34px;height:30px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;cursor:pointer}
 .zoom button:hover{border-color:var(--accent)}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);pointer-events:none;text-align:center}
+/* Wachstumsleiste (Hyperstead) */
+#growth{display:none;gap:12px;align-items:center;padding:7px 14px;border-bottom:1px solid var(--line);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 14%,var(--panel)),var(--panel) 70%)}
+#growth.on{display:flex}
+.g-stage{display:flex;align-items:center;gap:8px;min-width:0}
+.g-ico{font-size:22px;line-height:1}
+.g-name{font-weight:700;white-space:nowrap}
+.g-sub{font-size:11px;color:var(--mute);white-space:nowrap}
+.g-bar{flex:1 1 140px;min-width:80px;max-width:320px;height:8px;background:var(--chip);border-radius:5px;overflow:hidden}
+.g-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .6s}
+.g-stats{display:flex;gap:10px;font-size:12px;color:var(--mute);white-space:nowrap}
+.g-stats b{color:var(--text)}
+.g-tools{margin-left:auto;display:flex;gap:6px;align-items:center}
+.g-tools select{width:auto;padding:4px 8px}
+.n-rank{font-size:12px;cursor:help}
+/* Welt-Ansicht (isometrische Karte) */
+#map{position:absolute;left:0;top:0;overflow:visible;display:none}
+#app.view-world #map{display:block}
+#app.view-world #edges,#app.view-world #nodes,#app.view-world #palette{display:none}
+#app.view-world #vp{background:radial-gradient(ellipse at 50% 40%,color-mix(in srgb,var(--ground) 92%,var(--accent) 8%),var(--bg) 75%) !important;background-size:100% 100% !important;background-position:0 0 !important}
+#map .tile{stroke:color-mix(in srgb,var(--ground) 70%,var(--text) 30%);stroke-opacity:.18;stroke-width:1}
+#map .road{stroke:color-mix(in srgb,var(--text) 35%,var(--ground));stroke-opacity:.45;stroke-width:10;fill:none;stroke-linecap:round;stroke-linejoin:round}
+#map .road.flow{stroke:var(--accent);stroke-opacity:.9;stroke-width:3;stroke-dasharray:4 10;animation:flow 1.2s linear infinite}
+#map .bld{cursor:pointer}
+#map .bld:hover .face{filter:brightness(1.12)}
+#map .bld.sel .face{stroke:var(--accent);stroke-width:2}
+#map .face{stroke:rgba(0,0,0,.25);stroke-width:1}
+#map .lbl{font:600 13px system-ui,sans-serif;fill:var(--text);text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+#map .lbl2{font:11px system-ui,sans-serif;fill:var(--mute);text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+#map .state{font-size:22px;text-anchor:middle}
+#map .fig{cursor:pointer}
+#map .fig:hover circle{stroke:var(--accent);stroke-width:2}
+#map .smoke{fill:color-mix(in srgb,var(--text) 40%,transparent);animation:smoke 2.4s ease-out infinite}
+#map .win{fill:#ffe9a8;opacity:.0}
+#map .bld.busy .win{opacity:.85;animation:blink 3s ease-in-out infinite}
+@keyframes smoke{0%{transform:translate(0,0) scale(.6);opacity:.8}100%{transform:translate(6px,-34px) scale(1.6);opacity:0}}
+@keyframes flow{to{stroke-dashoffset:-28}}
+@keyframes blink{50%{opacity:.45}}
+@media (prefers-reduced-motion: reduce){#map .smoke,#map .road.flow,#map .bld.busy .win{animation:none}}
+:root[data-motion="off"] #map .smoke,:root[data-motion="off"] #map .road.flow,:root[data-motion="off"] #map .bld.busy .win{animation:none}
+#bcard{position:absolute;z-index:6;display:none;width:min(320px,calc(100% - 20px));background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);padding:12px}
+#bcard.on{display:block}
+#bcard h4{margin:0 0 2px;font-size:15px}
+#bcard .mem{display:flex;gap:8px;align-items:center;width:100%;background:none;border:0;padding:6px;border-radius:8px;cursor:pointer;text-align:left;color:var(--text)}
+#bcard .mem:hover{background:var(--panel2)}
+#bcard .mem small{color:var(--mute);margin-left:auto}
+#wlist{position:absolute;inset:0;overflow:auto;padding:10px;display:none;z-index:4}
+#app.view-world.narrow #wlist{display:block}
+#app.view-world.narrow #map,#app.view-world.narrow .zoom{display:none}
+.wcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;border-left:4px solid var(--accent)}
+.wcard .wh{display:flex;gap:10px;align-items:center}
+.wcard .wh .ico{font-size:26px}
+.wcard .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.wcard .chips button{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:4px 10px;cursor:pointer;color:var(--text);font-size:13px}
+.vbtn.on{border-color:var(--accent);color:var(--accent)}
 /* Panel */
 #panel{background:var(--panel);border-left:1px solid var(--line);overflow:hidden;display:none;flex-direction:column;min-height:0}
 #app.panel-open #panel{display:flex}
@@ -93,7 +161,7 @@ textarea{resize:vertical;min-height:110px}
 .chk{display:flex;gap:8px;align-items:flex-start;margin:8px 0;color:var(--text);font-size:13px}
 .chk small{display:block;color:var(--mute)}
 .btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
-.btn:hover{border-color:#55555d}
+.btn:hover{border-color:var(--hover)}
 #chatlog{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 330px);overflow:auto;margin-bottom:10px}
 .bub{padding:8px 11px;border-radius:12px;max-width:92%;white-space:pre-wrap;word-wrap:break-word;line-height:1.45;font-size:13px}
 .bub.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:3px}
@@ -101,7 +169,7 @@ textarea{resize:vertical;min-height:110px}
 .bub.wait{opacity:.6;font-style:italic}
 #chatbox{position:relative}
 #chatbox.drop::after{content:'Dateien hier ablegen → input/';position:absolute;inset:0;display:grid;place-items:center;
-  border:2px dashed var(--accent);border-radius:10px;background:rgba(249,115,22,.12);color:var(--text);font-weight:600;pointer-events:none}
+  border:2px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--text);font-weight:600;pointer-events:none}
 #chatatt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 #chatatt:empty{display:none}
 #chatpick{border:1px solid var(--line);border-radius:10px;background:var(--panel2);margin-bottom:6px;max-height:220px;overflow:auto;padding:4px}
@@ -122,7 +190,7 @@ a.btn.pri{color:#fff}
 .btn.danger{color:var(--red)}
 .btn.sm{padding:3px 8px;font-size:12px}
 .row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-.bud{height:6px;background:#26262b;border-radius:3px;overflow:hidden;margin-top:6px}
+.bud{height:6px;background:var(--chip);border-radius:3px;overflow:hidden;margin-top:6px}
 .bud i{display:block;height:100%;background:var(--accent)}
 .task{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--panel2)}
 .task summary{padding:8px 10px;cursor:pointer;display:flex;gap:8px;align-items:center}
@@ -134,7 +202,7 @@ a.btn.pri{color:#fff}
 .task pre,.res pre{user-select:text;-webkit-user-select:text}
 .res pre{padding-top:30px}
 .task pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0;max-height:300px;overflow:auto;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace}
-.chip{font-size:11px;border-radius:10px;padding:1px 8px;background:#26262b;color:var(--mute);white-space:nowrap}
+.chip{font-size:11px;border-radius:10px;padding:1px 8px;background:var(--chip);color:var(--mute);white-space:nowrap}
 .chip.running{background:rgba(59,130,246,.2);color:#7db0ff}
 .chip.done{background:rgba(34,197,94,.18);color:#6fdc98}
 .chip.failed,.chip.blocked{background:rgba(239,68,68,.2);color:#ff8a8a}
@@ -157,7 +225,7 @@ a.btn.pri{color:#fff}
 #ovbox header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center}
 #ovbox header b{flex:1}
 #ovbody{padding:14px 16px;overflow:auto}
-#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2a1212;border:1px solid var(--red);
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--toastbg);border:1px solid var(--red);
   padding:8px 14px;border-radius:10px;display:none;z-index:99;max-width:80vw}
 @media (max-width:1100px) and (min-width:821px){
   #app{grid-template-columns:200px 1fr 0}
@@ -165,6 +233,9 @@ a.btn.pri{color:#fff}
   #pname{flex-basis:150px}
 }
 @media (max-width:820px){
+  #growth{flex-wrap:wrap;padding:6px 10px;gap:8px}
+  .g-bar{flex:1 1 100%;max-width:none;order:3}
+  .g-stats{display:none}
   #app,#app.panel-open{grid-template-columns:1fr;height:100dvh}
   #main{grid-column:1;grid-row:1}
   #side{display:none}
@@ -189,6 +260,41 @@ a.btn.pri{color:#fff}
   .att span{max-width:150px}
   #toast{max-width:94vw;bottom:14px}
 }
+
+/* Betriebszentrale */
+.ops-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-bottom:10px}
+.ops-tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border:1px solid var(--line);border-radius:10px;background:var(--panel2,var(--chip));color:var(--text);cursor:pointer;font:inherit}
+.ops-tile:disabled{cursor:default}
+.ops-tile:not(:disabled):hover{border-color:var(--accent)}
+.ops-tile span{font-size:18px}.ops-tile b{font-size:20px}.ops-tile small{color:var(--mute);font-size:11px;text-align:center}
+.ops-cost{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:10px;margin-bottom:12px}
+.ops-cost button{margin-left:auto}
+.ops-sec{margin:14px 0 4px}.ops-sec h4{margin:0 0 6px;font-size:14px}
+.ops-n{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:var(--chip);color:var(--mute);font-size:11px;text-align:center}
+.ops-row{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)}
+.ops-row .chip{flex:none;margin-top:1px}
+.ops-main{flex:1;min-width:0;word-break:break-word}.ops-main small{display:block;color:var(--mute);font-size:12px}
+.ops-main a{color:var(--accent)}
+.ops-err{margin-top:3px;font-size:12px;color:var(--mute);white-space:pre-wrap;max-height:4.5em;overflow:hidden}
+.ops-empty{color:var(--mute);font-size:12px}
+#gStats{cursor:pointer}
+
+/* Feier beim Aufstieg */
+#party{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);overflow:hidden;padding:16px}
+#party.on{display:flex}
+#party i{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;opacity:.9;animation:fall 2.8s ease-in forwards}
+@keyframes fall{to{transform:translate(var(--dx),105vh) rotate(540deg);opacity:.6}}
+.party-card{position:relative;max-width:340px;width:100%;text-align:center;background:var(--panel);color:var(--text);border:2px solid var(--accent);border-radius:16px;padding:20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:8px;align-items:center;animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+.party-card b{font-size:18px}.party-card div{color:var(--mute);font-size:13px}
+.party-card .party-ico{font-size:56px;line-height:1;color:inherit}
+@keyframes pop{from{transform:scale(.6);opacity:0}}
+@media (prefers-reduced-motion: reduce){#party i{display:none}.party-card{animation:none}#growth .g-bar i{transition:none}}
+:root[data-motion="off"] #party i{display:none}
+:root[data-motion="off"] .party-card{animation:none}
+:root[data-motion="off"] #growth .g-bar i{transition:none}
+/* Barrierefreiheit: sichtbarer Tastatur-Fokus */
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible,select:focus-visible,input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#map .bld:focus-visible,#map .fig:focus-visible{outline:none;filter:drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 6px var(--accent))}
 </style>
 </head>
 <body>
@@ -196,6 +302,7 @@ a.btn.pri{color:#fff}
   <aside id="side">
     <div class="brand"><div class="logo">H</div><b>Hyperstead</b></div>
     <div class="side-sec">
+      <button class="side-btn" id="btnOps" title="Was gerade läuft, wartet, schiefging und was es heute kostet">🛰 Betriebszentrale</button>
       <button class="side-btn" id="btnInbox">📬 Post <span class="badge" id="inbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnApprovals">✋ Freigaben <span class="badge" id="apbadge" style="display:none">0</span></button>
       <button class="side-btn" id="btnGroupAI" title="Mehrere Agenten auswählen und gemeinsam auf eine KI / ein Modell umstellen">🔀 KI für Gruppe</button>
@@ -222,12 +329,25 @@ a.btn.pri{color:#fff}
       <input id="pgoal" type="text" placeholder="Ziel des Projekts (alle Agenten kennen es)" disabled>
       <button class="btn danger sm" id="btnDelProj" style="display:none">Projekt löschen</button>
     </div>
+    <div id="growth" aria-live="polite">
+      <div class="g-stage"><span class="g-ico" id="gIco"></span><div><div class="g-name" id="gName"></div><div class="g-sub" id="gSub"></div></div></div>
+      <div class="g-bar" title="Fortschritt bis zur nächsten Stufe"><i id="gBar"></i></div>
+      <div class="g-stats" id="gStats"></div>
+      <div class="g-tools">
+        <button class="btn sm vbtn" id="gView" title="Zwischen Welt-Karte und Bauplan (Knoten-Editor) wechseln">🗺 Welt</button>
+        <select id="gWorld" title="Welt dieses Projekts (ändert nur das Aussehen)"></select>
+        <button class="icon-btn" id="gTheme" title="Hell / Dunkel">🌓</button>
+        <button class="icon-btn" id="gInfo" title="Wie das Wachstum funktioniert">ⓘ</button>
+      </div>
+    </div>
     <div id="palette">
       <span style="color:var(--mute)">Agent hinzufügen (ziehen oder klicken):</span>
     </div>
     <div id="vp">
-      <div class="zoom"><button id="zin">+</button><button id="zout">−</button><button id="zfit">Fit</button></div>
-      <div id="world"><svg id="edges"></svg><div id="nodes"></div></div>
+      <div class="zoom"><button id="zin" title="Hineinzoomen" aria-label="Hineinzoomen">+</button><button id="zout" title="Herauszoomen" aria-label="Herauszoomen">−</button><button id="zfit">Fit</button></div>
+      <div id="world"><svg id="map" width="1" height="1"></svg><svg id="edges"></svg><div id="nodes"></div></div>
+      <div id="bcard" role="dialog" aria-label="Gebäude"></div>
+      <div id="wlist"></div>
       <div class="empty" id="empty">Wähle links ein Projekt oder lege eins mit ＋ an.</div>
     </div>
   </section>
@@ -244,8 +364,9 @@ a.btn.pri{color:#fff}
   </aside>
 </div>
 
-<div id="ov"><div id="ovbox"><header><b id="ovtitle"></b><button class="icon-btn" id="ovclose">✕</button></header><div id="ovbody"></div></div></div>
-<div id="toast"></div>
+<div id="ov"><div id="ovbox" role="dialog" aria-modal="true" aria-labelledby="ovtitle"><header><b id="ovtitle"></b><button class="icon-btn" id="ovclose" title="Schließen" aria-label="Schließen">✕</button></header><div id="ovbody"></div></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="party" role="alert" aria-live="assertive"></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -293,13 +414,13 @@ async function loadProjects(){
   S.projects.forEach((p,i)=>{
     const b = document.createElement('button');
     b.className = 'side-btn'+(p.id===S.pid?' active':'');
-    b.innerHTML = `<span class="pdot" style="background:${COLORS[i%COLORS.length]}"></span><span>${esc(p.name)}</span>`;
+    b.innerHTML = `<span class="pdot" style="background:${COLORS[i%COLORS.length]}"></span><span>${esc(p.name)}</span>${p.stage_icon?`<span style="margin-left:auto" title="${esc(p.stage_name||'')}">${p.stage_icon}</span>`:''}`;
     b.onclick = ()=>openProject(p.id);
     el.appendChild(b);
   });
 }
 async function openProject(id){
-  S.pid = id; S.sel = null; closePanel();
+  S.pid = id; S.sel = null; closePanel(); WORLD.g = null; WORLD.at = 0;
   await loadProjects(); await refresh(true);
   fit();
 }
@@ -328,7 +449,7 @@ async function refresh(force){
   const nm = S.graph.model_problems||0;
   const mb = $('#mdbadge'); mb.textContent = nm; mb.style.display = nm? '' : 'none';
   $('#schbadge').style.display = S.graph.closed ? '' : 'none';
-  render();
+  render(); renderGrowth(); loadGrowth(force);
   if(S.sel && S.tab==='tasks') loadTasks();
 }
 function agentById(id){ return S.graph && S.graph.agents.find(a=>a.id===id); }
@@ -338,7 +459,7 @@ function render(){
   $('#empty').style.display = g ? 'none' : 'grid';
   $('#pname').disabled = $('#pgoal').disabled = !g;
   $('#btnDelProj').style.display = g ? '' : 'none';
-  if(!g){ $('#nodes').innerHTML=''; $('#edges').innerHTML=''; $('#pname').value=''; $('#pgoal').value=''; return; }
+  if(!g){ $('#growth').classList.remove('on'); $('#nodes').innerHTML=''; $('#edges').innerHTML=''; $('#pname').value=''; $('#pgoal').value=''; return; }
   if(document.activeElement!==$('#pname')) $('#pname').value = g.project.name;
   if(document.activeElement!==$('#pgoal')) $('#pgoal').value = g.project.goal;
   const nodes = $('#nodes'); nodes.innerHTML='';
@@ -353,11 +474,12 @@ function render(){
       <div class="n-head"><div class="n-ico">${esc((a.name||'?')[0].toUpperCase())}</div>
         <div class="n-txt"><div class="n-name">${esc(a.name)}</div><div class="n-role">${esc(a.role||'—')}</div><div class="n-prov">${esc(prov)}</div></div>
         <span class="dot ${cls}"></span></div>
-      <div class="n-foot"><span>▶${running} ✓${c.done||0}${c.todo?` ·${c.todo} offen`:''}${c.failed?` ·${c.failed} ✗`:''}</span><span style="margin-left:auto">${fmtTok(a.used_tokens||0)}</span></div>
+      <div class="n-foot"><span>${rankBadge(a)} ▶${running} ✓${c.done||0}${c.todo?` ·${c.todo} offen`:''}${c.failed?` ·${c.failed} ✗`:''}</span><span style="margin-left:auto">${fmtTok(a.used_tokens||0)}</span></div>
       <div class="port bot" title="Ziehen, um einen Mitarbeiter zu verbinden"></div>`;
     nodes.appendChild(el);
   });
   drawEdges();
+  if(typeof drawMap==='function') drawMap();
 }
 function drawEdges(){
   const svg = $('#edges'); let h='';
@@ -421,6 +543,9 @@ function zoomAt(f,cx,cy){
   const ns=Math.min(2,Math.max(.3,V.s*f)); V.x=mx-(mx-V.x)*(ns/V.s); V.y=my-(my-V.y)*(ns/V.s); V.s=ns; applyView();
 }
 function fit(){
+  if(VIEW==='world' && MAP.box){ const vp=$('#vp').getBoundingClientRect(), b=MAP.box;
+    const s=Math.min(1.1,Math.max(.3,Math.min((vp.width-40)/(b.x1-b.x0),(vp.height-40)/(b.y1-b.y0))));
+    V.s=s; V.x=(vp.width-(b.x1-b.x0)*s)/2-b.x0*s; V.y=(vp.height-(b.y1-b.y0)*s)/2-b.y0*s; return applyView(); }
   const vp=$('#vp').getBoundingClientRect(); const as=S.graph?S.graph.agents:[];
   if(!as.length){ V.x=80;V.y=40;V.s=1; return applyView(); }
   const x0=Math.min(...as.map(a=>a.x)),y0=Math.min(...as.map(a=>a.y));
@@ -801,9 +926,17 @@ async function drawLog(a){
 }
 
 /* ---------- Overlays: Freigaben + Audit ---------- */
-function openOv(title){ $('#ovtitle').textContent=title; $('#ov').classList.add('on'); }
-$('#ovclose').onclick=()=>$('#ov').classList.remove('on');
-$('#ov').onclick=e=>{ if(e.target.id==='ov') $('#ov').classList.remove('on'); };
+let ovBack=null;
+function openOv(title){ if(!$('#ov').classList.contains('on')) ovBack=document.activeElement; $('#ovtitle').textContent=title; $('#ov').classList.add('on'); setTimeout(()=>{ const c=$('#ovclose'); if(c && !$('#ovbox').contains(document.activeElement)) c.focus({preventScroll:true}); },0); }
+function closeOv(){ $('#ov').classList.remove('on'); if(ovBack && document.contains(ovBack)) try{ ovBack.focus({preventScroll:true}); }catch(e){} ovBack=null; }
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  if($('#party').classList.contains('on')){ hideParty(); return; }
+  if($('#ov').classList.contains('on')){ e.preventDefault(); closeOv(); return; }
+  if(typeof hideBcard==='function' && $('#bcard') && $('#bcard').classList.contains('on')) hideBcard();
+});
+$('#ovclose').onclick=closeOv;
+$('#ov').onclick=e=>{ if(e.target.id==='ov') closeOv(); };
 $('#btnApprovals').onclick=async()=>{
   openOv('Freigaben'); const body=$('#ovbody');
   async function load(){
@@ -1259,12 +1392,308 @@ $('#btnAudit').onclick=async()=>{
   $('#ovbody').innerHTML=rows.length?rows.map(r=>`<div class="logrow"><span class="ts">${fmt(r.ts)}</span> <b>${esc(r.event)}</b> ${r.agent_name?'· '+esc(r.agent_name):''}<br>${esc(r.detail)}</div>`).join(''):'<div style="color:var(--mute)">Leer.</div>';
 };
 
+
+/* ---------- Betriebszentrale (nur vorhandene Daten) ---------- */
+async function showOps(){
+  if(!S.pid){ toast('Erst ein Projekt wählen.'); return; }
+  openOv('🛰 Betriebszentrale'); const body=$('#ovbody');
+  let r; try{ r=await api('/projects/'+S.pid+'/ops'); }catch(e){ return; }
+  if(!$('#ov').classList.contains('on')) return;
+  const c=r.counts||{}, task=wword('tasks','Aufgaben');
+  const tile=(ico,n,lbl,go)=>`<button class="ops-tile" ${go?`data-go="${go}"`:'disabled'}><span>${ico}</span><b>${n}</b><small>${lbl}</small></button>`;
+  const cost=x=>x&&x.calls?`${usdShort(x.cost)} · ${(x.calls||0).toLocaleString('de-AT')} ${x.calls===1?'Aufruf':'Aufrufe'}`:'0 $ · keine Aufrufe';
+  const ago=ts=>{ const m=Math.round((Date.now()/1000-ts)/60); return m<1?'gerade':m<60?'vor '+m+' min':m<1440?'vor '+Math.round(m/60)+' h':fmt(ts); };
+  const agentLink=x=>x.agent_id?`<a href="#" data-agent="${x.agent_id}">${esc(x.agent_name||'?')}</a>`:esc(x.agent_name||'?');
+  const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const when=s=>s.at==='open'?'bei Öffnung':s.at==='close'?'bei Schluss':esc(s.at);
+  const days=d=>{ const l=String(d||'').split(',').filter(x=>x!=='').map(Number); return l.length===7?'täglich':l.map(i=>DAYS[i]).join(' '); };
+  const sec=(id,title,n,html)=>`<section class="ops-sec" id="ops_${id}"><h4>${title} <span class="ops-n">${n}</span></h4>${html}</section>`;
+  const empty=t=>`<div class="ops-empty">${t}</div>`;
+  body.innerHTML=`
+    ${r.open?'':'<div class="task" style="padding:8px;margin-bottom:10px">🌙 Außerhalb der Öffnungszeiten: neue Aufträge warten bis zum Arbeitsbeginn.</div>'}
+    <div class="ops-tiles">
+      ${tile('▶',(c.running||0),'läuft','active')}
+      ${tile('⏳',(c.queued||0)+(c.waiting_subtasks||0),'wartet','active')}
+      ${tile('✋',r.approvals.length,'Freigaben','appr')}
+      ${tile('🔧',r.failed.length,'Fehler (7 Tage)','failed')}
+      ${tile('✓',(c.done||0),wword('done','fertig'),'')}
+    </div>
+    <div class="task ops-cost"><div>💶 <b>Heute:</b> ${cost(r.cost_today)}</div><div>📅 <b>7 Tage:</b> ${cost(r.cost_week)}</div>
+      <button class="btn sm" id="ops_usage">📊 Alle Kosten</button></div>
+    ${sec('active','▶ Läuft und wartet',r.active.length,r.active.length?r.active.map(t=>`<div class="ops-row"><span class="chip ${t.status}">${STATUS[t.status]||esc(t.status)}</span><div class="ops-main"><b>${esc(t.title)}</b><small>${agentLink(t)} · ${ago(t.updated)}</small></div></div>`).join(''):empty('Gerade ist nichts los.'))}
+    ${sec('appr','✋ Offene Freigaben',r.approvals.length,r.approvals.length?r.approvals.map(a=>`<div class="ops-row"><span class="chip waiting_approval">${esc(a.kind)}</span><div class="ops-main"><b>${esc(a.task_title||'—')}</b><small>${esc(a.agent_name||'?')} · ${ago(a.created)}</small></div></div>`).join('')+'<div class="row" style="margin-top:6px"><button class="btn pri sm" id="ops_appr">Freigaben entscheiden</button></div>':empty('Nichts wartet auf dich.'))}
+    ${sec('failed','🔧 Fehlgeschlagen (7 Tage)',r.failed.length,r.failed.length?r.failed.map(t=>`<div class="ops-row"><span class="chip failed">Fehler</span><div class="ops-main"><b>${esc(t.title)}</b><small>${agentLink(t)} · ${ago(t.updated)}</small>${t.error?`<div class="ops-err">${esc(t.error)}</div>`:''}</div>${t.parent_task_id?'':`<button class="btn sm" data-rerun="${t.id}">↻ Neu</button>`}</div>`).join(''):empty('Keine Fehler in den letzten 7 Tagen.'))}
+    ${sec('sched','🕘 Zeitpläne',r.schedules.length,r.schedules.length?r.schedules.map(s=>`<div class="ops-row"><span class="chip ${s.enabled?'done':'todo'}">${s.enabled?'aktiv':'aus'}</span><div class="ops-main"><b>${s.kind==='inspect'?'🔎 ':''}${esc(s.title)}</b><small>${esc(s.agent_name||'?')} · ${when(s)} · ${days(s.days)}${s.last_run?' · zuletzt '+esc(s.last_run):''}</small></div><button class="btn sm" data-srun="${s.id}">▶ Jetzt</button></div>`).join(''):empty('Keine Zeitpläne. Anlegen unter 🕘 Zeitplan.'))}
+    ${sec('err','⚠ Fehlermeldungen im Verlauf',r.errors.length,r.errors.length?r.errors.map(e=>`<div class="logrow"><span class="ts">${fmt(e.ts)}</span> <b>${esc(e.event)}</b> ${e.agent_name?'· '+esc(e.agent_name):''}<br>${esc(e.detail)}</div>`).join(''):empty('Keine.'))}
+    ${sec('log','📜 Letzte Ereignisse',r.audit.length,r.audit.map(e=>`<div class="logrow"><span class="ts">${fmt(e.ts)}</span> <b>${esc(e.event)}</b> ${e.agent_name?'· '+esc(e.agent_name):''}<br>${esc(e.detail)}</div>`).join('')+'<div class="row" style="margin-top:6px"><button class="btn sm" id="ops_audit">Ganzer Verlauf</button></div>')}
+    <div class="ops-empty" style="margin-top:8px">Alle Zahlen kommen aus den ${esc(task)}, Freigaben, Zeitplänen und dem Verlauf dieses Projekts. Kosten sind Schätzungen.</div>`;
+  body.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const el=$('#ops_'+b.dataset.go); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); });
+  body.querySelectorAll('[data-agent]').forEach(a=>a.onclick=e=>{ e.preventDefault(); $('#ov').classList.remove('on'); selectAgent(+a.dataset.agent); });
+  body.querySelectorAll('[data-rerun]').forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await api('/tasks/'+b.dataset.rerun+'/run','POST',{}); toast('Neu gestartet'); }catch(e){} showOps(); refresh(true); });
+  body.querySelectorAll('[data-srun]').forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await api('/schedules/'+b.dataset.srun+'/run','POST',{}); toast('Gestartet'); }catch(e){} showOps(); refresh(true); });
+  const on=(id,f)=>{ const el=$('#'+id); if(el) el.onclick=f; };
+  on('ops_usage',()=>showUsage(1)); on('ops_appr',()=>$('#btnApprovals').click()); on('ops_audit',()=>$('#btnAudit').click());
+}
+$('#btnOps').onclick=showOps;
+
+/* ---------- Welten und Wachstum (Hyperstead) ---------- */
+const WORLD = {list:null, g:null, at:0};
+function wdef(){ return (WORLD.list && WORLD.g && WORLD.list.worlds[WORLD.g.world]) || null; }
+function wword(k, dflt){ const w=wdef(); return (w && w.words[k]) || dflt; }
+function applyWorldColors(){
+  const w = wdef(), r = document.documentElement.style;
+  if(!w){ r.removeProperty('--accent'); r.removeProperty('--accent2'); r.removeProperty('--ground'); return; }
+  r.setProperty('--accent', w.colors.accent); r.setProperty('--accent2', w.colors.accent2);
+  const light = document.documentElement.dataset.theme==='light' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: light)').matches);
+  r.setProperty('--ground', light ? w.colors.ground : w.colors.ground_dark);
+}
+async function loadGrowth(force){
+  if(!S.pid){ WORLD.g=null; renderGrowth(); return; }
+  if(!force && Date.now()-WORLD.at < 10000) return;
+  WORLD.at = Date.now();
+  try{
+    if(!WORLD.list) WORLD.list = await api('/worlds');
+    const pid = S.pid, g = await api('/projects/'+pid+'/growth');
+    if(pid!==S.pid) return;
+    const before = WORLD.g && WORLD.g.pid===pid ? WORLD.g.stage : null;
+    const first = !WORLD.g || WORLD.g.pid!==pid;
+    const oldRanks = !first && WORLD.g.ranks || null;
+    WORLD.g = {...g, pid};
+    if(oldRanks) Object.entries(g.ranks||{}).forEach(([id,r])=>{ const o=oldRanks[id];
+      if(o && r.rank>o.rank){ const a=((S.graph&&S.graph.agents)||[]).find(x=>x.id===+id); toast(`🎉 ${a?a.name:'Ein Agent'} ist jetzt ${r.icon} ${r.name}`); } });
+    if(first){ renderGrowth(); render(); fit(); }
+    if(before!==null && g.stage>before) celebrate(g);
+  }catch(e){ return; }
+  renderGrowth(); render();
+}
+function renderGrowth(){
+  const el=$('#growth'), g=WORLD.g, w=wdef();
+  el.classList.toggle('on', !!(g && w && S.graph));
+  applyWorldColors();
+  if(!g || !w) return;
+  $('#gIco').textContent = g.icon;
+  $('#gName').textContent = g.name+' · Stufe '+(g.stage+1)+'/'+g.stage_count;
+  $('#gSub').textContent = g.next!==null ? `${g.points} ${w.words.points} · noch ${g.next-g.points} bis ${g.next_icon} ${g.next_name}` : `${g.points} ${w.words.points} · höchste Stufe erreicht`;
+  $('#gBar').style.width = Math.round(g.progress*100)+'%';
+  const ags=(S.graph&&S.graph.agents)||[]; let run=0, done=0;
+  ags.forEach(a=>{ const c=a.counts||{}; run+=(c.running||0)+(c.queued||0)+(c.waiting_subtasks||0); done+=(c.done||0); });
+  $('#gStats').innerHTML = `<span>👥 <b>${ags.length}</b>${g.limits&&g.team_limit?' / '+g.team_limit:''}</span><span>▶ <b>${run}</b> läuft</span><span>✓ <b>${done}</b> ${esc(w.words.done)}</span><span>✋ <b>${(S.graph&&S.graph.pending_approvals)||0}</b> Freigaben</span><span title="Geschätzte KI-Kosten heute (${g.calls_today||0} Aufrufe)">💶 <b>${usdShort(g.cost_today)}</b> heute</span>`;
+  const sel=$('#gWorld');
+  if(sel.options.length!==Object.keys(WORLD.list.worlds).length)
+    sel.innerHTML = Object.entries(WORLD.list.worlds).map(([k,v])=>`<option value="${k}">${esc(v.stages[0][0]+' '+v.name)}</option>`).join('');
+  if(document.activeElement!==sel) sel.value = g.world;
+}
+function usdShort(c){ c=c||0; return c>0&&c<0.01?'< 0,01 $':c.toLocaleString('de-AT',{maximumFractionDigits:2})+' $'; }
+$('#gStats').onclick = ()=>showOps();
+$('#gStats').title = 'Betriebszentrale öffnen';
+$('#gWorld').onchange = async e=>{ if(!S.pid) return; await api('/projects/'+S.pid+'/world','PUT',{world:e.target.value}); await loadGrowth(true); fit(); loadProjects(); };
+$('#gTheme').onclick = ()=>{
+  const d=document.documentElement, cur=d.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  d.dataset.theme = cur==='light'?'dark':'light';
+  try{ localStorage.setItem('hs-theme', d.dataset.theme); }catch(e){}
+  applyWorldColors();
+};
+try{ const t=localStorage.getItem('hs-theme'); if(t) document.documentElement.dataset.theme=t; }catch(e){}
+$('#gInfo').onclick = ()=>{
+  const g=WORLD.g, w=wdef(), L=WORLD.list; if(!g||!w) return;
+  openOv(`${w.stages[0][0]} Welt „${w.name}“ und Wachstum`);
+  const P=L.points;
+  $('#ovbody').innerHTML = `<div style="color:var(--mute);font-size:12px;margin-bottom:10px">${esc(w.tagline)} Die Welt ändert nur Aussehen und Begriffe. Die Agenten arbeiten weiter mit klaren Begriffen, ihre Qualität bleibt gleich.</div>
+    <div class="tlabel">Stufen</div>
+    ${w.stages.map((st,i)=>`<div class="logrow" style="${i===g.stage?'font-weight:700':''}">${st[0]} ${esc(st[1])} <span class="ts">ab ${L.stage_points[i]} ${esc(w.words.points)} · Führung wirbt selbst bis ${L.stage_team[i]??'beliebig viele'} Agenten an, ${L.stage_depth[i]??'volle'} Ebenen</span>${i===g.stage?' ← jetzt':''}</div>`).join('')}
+    <div class="tlabel">Punkte</div>
+    <div class="logrow">Lieferung beim ersten Mal ${esc(w.words.done)}: +${P.done_first} · nach Überarbeitung: +${P.done_revised} · Auftrag in der Post erledigt: +${P.inbox_closed} · fehlgeschlagen: ${P.task_failed} · Nacharbeit angefordert: ${P.inbox_rework}</div>
+    <div class="tlabel">Ränge der Agenten</div>
+    <div class="logrow">${w.ranks.map((r,i)=>`${r[0]} ${esc(r[1])} (ab ${L.rank_at[i]})`).join(' · ')}</div>
+    <div class="chk" style="margin-top:12px"><input type="checkbox" id="gLim" ${g.limits?'checked':''}><div>Stufe begrenzt das Selbst-Anwerben der Führung<small>Du selbst kannst immer alles anlegen. Aus = die Führung darf so viele anwerben wie bisher.</small></div></div>
+    <div class="chk"><input type="checkbox" id="gMot" ${document.documentElement.dataset.motion==='off'?'':'checked'}><div>Bewegung und Feier-Effekte<small>Rauch, Lichter, Wege und Konfetti. Gilt für dieses Gerät. Verlangt das Gerät „Bewegung reduzieren“, bleibt alles ruhig.</small></div></div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" id="gParty">🎉 Feier ansehen</button></div>`;
+  $('#gLim').onchange = async e=>{ await api('/projects/'+S.pid+'/world','PUT',{limits:e.target.checked}); loadGrowth(true); };
+  $('#gMot').onchange = e=>setMotion(e.target.checked);
+  $('#gParty').onclick = ()=>{ closeOv(); celebrate(WORLD.g); };
+};
+function rankBadge(a){
+  const r = WORLD.g && WORLD.g.ranks && WORLD.g.ranks[a.id]; if(!r) return '';
+  return `<span class="n-rank" title="${esc(r.name)}: ${r.done} ${esc(wword('done','abgenommen'))}${r.next?' · nächster Rang ab '+r.next:''}">${r.icon}</span>`;
+}
+
+
+/* ---------- Feinschliff: Feier beim Aufstieg, Bewegung an/aus ---------- */
+function motionOff(){ return document.documentElement.dataset.motion==='off' || matchMedia('(prefers-reduced-motion: reduce)').matches; }
+function setMotion(on){ if(on) delete document.documentElement.dataset.motion; else document.documentElement.dataset.motion='off'; try{ localStorage.setItem('hs-motion', on?'on':'off'); }catch(e){} }
+try{ if(localStorage.getItem('hs-motion')==='off') document.documentElement.dataset.motion='off'; }catch(e){}
+let partyT=null;
+function hideParty(){ const p=$('#party'); p.classList.remove('on'); p.innerHTML=''; clearTimeout(partyT); }
+function celebrate(g){
+  const w=wdef(); if(!w) return;
+  const p=$('#party'), cols=[w.colors.accent, w.colors.accent2, '#facc15', '#f472b6', '#60a5fa'];
+  const bits = motionOff() ? '' : Array.from({length:36},(_,i)=>`<i style="left:${(i*97)%100}%;background:${cols[i%cols.length]};animation-delay:${(i%12)*0.08}s;--dx:${((i*37)%60)-30}px"></i>`).join('');
+  const nxt = g.next!==null ? `Nächstes Ziel: ${g.next_icon} ${esc(g.next_name)} ab ${g.next} ${esc(w.words.points)}.` : 'Das ist die höchste Stufe.';
+  const lim = g.limits && g.team_limit ? ` Die Führung darf jetzt selbst bis zu ${g.team_limit} Agenten anwerben.` : '';
+  p.innerHTML = `${bits}<div class="party-card"><div class="party-ico">${g.icon}</div><b>${esc(w.words.project)} gewachsen: ${esc(g.name)}!</b><div>${nxt}${lim}</div><button class="btn pri sm" id="partyOk">Weiter</button></div>`;
+  p.classList.add('on'); $('#partyOk').onclick=hideParty; p.onclick=e=>{ if(e.target===p) hideParty(); };
+  setTimeout(()=>{ const b=$('#partyOk'); if(b) b.focus({preventScroll:true}); },50);
+  clearTimeout(partyT); partyT=setTimeout(hideParty, 9000);
+}
+
+/* ---------- Welt-Karte (isometrisch, aus echten Daten) ---------- */
+const MAP = {TW:128, TH:64, teams:[], box:null, down:null};
+let VIEW = 'world';
+try{ VIEW = localStorage.getItem('hs-view') || 'world'; }catch(e){}
+function setView(v){
+  VIEW = v; try{ localStorage.setItem('hs-view', v); }catch(e){}
+  $('#app').classList.toggle('view-world', v==='world');
+  $('#gView').textContent = v==='world' ? '📐 Bauplan' : '🗺 Welt';
+  $('#gView').title = v==='world' ? 'Zum Bauplan (Knoten-Editor) wechseln' : 'Zur Welt-Karte wechseln';
+  hideBcard(); render(); fit();
+}
+$('#gView').onclick = ()=>setView(VIEW==='world'?'plan':'world');
+function narrowCheck(){ $('#app').classList.toggle('narrow', innerWidth<=820); }
+addEventListener('resize', narrowCheck); narrowCheck();
+
+function teamsOf(g){
+  // Ein Gebäude je Führungskraft (Agent mit Unterstellten) und eins für die oberste Ebene; Mitarbeiter ohne eigenes Team wohnen beim Vorgesetzten.
+  const kids = {}; g.agents.forEach(a=>{ if(a.parent_id) (kids[a.parent_id]=kids[a.parent_id]||[]).push(a); });
+  const roots = g.agents.filter(a=>!a.parent_id || !agentById(a.parent_id));
+  const teams = [], byLead = {};
+  const add = (lead, parentTeam)=>{ const t={lead, members:[], parent:parentTeam, kids:[]}; teams.push(t); byLead[lead.id]=t; if(parentTeam) parentTeam.kids.push(t); return t; };
+  const walk = (a, team)=>{ (kids[a.id]||[]).forEach(k=>{ if(kids[k.id]) walk(k, add(k, team)); else team.members.push(k); }); };
+  roots.forEach(r=>{ const t = add(r, null); walk(r, t); });
+  return teams;
+}
+function placeTeams(teams){
+  // Hauptgebäude in der Mitte, Teams im Ring darum, Unterteams nahe ihrem Team.
+  const used = new Set(), key=(x,y)=>x+','+y, step=4;
+  const ring = [];
+  for(let r=1;r<8;r++) for(let x=-r;x<=r;x++) for(let y=-r;y<=r;y++) if(Math.max(Math.abs(x),Math.abs(y))===r) ring.push([x*step,y*step]);
+  teams.forEach((t,i)=>{
+    let best=null, bd=1e9;
+    const px = t.parent ? t.parent.gx : 0, py = t.parent ? t.parent.gy : 0;
+    if(!t.parent && i===0 && !used.has(key(0,0))){ best=[0,0]; }
+    else for(const [x,y] of ring){ if(used.has(key(x,y))) continue; const d=Math.hypot(x-px,y-py)+Math.hypot(x,y)*.15; if(d<bd){bd=d;best=[x,y];} }
+    t.gx=best[0]; t.gy=best[1]; used.add(key(t.gx,t.gy));
+  });
+}
+function iso(gx,gy){ return {x:(gx-gy)*MAP.TW/2, y:(gx+gy)*MAP.TH/2}; }
+function teamState(t){
+  const all=[t.lead,...t.members], c={run:0,wait:0,appr:0,fail:0,done:0,paused:0};
+  all.forEach(a=>{ const k=a.counts||{}; c.run+=(k.running||0)+(k.queued||0); c.wait+=k.waiting_subtasks||0; c.appr+=k.waiting_approval||0; c.fail+=k.failed||0; c.done+=k.done||0; if(a.paused) c.paused++; });
+  c.icon = c.fail?'🔧':c.appr?'✋':c.run?'':c.wait?'⏳':c.done?'📦':'';
+  c.text = c.fail?`${c.fail} fehlgeschlagen`:c.appr?'wartet auf deine Freigabe':c.run?`${c.run} in Arbeit`:c.wait?'wartet auf Zulieferung':c.done?`${c.done} geliefert`:'bereit';
+  return c;
+}
+function shade(hex, f){ const n=parseInt(hex.slice(1),16); let r=n>>16,g=(n>>8)&255,b=n&255; const m=v=>Math.max(0,Math.min(255,Math.round(f>1? v+(255-v)*(f-1) : v*f))); return `rgb(${m(r)},${m(g)},${m(b)})`; }
+const HUES = ['#7c8aa5','#a57c7c','#7ca58a','#a5977c','#8a7ca5','#7ca3a5'];
+function buildingSvg(t, i, w){
+  const p=iso(t.gx,t.gy), hw=MAP.TW*.36, hh=MAP.TH*.36, st=teamState(t);
+  const stage=(WORLD.g&&WORLD.g.stage)||0, n=t.members.length+1;
+  const h = 34 + Math.min(n,8)*7 + stage*8 + (t.parent?0:14);
+  const base = t.parent ? HUES[i%HUES.length] : (w.colors.accent2||'#555');
+  const x=p.x, y=p.y, top=[[x,y-h-hh],[x+hw,y-h],[x,y-h+hh],[x-hw,y-h]];
+  const pts=a=>a.map(q=>q.join(',')).join(' ');
+  let roof='';
+  const wid = w===WORLD.list.worlds.guild ? 'guild' : w===WORLD.list.worlds.gizmo ? 'gizmo' : 'tycoon';
+  if(wid==='guild'){ const tip=[x,y-h-hh-34]; roof=`<polygon class="face" points="${pts([top[3],tip,top[2]])}" fill="${shade(w.colors.accent,.85)}"/><polygon class="face" points="${pts([top[2],tip,top[1]])}" fill="${shade(w.colors.accent,1.15)}"/>${t.parent?'':`<line x1="${x}" y1="${y-h-hh-34}" x2="${x}" y2="${y-h-hh-58}" stroke="${shade(w.colors.accent,.6)}" stroke-width="2"/><polygon points="${x},${y-h-hh-58} ${x+16},${y-h-hh-52} ${x},${y-h-hh-46}" fill="${w.colors.accent}"/>`}`; }
+  else if(wid==='gizmo'){ roof=`<ellipse class="face" cx="${x}" cy="${y-h}" rx="${hw*.75}" ry="${hh*.75}" fill="${shade(w.colors.accent,1.1)}"/><path class="face" d="M${x-hw*.75},${y-h} A${hw*.75},${hw*.75} 0 0 1 ${x+hw*.75},${y-h}" fill="${shade(w.colors.accent,1.25)}"/><circle cx="${x}" cy="${y-h-hw*.75-6}" r="4" fill="${w.colors.accent2}"/>`; }
+  else { roof=`<polygon class="face" points="${pts(top)}" fill="${shade(base,1.35)}"/><rect x="${x-hw*.55}" y="${y-h-hh-16}" width="${hw*1.1}" height="12" rx="3" fill="${w.colors.accent}"/>`; }
+  const wins=[]; const rows=Math.max(1,Math.floor((h-16)/18));
+  for(let r=0;r<rows;r++) for(const side of [-1,1]) for(let k=0;k<2;k++){
+    const fx = x + side*(hw*(0.25+0.4*k)), fy = y - h + 14 + r*18 + (side<0? hh*(1-(0.25+0.4*k)) : hh*(1-(0.25+0.4*k)));
+    wins.push(`<rect class="win" x="${fx-4}" y="${fy-4}" width="8" height="9" rx="1.5"/>`);
+  }
+  const smoke = st.run ? [0,0.8,1.6].map(d=>`<circle class="smoke" cx="${x+hw*.45}" cy="${y-h-hh}" r="6" style="animation-delay:${d}s"/>`).join('') : '';
+  const bname = (w.buildings[i%w.buildings.length]);
+  const title = t.parent ? (t.lead.role||bname) : wword('top','Leitung');
+  return `<g class="bld${st.run?' busy':''}${S.sel===t.lead.id?' sel':''}" data-team="${i}" tabindex="0" role="button" aria-label="${esc(t.lead.name)}: ${esc(st.text)}">
+    <polygon class="face" points="${pts([[x,y-hh*1.25],[x+hw*1.25,y],[x,y+hh*1.25],[x-hw*1.25,y]])}" fill="${shade(w.colors.accent2,.5)}" opacity=".18"/>
+    <polygon class="face" points="${pts([top[3],top[2],[x,y+hh],[x-hw,y]])}" fill="${shade(base,.82)}"/>
+    <polygon class="face" points="${pts([top[2],top[1],[x+hw,y],[x,y+hh]])}" fill="${shade(base,1.08)}"/>
+    ${wid==='tycoon'?'':`<polygon class="face" points="${pts(top)}" fill="${shade(base,1.25)}"/>`}
+    ${wins.join('')}${roof}${smoke}
+    ${st.icon?`<text class="state" x="${x}" y="${y-h-hh-(wid==='guild'?40:22)}">${st.icon}</text>`:''}
+    <text class="lbl" x="${x}" y="${y+hh+46}">${esc(t.lead.name)}</text>
+    <text class="lbl2" x="${x}" y="${y+hh+61}">${esc(title)} · ${esc(st.text)}</text>
+  </g>`;
+}
+function figuresSvg(t){
+  const p=iso(t.gx,t.gy), list=[t.lead,...t.members], out=[];
+  list.forEach((a,k)=>{
+    const n=list.length, gap=Math.min(22, (MAP.TW*1.3)/Math.max(1,n-1));
+    const fx = p.x + (k-(n-1)/2)*gap, fy = p.y + MAP.TH*.36 + 18 + (k%2)*4;
+    const c=a.counts||{}, busy=(c.running||0)+(c.queued||0);
+    const col = a.paused ? '#888' : busy ? 'var(--blue)' : (a.id===t.lead.id ? 'var(--accent)' : 'var(--accent2)');
+    const r = WORLD.g && WORLD.g.ranks && WORLD.g.ranks[a.id];
+    out.push(`<g class="fig" data-agent="${a.id}" tabindex="0" role="button" aria-label="${esc(a.name)}"><title>${esc(a.name)} – ${esc(a.role||'')}${r?' · '+r.icon+' '+r.name:''}${busy?' · arbeitet':''}</title>
+      <ellipse cx="${fx}" cy="${fy+9}" rx="7" ry="3" fill="rgba(0,0,0,.25)"/>
+      <rect x="${fx-5}" y="${fy-4}" width="10" height="12" rx="4" fill="${col}"/>
+      <circle cx="${fx}" cy="${fy-9}" r="5" fill="#f2d7b6" stroke="rgba(0,0,0,.3)"/>
+      ${r&&r.rank>0?`<text x="${fx+9}" y="${fy-8}" font-size="10">${r.icon}</text>`:''}</g>`);
+  });
+  return out.join('');
+}
+function drawMap(){
+  const g=S.graph, w=wdef(), svg=$('#map');
+  if(!g || !w || VIEW!=='world'){ svg.innerHTML=''; $('#wlist').innerHTML=''; MAP.box=null; return; }
+  const teams = teamsOf(g); placeTeams(teams); MAP.teams = teams;
+  if(!teams.length){ svg.innerHTML=''; $('#wlist').innerHTML=`<div class="wcard">Noch niemand da. Wechsle zum Bauplan (📐) und lege den ersten Agenten an.</div>`; MAP.box=null; return; }
+  const R = Math.max(4, ...teams.map(t=>Math.max(Math.abs(t.gx),Math.abs(t.gy)))+2);
+  const tiles=[];
+  for(let gx=-R;gx<=R;gx++) for(let gy=-R;gy<=R;gy++){
+    const p=iso(gx,gy), hw=MAP.TW/2, hh=MAP.TH/2;
+    tiles.push(`<polygon class="tile" points="${p.x},${p.y-hh} ${p.x+hw},${p.y} ${p.x},${p.y+hh} ${p.x-hw},${p.y}" fill="var(--ground)"/>`);
+  }
+  const roads=[];
+  teams.forEach(t=>{ if(!t.parent) return; const a=iso(t.parent.gx,t.parent.gy), b=iso(t.gx,t.gy), m=iso(t.gx,t.parent.gy);
+    const busy = teamState(t).run || teamState(t).wait;
+    const d=`M${a.x},${a.y} L${m.x},${m.y} L${b.x},${b.y}`;
+    roads.push(`<path class="road" d="${d}"/>`+(busy?`<path class="road flow" d="${d}"/>`:'')); });
+  const order = teams.map((t,i)=>[t,i]).sort((A,B)=>(A[0].gx+A[0].gy)-(B[0].gx+B[0].gy));
+  const blds = order.map(([t,i])=>buildingSvg(t,i,w)+figuresSvg(t)).join('');
+  const ps = teams.map(t=>iso(t.gx,t.gy));
+  MAP.box = {x0:Math.min(...ps.map(q=>q.x))-MAP.TW*1.1, x1:Math.max(...ps.map(q=>q.x))+MAP.TW*1.1,
+             y0:Math.min(...ps.map(q=>q.y))-230, y1:Math.max(...ps.map(q=>q.y))+90};
+  svg.innerHTML = `<g>${tiles.join('')}</g><g>${roads.join('')}</g><g>${blds}</g>`;
+  // Handy: Liste statt Karte
+  $('#wlist').innerHTML = teams.map((t,i)=>{ const st=teamState(t), title=t.parent?(t.lead.role||w.buildings[i%w.buildings.length]):wword('top','Leitung');
+    return `<div class="wcard"><div class="wh"><span class="ico">${st.icon||(t.parent?'🏠':(WORLD.g?WORLD.g.icon:'🏛'))}</span><div style="flex:1;min-width:0"><b>${esc(t.lead.name)}</b><div style="color:var(--mute);font-size:12px">${esc(title)} · ${esc(st.text)}</div></div></div>
+      <div class="chips">${[t.lead,...t.members].map(a=>{ const r=WORLD.g&&WORLD.g.ranks&&WORLD.g.ranks[a.id]; const c=a.counts||{}; const busy=(c.running||0)+(c.queued||0); return `<button data-agent="${a.id}">${r?r.icon+' ':''}${esc(a.name)}${busy?' ▶':''}${a.paused?' ⏸':''}</button>`; }).join('')}</div></div>`; }).join('');
+}
+function hideBcard(){ $('#bcard').classList.remove('on'); }
+function showBcard(i, cx, cy){
+  const t = MAP.teams[i]; if(!t) return; const w=wdef(), st=teamState(t);
+  const open = [t.lead,...t.members].reduce((n,a)=>{ const c=a.counts||{}; return n+(c.running||0)+(c.queued||0)+(c.waiting_subtasks||0)+(c.todo||0); },0);
+  const el=$('#bcard');
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><h4 style="flex:1">${esc(t.lead.name)}</h4><button class="icon-btn" id="bcx" aria-label="Schließen">✕</button></div>
+    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">${esc(t.parent?(w.words.lead):(w.words.top))} · ${esc(st.text)} · ${open} offen · ${st.done} ${esc(w.words.done)}</div>
+    ${[t.lead,...t.members].map(a=>{ const r=WORLD.g&&WORLD.g.ranks&&WORLD.g.ranks[a.id]; const c=a.counts||{}; return `<button class="mem" data-agent="${a.id}">${r?r.icon:'•'} ${esc(a.name)} <small>${esc(a.role||'')}${(c.running||0)+(c.queued||0)?' · ▶':''}${a.paused?' · ⏸':''}</small></button>`; }).join('')}
+    <div class="row" style="margin-top:10px"><button class="btn sm pri" data-act="tasks">＋ ${esc(w.words.task||'Auftrag')}</button><button class="btn sm" data-act="chat">💬 Chat</button><button class="btn sm" data-act="set">Einstellungen</button></div>`;
+  const vp=$('#vp').getBoundingClientRect();
+  el.style.left = Math.max(10, Math.min(cx - vp.left + 12, vp.width - 330))+'px';
+  el.style.top = Math.max(10, Math.min(cy - vp.top - 20, vp.height - 260))+'px';
+  el.classList.add('on');
+  el.querySelector('#bcx').onclick = hideBcard;
+  el.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{ S.tab=b.dataset.act; hideBcard(); selectAgent(t.lead.id); });
+  el.querySelectorAll('.mem').forEach(b=>b.onclick=()=>{ hideBcard(); selectAgent(+b.dataset.agent); });
+}
+$('#vp').addEventListener('pointerdown', e=>{ MAP.down={x:e.clientX,y:e.clientY}; }, true);
+function mapPick(e){
+  if(MAP.down && Math.hypot(e.clientX-MAP.down.x, e.clientY-MAP.down.y)>6) return;  // war Verschieben, kein Tippen
+  const f=e.target.closest('.fig, #wlist [data-agent]'); if(f){ hideBcard(); selectAgent(+f.dataset.agent); return; }
+  const b=e.target.closest('.bld'); if(b){ showBcard(+b.dataset.team, e.clientX, e.clientY); return; }
+  if(!e.target.closest('#bcard')) hideBcard();
+}
+$('#map').addEventListener('click', mapPick);
+$('#wlist').addEventListener('click', mapPick);
+$('#map').addEventListener('keydown', e=>{ if(e.key!=='Enter' && e.key!==' ') return; const f=e.target.closest('.fig'); if(f){ e.preventDefault(); selectAgent(+f.dataset.agent); return; }
+  const b=e.target.closest('.bld'); if(b){ e.preventDefault(); const r=b.getBoundingClientRect(); showBcard(+b.dataset.team, r.left+r.width/2, r.top+r.height/2); } });
+
 /* ---------- Start ---------- */
 (async function init(){
   applyView();
   S.info = await api('/info');
   $('#btnLogout').style.display = S.info.auth ? '' : 'none';
   S.providers = await api('/providers');
+  setView(VIEW);
   await loadProjects();
   if(S.projects.length) await openProject(S.projects[0].id);
   setInterval(()=>{ if(!document.hidden) refresh(); }, 2500);

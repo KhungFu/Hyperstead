@@ -236,6 +236,9 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | `werkstatt.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 | `hyperstead` servisi (Pi) | Güncellemeden sonra eski `paperclip-lite` servisi hâlâ çalışır, `systemctl … hyperstead` "not found" der. | `./install.sh --service` komutunu bir kez çalıştırın, eski servisi değiştirir. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` yeni dosyayı bulamaz ve pencere hata mesajıyla kapanır. | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| `growth.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| Bugün yapay zekâ çağrısı yok (operasyon merkezi, çubukta 💶) | 0 $ veya „keine Aufrufe“ gösterir. | Yapılacak bir şey yok. Maliyetler tahminidir, kendi fiyatlarınızı `.env` içinde `PCL_PRICES` ile belirleyin. |
+| Tarayıcı hiçbir şey kaydetmiyor (gizli pencere) | Açık/koyu, dünya/plan ve hareket her yüklemede varsayılana döner. | Normal pencere kullanın; proje verileri bundan etkilenmez. |
 
 ## İnternetten erişim
 
@@ -288,6 +291,37 @@ Bir patron bir görev alır ve **planlar** (alt görevleri dağıtır) ya da iş
 çalışanları bitirir bitirmez yeniden uyanır, **raporlarını okur**, eksikleri geri bildirimle iade eder ya da
 her şeyi özetleyip kendi patronuna bildirir. Sonuç böylece istediğiniz kadar seviye yukarı çıkar.
 „Wartet auf Team“ durumu (ekibi bekliyor) şu anlama gelir: patron ekibini bekliyor. Görevler sekmesinde tüm ağacı görürsünüz.
+
+## Dünyalar ve büyüme
+
+Her proje, istediğiniz zaman değiştirebileceğiniz bir **dünyada** geçer. Dünya yalnızca arayüzün kelimelerini, simgelerini
+ve renklerini değiştirir. Ajanlar her zaman açık terimlerle (görev, rapor, ekip) çalışır, böylece kaliteleri aynı kalır.
+
+| Dünya | Siz | En üstte | Ekipler | Aşamalar |
+| --- | --- | --- | --- | --- |
+| Lonca | Hükümdar | Kale beyi | Loncalar | 🛖 Kulübe → 🏡 Mezra → 🏘️ Köy → 🏰 Kale → 👑 Krallık |
+| Tycoon (varsayılan) | Kurucu | Patron | Odalar | 🛠️ Garaj → 🏚️ Atölye → 🏪 Dükkân → 🏢 Genel merkez → 🏙️ Holding |
+| Gizmo Şehri | Şehir kurucusu | Belediye başkanı | Binalar | ⛺ Kamp → 🏡 Köy → 🏘️ Kasaba → 🏛️ Şehir → 🌆 Metropol |
+
+Arayüz adları Almanca gösterir.
+
+**Kullanım:** Çalışma alanının üstündeki çubuk aşamayı, bir sonraki aşamaya ilerlemeyi ve önemli sayıları gösterir. Sağda dünyayı seçer, açık ve koyu arasında geçiş yapar (🌓) ve ⓘ ile aşamalar, puanlar ve rütbeler hakkındaki özeti açarsınız. Her ajanın rütbesi kartında simge olarak görünür.
+
+**Dünya haritası:** Çubuktaki 🗺 / 📐 ile dünya haritası ve plan (düğüm editörü) arasında geçiş yaparsınız. Haritada her yönetici ekibiyle birlikte bir binadır, ajanlar önünde figür olarak durur, yollar kimin kime rapor verdiğini gösterir. Duman ve ışık "çalışıyor", 🔧 başarısız, ✋ onayınızı bekliyor, ⏳ alt görevleri bekliyor, 📦 teslim edildi demektir. Bir binaya dokunmak ekibi ve işlemleri gösterir, bir figüre dokunmak ajanı açar. Telefonda harita yerine binaların listesi görünür. Cihaz azaltılmış hareket isterse animasyonlar durur.
+
+**Operasyon merkezi:** Kenar çubuğundaki 🛰 (veya büyüme çubuğundaki sayılara dokunmak) şu anda neyin çalıştığını ve beklediğini, hangi onayların açık olduğunu, son 7 günde neyin başarısız olduğunu (↻ Neu ile), zaman planlarını (▶ Jetzt ile), hata mesajlarını ve son olayları bir bakışta gösterir. Ayrıca bugünün ve son 7 günün tahmini yapay zekâ maliyetlerini gösterir; bugünkü maliyet çubukta 💶 olarak da görünür. Tüm sayılar mevcut görevlerden, onaylardan, zaman planlarından ve geçmişten gelir, hiçbir şey uydurulmaz.
+
+**Yükselme ve kullanım:** Bir proje yeni bir aşamaya ulaştığında, yeni aşamayı ve bir sonraki hedefi gösteren kısa bir kutlama görünür (Telegram aynı mesajı gönderir). Bir ajan rütbe atladığında kısa bir bildirim çıkar. Çubuktaki ⓘ altında bu cihaz için hareket ve kutlama efektlerini kapatabilirsiniz; cihaz „hareketi azalt“ isterse zaten her şey durağan kalır. Tüm pencereler Esc ile kapanır, haritadaki binalar ve figürler Tab ve Enter ile kullanılabilir.
+
+**Puanlar:** teslimat ilk seferde kabul +10, düzeltmeden sonra +5, görev postada tamamlandı olarak işaretlendi +20,
+başarısız −3, yeniden çalışma istendi −5. Aşamalar 0 / 100 / 300 / 700 / 1500 puandan başlar. Mevcut projelerin
+geçmiş başarıları otomatik olarak sayılır. Bir aşama atlaması Telegram ile bir kez bildirilir.
+
+**Aşamanın sınırladığı şey:** yalnızca yönetimin **kendi başına** kaç ajan alabileceği (projede 8 / 12 / 18 / 25 / sınırsız)
+ve ne kadar derine (2 / 3 / 4 / 5 / tam derinlik). Siz her zaman her şeyi kendiniz oluşturabilirsiniz. Sınır proje başına
+kapatılabilir.
+
+**Ajan rütbeleri** kendi kabul edilen teslimatlarına göre: 0 / 5 / 20 / 60'tan itibaren (ör. çırak, kalfa, usta, büyük usta).
 
 ## Ajanların yetenekleri (internet, görseller, dosyalar)
 

@@ -237,6 +237,9 @@ Ova lista se dopunjava pri svakoj promjeni programa. Svaki red kaže šta sistem
 | `werkstatt.py` (programski fajl) | Hyperstead se ne pokreće (greška pri uvozu). | Ponovo pokrenite `git pull`, fajl je dio programa. |
 | Servis `hyperstead` (Pi) | Nakon ažuriranja i dalje radi stari servis `paperclip-lite`, `systemctl … hyperstead` javlja "not found". | Jednom pokrenite `./install.sh --service`, on zamjenjuje stari servis. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` ne pronalazi novi fajl i prozor se zatvara sa greškom. | Ponovo pokrenite `git pull`, fajl je dio programa. |
+| `growth.py` (programski fajl) | Hyperstead se ne pokreće (greška pri uvozu). | Ponovo pokrenite `git pull`, fajl je dio programa. |
+| Danas nema poziva vještačke inteligencije (operativni centar, 💶 u traci) | Prikazuje 0 $ odnosno „keine Aufrufe“. | Ništa ne treba raditi. Troškovi su procjene, vlastite cijene preko `PCL_PRICES` u `.env`. |
+| Preglednik ništa ne čuva (privatni prozor) | Svijetlo/tamno, svijet/nacrt i pokreti se pri svakom učitavanju vraćaju na zadano. | Koristite običan prozor; podaci projekata nisu pogođeni. |
 
 ## Pristup sa interneta
 
@@ -289,6 +292,37 @@ Sa `TRUST_PROXY=1` aplikacija se pokreće samo ako `APP_TOKEN` ima najmanje 12 z
 saradnici gotovi, on se ponovo budi, **čita njihove izvještaje**, vraća nedostatke uz povratnu informaciju ili
 sažima sve i izvještava svog šefa. Tako se rezultat penje kroz koliko god nivoa.
 Status „Wartet auf Team“ (čeka tim) znači: šef čeka svoje ljude. U kartici zadataka vidite cijelo stablo.
+
+## Svjetovi i rast
+
+Svaki projekat se odvija u jednom **svijetu** koji možete promijeniti u bilo kojem trenutku. Svijet mijenja samo riječi, ikone i boje
+interfejsa. Agenti uvijek rade s jasnim pojmovima (zadatak, izvještaj, tim), tako da njihov kvalitet ostaje isti.
+
+| Svijet | Vi ste | Na vrhu | Timovi su | Nivoi |
+| --- | --- | --- | --- | --- |
+| Esnaf | Vladar | Gospodar dvorca | Esnafi | 🛖 Koliba → 🏡 Zaseok → 🏘️ Selo → 🏰 Dvorac → 👑 Kraljevstvo |
+| Tycoon (zadano) | Osnivač | Šef | Prostorije | 🛠️ Garaža → 🏚️ Radionica → 🏪 Radnja → 🏢 Sjedište → 🏙️ Koncern |
+| Gizmo grad | Osnivač grada | Gradonačelnik | Zgrade | ⛺ Logor → 🏡 Selo → 🏘️ Gradić → 🏛️ Grad → 🌆 Metropola |
+
+Interfejs prikazuje nazive na njemačkom.
+
+**Upotreba:** Traka iznad površine prikazuje nivo, napredak do sljedećeg nivoa i najvažnije brojeve. Desno birate svijet, prebacujete između svijetlog i tamnog prikaza (🌓) i sa ⓘ otvarate pregled nivoa, bodova i rangova. Rang svakog agenta je prikazan kao ikona na njegovoj kartici.
+
+**Mapa svijeta:** Sa 🗺 / 📐 u traci prelazite između mape svijeta i nacrta (uređivač čvorova). Na mapi je svaki rukovodilac sa svojim timom jedna zgrada, agenti stoje ispred nje kao figure, putevi pokazuju ko kome podnosi izvještaj. Dim i svjetlo znače "radi", 🔧 neuspješno, ✋ čeka vaše odobrenje, ⏳ čeka podzadatke, 📦 isporučeno. Dodir na zgradu prikazuje tim i radnje, dodir na figuru otvara agenta. Na telefonu se umjesto mape prikazuje lista zgrada. Animacije se zaustavljaju kada uređaj traži smanjeno kretanje.
+
+**Operativni centar:** 🛰 u bočnoj traci (ili dodir na brojeve u traci rasta) na prvi pogled prikazuje šta trenutno radi i čeka, koja odobrenja su otvorena, šta nije uspjelo u posljednjih 7 dana (sa ↻ Neu), rasporede (sa ▶ Jetzt), poruke o greškama i posljednje događaje. Uz to prikazuje procijenjene troškove vještačke inteligencije za danas i posljednjih 7 dana; današnji trošak stoji i kao 💶 u traci. Svi brojevi dolaze iz postojećih zadataka, odobrenja, rasporeda i historije, ništa nije izmišljeno.
+
+**Napredovanje i rukovanje:** Kada projekat dostigne novi stepen, pojavi se kratka proslava s novim stepenom i sljedećim ciljem (Telegram šalje istu poruku). Kada agent napreduje u rangu, pojavi se kratko obavještenje. Pod ⓘ u traci možete za ovaj uređaj isključiti pokrete i efekte proslave; ako uređaj traži „smanji pokrete“, sve ionako ostaje mirno. Svi prozori se zatvaraju tipkom Esc, zgrade i figure na mapi mogu se koristiti tipkama Tab i Enter.
+
+**Bodovi:** isporuka prihvaćena iz prve +10, nakon ispravke +5, zadatak označen kao završen u pošti +20,
+neuspješno −3, zatražena dorada −5. Nivoi od 0 / 100 / 300 / 700 / 1500 bodova. Postojeći projekti automatski
+dobijaju svoje dosadašnje uspjehe. Prelazak na viši nivo se jednom javlja putem Telegrama.
+
+**Šta nivo ograničava:** samo koliko agenata rukovodstvo smije **samo** zaposliti (8 / 12 / 18 / 25 / neograničeno
+u projektu) i koliko duboko (2 / 3 / 4 / 5 / puna dubina). Vi uvijek možete sve napraviti sami. Ograničenje se može
+isključiti po projektu.
+
+**Rangovi agenata** prema vlastitim prihvaćenim isporukama: od 0 / 5 / 20 / 60 (npr. šegrt, kalfa, majstor, veliki majstor).
 
 ## Mogućnosti agenata (internet, slike, fajlovi)
 

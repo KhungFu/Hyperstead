@@ -32,6 +32,7 @@ import agent_tools as tools
 import cloud_upload as cloud
 import werkstatt as W
 import company_templates
+import growth as G
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
 
 BASE = Path(__file__).resolve().parent
@@ -395,6 +396,11 @@ def log(event, detail="", project_id=None, agent_id=None, task_id=None):
         "INSERT INTO audit(ts,project_id,agent_id,task_id,event,detail) VALUES(?,?,?,?,?,?)",
         (time.time(), project_id, agent_id, task_id, event, str(detail)[:4000]),
     )
+    if project_id and event in GROWTH_EVENTS:
+        try:
+            growth_check(project_id)
+        except Exception as e:  # Wachstum darf nie die eigentliche Arbeit stoeren
+            print("Wachstum:", e)
 
 
 def werkstatt_level(agent):
@@ -2041,6 +2047,17 @@ def recruit_team(boss, project, items, notes):
                        "reports": str(it.get("reports_to") or "").strip().lower(),
                        "tools": {str(x) for x in tl if str(x) in RECRUIT_PERMS}
                        | tools_for_role(name, it.get("role"), it.get("system_prompt"))})
+    if growth_limits_on(project["id"]):  # Hyperstead: wie gross die Fuehrung selbst anwerben darf, haengt von der Stufe ab
+        gi = project_growth(project["id"])
+        if gi["team_limit"] is not None:
+            have = q1("SELECT COUNT(*) c FROM agents WHERE project_id=?", (project["id"],))["c"]
+            room = max(0, gi["team_limit"] - have)
+            if len(people) > room:
+                cut = [p["name"] for p in people[room:]]
+                people = people[:room]
+                notes.append(f"Stufe {gi['icon']} {gi['name']} erlaubt hoechstens {gi['team_limit']} Agenten im Projekt - "
+                             f"nicht eingestellt: {', '.join(cut)}. Mehr Platz gibt es mit der naechsten Stufe "
+                             f"oder wenn der Besitzer selbst Agenten anlegt.")
     idx = {p["name"].lower(): i for i, p in enumerate(people)}
     for i, p in enumerate(people):  # Vorgesetzter innerhalb des neuen Teams, sonst der Chef selbst
         j = idx.get(p["reports"])
@@ -2059,6 +2076,20 @@ def recruit_team(boss, project, items, notes):
         while cur is not None:
             d, cur = d + 1, people[cur]["parent"]
         depth.append(d)
+    if growth_limits_on(project["id"]):  # Tiefe: neue Ebenen unter dem Chef nur bis zur Grenze der Stufe, sonst direkt unter den Chef
+        lim = project_growth(project["id"])["depth_limit"]
+        base = agent_depth(boss["id"])
+        for i, p in enumerate(people):
+            if base + depth[i] > lim and p["parent"] is not None:
+                p["parent"] = None
+                notes.append(f"'{p['name']}' arbeitet direkt unter {boss['name']}: die aktuelle Stufe erlaubt nur {lim} Ebenen.")
+        has_kids = {p["parent"] for p in people if p["parent"] is not None}
+        depth = [0] * len(people)
+        for i, p in enumerate(people):
+            d, cur = 1, p["parent"]
+            while cur is not None:
+                d, cur = d + 1, people[cur]["parent"]
+            depth[i] = d
     per_row = {}
     for i, p in enumerate(people):
         per_row.setdefault(depth[i], []).append(i)
@@ -2429,6 +2460,70 @@ def get_setting(k, default=None):
 
 def set_setting(k, v):
     ex("INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)", (k, str(v)))
+
+
+# ------------------------------------------------------- Welten und Wachstum (Hyperstead)
+GROWTH_EVENTS = ("task_done", "task_failed", "inbox_closed", "inbox_rework")
+
+
+def project_world(pid):
+    return G.world_ok(get_setting(f"world:{pid}", G.DEFAULT_WORLD))
+
+
+def growth_limits_on(pid):
+    return get_setting(f"growth_limits:{pid}", "1") != "0"
+
+
+def project_points(pid):
+    """Punkte aus dem Audit-Log (append-only): alte Projekte bekommen ihre Erfolge automatisch angerechnet."""
+    done = [r["rounds"] or 0 for r in q(
+        "SELECT t.rounds FROM audit a LEFT JOIN tasks t ON t.id=a.task_id WHERE a.project_id=? AND a.event='task_done'", (pid,))]
+    cnt = {r["event"]: r["c"] for r in q(
+        "SELECT event, COUNT(*) c FROM audit WHERE project_id=? AND event IN ('inbox_closed','task_failed','inbox_rework')"
+        " GROUP BY event", (pid,))}
+    return G.points_from_events(done, cnt.get("inbox_closed", 0), cnt.get("task_failed", 0), cnt.get("inbox_rework", 0))
+
+
+def project_growth(pid):
+    w = project_world(pid)
+    info = G.stage_info(project_points(pid), w, MAX_DEPTH)
+    info.update({"world": w, "limits": growth_limits_on(pid)})
+    return info
+
+
+def agent_ranks(pid):
+    w = project_world(pid)
+    done = {r["agent_id"]: r["c"] for r in q(
+        "SELECT agent_id, COUNT(*) c FROM audit WHERE project_id=? AND event='task_done' GROUP BY agent_id", (pid,))}
+    return {a["id"]: G.rank_info(done.get(a["id"], 0), w) for a in q("SELECT id FROM agents WHERE project_id=?", (pid,))}
+
+
+def growth_check(pid):
+    """Meldet einen Stufenaufstieg einmal (Audit + Telegram). Beim ersten Mal wird nur der Stand gemerkt (Nachruesten ohne Meldung)."""
+    info = project_growth(pid)
+    key = f"stage:{pid}"
+    last = get_setting(key)
+    if last is None or info["stage"] < int(last):
+        set_setting(key, info["stage"])
+        return None
+    if info["stage"] > int(last):
+        set_setting(key, info["stage"])
+        p = q1("SELECT name FROM projects WHERE id=?", (pid,))
+        msg = (f"🎉 {p['name'] if p else 'Projekt'} ist gewachsen: {info['icon']} {info['name']} "
+               f"(Stufe {info['stage'] + 1} von {info['stage_count']}, {info['points']} Punkte).")
+        ex("INSERT INTO audit(ts,project_id,agent_id,task_id,event,detail) VALUES(?,?,?,?,?,?)",
+           (time.time(), pid, None, None, "stage_up", msg))
+        tg_notify(msg)
+        return info
+    return None
+
+
+def agent_depth(aid):
+    d, cur, n = 0, q1("SELECT parent_id FROM agents WHERE id=?", (aid,)), 0
+    while cur and cur["parent_id"] and n <= MAX_DEPTH + 2:
+        d, n = d + 1, n + 1
+        cur = q1("SELECT parent_id FROM agents WHERE id=?", (cur["parent_id"],))
+    return d
 
 
 # ------------------------------------------------------- Modell-Ueberwachung
@@ -3578,7 +3673,15 @@ def api_provider_test():
 
 @app.get("/api/projects")
 def api_projects():
-    return jsonify(q("SELECT * FROM projects ORDER BY id"))
+    out = []
+    for p in q("SELECT * FROM projects ORDER BY id"):
+        try:
+            g = project_growth(p["id"])
+            p.update({"world": g["world"], "stage": g["stage"], "stage_icon": g["icon"], "stage_name": g["name"]})
+        except Exception:
+            pass
+        out.append(p)
+    return jsonify(out)
 
 
 @app.post("/api/projects")
@@ -3762,6 +3865,38 @@ def _sched_out(r):
     r["days"] = _days(r["days"], list(range(7)))
     r["agent"] = (q1("SELECT name FROM agents WHERE id=?", (r["agent_id"],)) or {"name": "?"})["name"]
     return r
+
+
+@app.get("/api/worlds")
+def api_worlds():
+    return jsonify({"worlds": G.WORLDS, "default": G.DEFAULT_WORLD, "stage_points": G.STAGE_POINTS,
+                    "stage_team": G.STAGE_TEAM, "stage_depth": G.STAGE_DEPTH, "rank_at": G.RANK_AT, "points": G.POINTS})
+
+
+@app.get("/api/projects/<int:pid>/growth")
+def api_growth(pid):
+    if not q1("SELECT 1 AS x FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    ranks = agent_ranks(pid)
+    c = q1("SELECT SUM(cost) cost, COUNT(*) calls FROM llm_calls WHERE project_id=? "
+           "AND date(ts,'unixepoch','localtime')=date('now','localtime')", (pid,))
+    return jsonify({**project_growth(pid), "ranks": {str(k): v for k, v in ranks.items()},
+                    "cost_today": c["cost"] or 0, "calls_today": c["calls"]})
+
+
+@app.put("/api/projects/<int:pid>/world")
+def api_world_put(pid):
+    if not q1("SELECT 1 AS x FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    d = request.get_json(force=True) or {}
+    if "world" in d:
+        if d["world"] not in G.WORLDS:
+            return jsonify({"error": "Unbekannte Welt"}), 400
+        set_setting(f"world:{pid}", d["world"])
+    if "limits" in d:
+        set_setting(f"growth_limits:{pid}", "1" if d["limits"] else "0")
+    log("world_changed", json.dumps({k: d[k] for k in ("world", "limits") if k in d}), pid)
+    return jsonify(project_growth(pid))
 
 
 @app.get("/api/projects/<int:pid>/hours")
@@ -4809,6 +4944,41 @@ def api_audit():
     sql += " ORDER BY au.id DESC LIMIT ?"
     args.append(min(int(request.args.get("limit", 100)), 500))
     return jsonify(q(sql, args))
+
+
+ACTIVE_STATES = ("running", "queued", "waiting_subtasks", "waiting_approval")
+
+
+def project_ops(pid):
+    """Betriebszentrale: nur Zahlen aus vorhandenen Tabellen (tasks, approvals, schedules, llm_calls, audit)."""
+    marks = ",".join("?" * len(ACTIVE_STATES))
+    tj = "SELECT t.id, t.title, t.status, t.updated, t.agent_id, t.parent_task_id, a.name agent_name FROM tasks t " \
+         "LEFT JOIN agents a ON a.id=t.agent_id WHERE t.project_id=? "
+    active = q(tj + f"AND t.status IN ({marks}) ORDER BY t.updated DESC LIMIT 50", (pid, *ACTIVE_STATES))
+    failed = q(tj.replace("t.updated,", "t.updated, substr(t.result,1,300) error,") +
+               "AND t.status='failed' AND t.updated>=? ORDER BY t.updated DESC LIMIT 20", (pid, time.time() - 7 * 86400))
+    counts = {r["status"]: r["c"] for r in q("SELECT status, COUNT(*) c FROM tasks WHERE project_id=? GROUP BY status", (pid,))}
+    approvals = q("""SELECT ap.id, ap.kind, substr(ap.payload,1,200) payload, ap.task_id, ap.created, a.name agent_name, t.title task_title
+                     FROM approvals ap LEFT JOIN agents a ON a.id=ap.agent_id LEFT JOIN tasks t ON t.id=ap.task_id
+                     WHERE ap.status='pending' AND ap.project_id=? ORDER BY ap.id""", (pid,))
+    schedules = q("""SELECT s.id, s.title, s.at, s.days, s.enabled, s.last_run, s.kind, a.name agent_name
+                     FROM schedules s LEFT JOIN agents a ON a.id=s.agent_id WHERE s.project_id=? ORDER BY s.at""", (pid,))
+    cost = "COUNT(*) calls, COALESCE(SUM(tokens),0) tokens, SUM(cost) cost"
+    today = q1(f"SELECT {cost} FROM llm_calls WHERE project_id=? AND date(ts,'unixepoch','localtime')=date('now','localtime')", (pid,))
+    week = q1(f"SELECT {cost} FROM llm_calls WHERE project_id=? AND ts>=?", (pid, time.time() - 7 * 86400))
+    errors = q("""SELECT au.id, au.ts, au.event, au.detail, a.name agent_name FROM audit au LEFT JOIN agents a ON a.id=au.agent_id
+                  WHERE au.project_id=? AND (au.event LIKE '%fail%' OR au.event LIKE '%error%') ORDER BY au.id DESC LIMIT 20""", (pid,))
+    audit = q("""SELECT au.id, au.ts, au.event, au.detail, a.name agent_name FROM audit au LEFT JOIN agents a ON a.id=au.agent_id
+                 WHERE au.project_id=? ORDER BY au.id DESC LIMIT 40""", (pid,))
+    return {"counts": counts, "active": active, "failed": failed, "approvals": approvals, "schedules": schedules,
+            "cost_today": today, "cost_week": week, "errors": errors, "audit": audit, "open": bool(is_open(pid))}
+
+
+@app.get("/api/projects/<int:pid>/ops")
+def api_project_ops(pid):
+    if not q1("SELECT id FROM projects WHERE id=?", (pid,)):
+        abort(404)
+    return jsonify(project_ops(pid))
 
 
 @app.errorhandler(400)

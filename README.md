@@ -237,6 +237,9 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | `werkstatt.py` (Programmdatei) | Hyperstead startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 | Dienst `hyperstead` (Pi) | Nach dem Update läuft noch der alte Dienst `paperclip-lite`, `systemctl … hyperstead` meldet „not found“. | `./install.sh --service` einmal ausführen, er ersetzt den alten Dienst. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` findet die neue Datei nicht und das Fenster schließt sich mit einer Fehlermeldung. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
+| `growth.py` (Programmdatei) | Hyperstead startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
+| Keine KI-Aufrufe heute (Betriebszentrale, 💶 in der Leiste) | Zeigt 0 $ bzw. „keine Aufrufe“. | Nichts zu tun. Kosten sind Schätzungen, eigene Preise per `PCL_PRICES` in `.env`. |
+| Browser speichert nichts (privates Fenster) | Hell/Dunkel, Welt/Bauplan und Bewegung fallen bei jedem Laden auf den Standard zurück. | Normales Fenster verwenden; die Daten der Projekte sind davon nicht betroffen. |
 
 ## Zugriff aus dem Internet
 
@@ -289,6 +292,35 @@ Ein Chef bekommt eine Aufgabe und **plant** (verteilt Teilaufgaben) oder erledig
 Mitarbeiter fertig sind, wacht er wieder auf, **liest ihre Berichte**, gibt Mängel mit Feedback zurück oder
 fasst alles zusammen und berichtet an seinen Chef. So wandert das Ergebnis über beliebig viele Ebenen nach oben.
 Status „Wartet auf Team“ heißt: der Chef wartet auf seine Leute. Im Aufgaben-Tab siehst du den ganzen Baum.
+
+## Welten und Wachstum
+
+Jedes Projekt spielt in einer **Welt**, die du jederzeit umschaltest. Die Welt ändert nur Begriffe, Symbole und Farben
+der Oberfläche. Die Agenten arbeiten immer mit klaren Begriffen (Auftrag, Bericht, Team), damit ihre Qualität gleich bleibt.
+
+| Welt | Du bist | Oben steht | Teams heißen | Stufen |
+| --- | --- | --- | --- | --- |
+| Gilde | König:in | Burgherr | Zünfte | 🛖 Hütte → 🏡 Weiler → 🏘️ Dorf → 🏰 Burg → 👑 Königreich |
+| Tycoon (Standard) | Gründer:in | Boss | Räume | 🛠️ Garage → 🏚️ Werkstatt → 🏪 Laden → 🏢 Firmensitz → 🏙️ Konzern |
+| Gizmo-Stadt | Stadtgründer:in | Bürgermeister:in | Gebäude | ⛺ Lager → 🏡 Dorf → 🏘️ Kleinstadt → 🏛️ Stadt → 🌆 Metropole |
+
+**Bedienung:** Die Leiste über der Fläche zeigt Stufe, Fortschritt zur nächsten Stufe und die wichtigsten Zahlen. Rechts wählst du die Welt, schaltest zwischen Hell und Dunkel um (🌓) und öffnest mit ⓘ die Übersicht über Stufen, Punkte und Ränge. Der Rang jedes Agenten steht als Symbol auf seiner Karte.
+
+**Welt-Karte:** Mit 🗺 / 📐 in der Leiste wechselst du zwischen der Welt-Karte und dem Bauplan (Knoten-Editor). Auf der Karte ist jede Führungskraft mit ihrem Team ein Gebäude, die Agenten stehen als Figuren davor, Straßen zeigen, wer wem berichtet. Rauch und Licht bedeuten „arbeitet“, 🔧 fehlgeschlagen, ✋ wartet auf deine Freigabe, ⏳ wartet auf Zulieferung, 📦 geliefert. Ein Tipp auf ein Gebäude zeigt Team und Aktionen, ein Tipp auf eine Figur öffnet den Agenten. Auf dem Handy erscheint statt der Karte eine Liste der Gebäude. Bewegung wird abgeschaltet, wenn das Gerät „Bewegung reduzieren“ verlangt.
+
+**Betriebszentrale:** 🛰 in der Seitenleiste (oder ein Tipp auf die Zahlen in der Wachstumsleiste) zeigt auf einen Blick, was gerade läuft und wartet, welche Freigaben offen sind, was in den letzten 7 Tagen fehlgeschlagen ist (mit ↻ Neu), die Zeitpläne (mit ▶ Jetzt), Fehlermeldungen und die letzten Ereignisse. Dazu die geschätzten KI-Kosten von heute und den letzten 7 Tagen; heute steht auch als 💶 in der Leiste. Alle Zahlen kommen aus den vorhandenen Aufgaben, Freigaben, Zeitplänen und dem Verlauf, nichts wird erfunden.
+
+**Aufstieg und Bedienung:** Erreicht ein Projekt eine neue Stufe, erscheint eine kurze Feier mit der neuen Stufe und dem nächsten Ziel (per Telegram kommt dieselbe Nachricht). Steigt ein Agent im Rang auf, meldet das eine kurze Einblendung. Unter ⓘ in der Leiste lassen sich Bewegung und Feier-Effekte für dieses Gerät abschalten; verlangt das Gerät „Bewegung reduzieren“, bleibt ohnehin alles ruhig. Alle Fenster schließen mit Esc, Gebäude und Figuren auf der Karte lassen sich mit Tab und Enter bedienen.
+
+**Punkte:** Lieferung beim ersten Mal abgenommen +10, nach Überarbeitung +5, Auftrag in der Post als erledigt markiert +20,
+fehlgeschlagen −3, Nacharbeit angefordert −5. Stufen ab 0 / 100 / 300 / 700 / 1500 Punkten. Bestehende Projekte bekommen
+ihre bisherigen Erfolge automatisch angerechnet. Ein Aufstieg kommt einmal per Telegram.
+
+**Was die Stufe begrenzt:** nur, wie viele Agenten die Führung **selbst** anwerben darf (8 / 12 / 18 / 25 / unbegrenzt
+im Projekt) und wie tief (2 / 3 / 4 / 5 / volle Tiefe). Du selbst kannst immer alles anlegen. Die Grenze lässt sich je
+Projekt abschalten.
+
+**Ränge der Agenten** nach eigenen abgenommenen Lieferungen: ab 0 / 5 / 20 / 60 (z. B. Lehrling, Geselle, Meister, Großmeister).
 
 ## Fähigkeiten der Agenten (Internet, Bilder, Dateien)
 

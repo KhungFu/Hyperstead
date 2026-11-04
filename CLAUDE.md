@@ -126,6 +126,25 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (früher PaperclipL
   Abo-Warnung `PCL_ABO_WARN_5H` einmal je 5 h (`settings abo_warn:<anbieter>`). API `/api/usage?days=`.
 - Tests: `tests/` (pytest, `conftest.drain()` arbeitet die Queue synchron ab). Neue Funktionen dort mit abdecken.
 
+## Welten und Wachstum (Hyperstead)
+- `growth.py` (reine Daten + Rechnung): `WORLDS` (guild/tycoon/gizmo: Stufen, Raenge, Begriffe, Gebaeude, Farben), `STAGE_POINTS`,
+  `STAGE_TEAM`/`STAGE_DEPTH` (Grenzen nur fuers SELBST-Anwerben), `RANK_AT`, `POINTS`. Welt nur Oberflaeche: Agenten-Prompts nie mit Spielbegriffen.
+- app.py: `project_world` (`settings world:<pid>`), `growth_limits_on` (`growth_limits:<pid>`, Std. an), `project_points` aus dem Audit-Log
+  (task_done mit tasks.rounds, inbox_closed, task_failed, inbox_rework; dadurch automatisch nachgeruestet), `agent_ranks`, `growth_check`
+  (aus `log()` bei GROWTH_EVENTS; erster Aufruf merkt `stage:<pid>` still, Aufstieg -> audit `stage_up` + Telegram einmal).
+  `recruit_team` kuerzt nach Stufe (Notiz an den Chef). API `/api/worlds`, `/api/projects/<id>/growth`, PUT `/api/projects/<id>/world`.
+  Tests `tests/test_growth.py`.
+- UI (index.html): Wachstumsleiste `#growth` (`loadGrowth` alle 10 s, `renderGrowth`), Welt-Farben per CSS-Variablen, Hell/Dunkel `data-theme`
+  (localStorage `hs-theme`). Welt-Karte `#map` (SVG im selben `#world`-Transform wie die Knoten): `teamsOf` (Gebaeude = Agent mit Unterstellten +
+  oberste Ebene), `placeTeams` (Ring um die Mitte), `buildingSvg`/`figuresSvg` je Welt, Klick ueber `mapPick` (`#bcard`), Handy <=820 px `#wlist`.
+  Ansicht `VIEW` world|plan (localStorage `hs-view`).
+- Betriebszentrale: `project_ops(pid)` / `GET /api/projects/<id>/ops` (aktive + fehlgeschlagene Aufgaben 7 Tage, offene Freigaben, Zeitplaene,
+  Kosten heute/7 Tage aus `llm_calls`, Fehler-Ereignisse und letzte Ereignisse aus `audit`, `open` = `is_open`). UI `showOps` (🛰, Klick auf `#gStats`),
+  Knoepfe nutzen vorhandene APIs (`/tasks/<id>/run`, `/schedules/<id>/run`). Growth-API liefert zusaetzlich `cost_today`/`calls_today` (💶 in der Leiste).
+- Feinschliff: `celebrate(g)` (`#party`, Konfetti nur ohne `motionOff()`), Rang-Aufstieg als Toast (Vergleich alter `WORLD.g.ranks`), Schalter Bewegung
+  im ⓘ-Fenster (`setMotion`, localStorage `hs-motion`, `data-motion=off`). `#ov` ist `role=dialog`, `openOv`/`closeOv` setzen den Fokus, Esc schliesst
+  Feier/Fenster/Gebaeudekarte, `:focus-visible`-Rahmen. Pruefskript (nicht im Repo): alle sichtbaren Bedienelemente brauchen Text, title oder aria-label.
+
 ## Verbindungen (Webhooks)
 - Tabelle `connections` (Besitzer legt URL/Methode/Kopfzeilen fest, `${ENV}` in Kopfzeilen aus .env, `confirm`, `on_post`). Recht `connect`
   -> `connections_doc` im Werkzeugblock, `call_connection` in `run_with_tools` (confirm -> `approvals.kind='connect'`, Task endet `waiting_approval`).
