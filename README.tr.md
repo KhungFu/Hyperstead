@@ -303,6 +303,8 @@ ve renklerini değiştirir. Ajanlar her zaman açık terimlerle (görev, rapor, 
 
 Arayüz adları Almanca gösterir.
 
+**Kullanım:** Çalışma alanının üstündeki çubuk aşamayı, bir sonraki aşamaya ilerlemeyi ve önemli sayıları gösterir. Sağda dünyayı seçer, açık ve koyu arasında geçiş yapar (🌓) ve ⓘ ile aşamalar, puanlar ve rütbeler hakkındaki özeti açarsınız. Her ajanın rütbesi kartında simge olarak görünür.
+
 **Puanlar:** teslimat ilk seferde kabul +10, düzeltmeden sonra +5, görev postada tamamlandı olarak işaretlendi +20,
 başarısız −3, yeniden çalışma istendi −5. Aşamalar 0 / 100 / 300 / 700 / 1500 puandan başlar. Mevcut projelerin
 geçmiş başarıları otomatik olarak sayılır. Bir aşama atlaması Telegram ile bir kez bildirilir.

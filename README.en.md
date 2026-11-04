@@ -304,6 +304,8 @@ of the interface. The agents always work with clear terms (task, report, team), 
 
 The interface shows the names in German.
 
+**Usage:** The bar above the canvas shows the stage, progress to the next stage and the key numbers. On the right you pick the world, switch between light and dark (🌓) and open the overview of stages, points and ranks with ⓘ. Each agent's rank is shown as an icon on its card.
+
 **Points:** delivery accepted the first time +10, after revision +5, task marked as done in the mail +20,
 failed −3, rework requested −5. Stages from 0 / 100 / 300 / 700 / 1500 points. Existing projects get
 their past successes counted automatically. A stage-up is announced once via Telegram.

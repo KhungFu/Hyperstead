@@ -304,6 +304,8 @@ sučelja. Agenti uvijek rade s jasnim pojmovima (zadatak, izvješće, tim), tako
 
 Sučelje prikazuje nazive na njemačkom.
 
+**Upotreba:** Traka iznad površine prikazuje razinu, napredak do sljedeće razine i najvažnije brojeve. Desno birate svijet, prebacujete između svijetlog i tamnog prikaza (🌓) i s ⓘ otvarate pregled razina, bodova i rangova. Rang svakog agenta prikazan je kao ikona na njegovoj kartici.
+
 **Bodovi:** isporuka prihvaćena iz prve +10, nakon ispravka +5, zadatak označen kao završen u pošti +20,
 neuspješno −3, zatražena dorada −5. Razine od 0 / 100 / 300 / 700 / 1500 bodova. Postojeći projekti automatski
 dobivaju svoje dosadašnje uspjehe. Prelazak na višu razinu javlja se jednom putem Telegrama.
