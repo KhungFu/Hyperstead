@@ -237,6 +237,7 @@ Ovaj popis se dopunjuje pri svakoj promjeni programa. Svaki redak kaže što sus
 | `werkstatt.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 | Servis `hyperstead` (Pi) | Nakon ažuriranja i dalje radi stari servis `paperclip-lite`, `systemctl … hyperstead` javlja "not found". | Jednom pokrenite `./install.sh --service`, on zamjenjuje stari servis. |
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` ne pronalazi novu datoteku i prozor se zatvara s pogreškom. | Ponovno pokrenite `git pull`, datoteka je dio programa. |
+| `growth.py` (programska datoteka) | Hyperstead se ne pokreće (pogreška pri uvozu). | Ponovno pokrenite `git pull`, datoteka je dio programa. |
 
 ## Pristup s interneta
 
@@ -289,6 +290,29 @@ Nadređeni dobiva zadatak i **planira** (raspoređuje podzadatke) ili ga sam oba
 suradnici gotovi, on se ponovno budi, **čita njihova izvješća**, vraća nedostatke uz povratnu informaciju ili
 sažima sve i izvještava svog nadređenog. Tako se rezultat penje kroz koliko god razina.
 Status „Wartet auf Team“ (čeka tim) znači: nadređeni čeka svoje ljude. U kartici zadataka vidite cijelo stablo.
+
+## Svjetovi i rast
+
+Svaki se projekt odvija u jednom **svijetu** koji možete promijeniti u bilo kojem trenutku. Svijet mijenja samo riječi, ikone i boje
+sučelja. Agenti uvijek rade s jasnim pojmovima (zadatak, izvješće, tim), tako da njihova kvaliteta ostaje ista.
+
+| Svijet | Vi ste | Na vrhu | Timovi su | Razine |
+| --- | --- | --- | --- | --- |
+| Ceh | Vladar | Gospodar dvorca | Cehovi | 🛖 Koliba → 🏡 Zaselak → 🏘️ Selo → 🏰 Dvorac → 👑 Kraljevstvo |
+| Tycoon (zadano) | Osnivač | Šef | Prostorije | 🛠️ Garaža → 🏚️ Radionica → 🏪 Trgovina → 🏢 Sjedište → 🏙️ Koncern |
+| Gizmo grad | Osnivač grada | Gradonačelnik | Zgrade | ⛺ Logor → 🏡 Selo → 🏘️ Gradić → 🏛️ Grad → 🌆 Metropola |
+
+Sučelje prikazuje nazive na njemačkom.
+
+**Bodovi:** isporuka prihvaćena iz prve +10, nakon ispravka +5, zadatak označen kao završen u pošti +20,
+neuspješno −3, zatražena dorada −5. Razine od 0 / 100 / 300 / 700 / 1500 bodova. Postojeći projekti automatski
+dobivaju svoje dosadašnje uspjehe. Prelazak na višu razinu javlja se jednom putem Telegrama.
+
+**Što razina ograničava:** samo koliko agenata uprava smije **sama** zaposliti (8 / 12 / 18 / 25 / neograničeno
+u projektu) i koliko duboko (2 / 3 / 4 / 5 / puna dubina). Vi uvijek možete sve napraviti sami. Ograničenje se može
+isključiti po projektu.
+
+**Rangovi agenata** prema vlastitim prihvaćenim isporukama: od 0 / 5 / 20 / 60 (npr. šegrt, kalfa, majstor, veliki majstor).
 
 ## Mogućnosti agenata (internet, slike, datoteke)
 

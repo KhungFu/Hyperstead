@@ -126,6 +126,15 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (früher PaperclipL
   Abo-Warnung `PCL_ABO_WARN_5H` einmal je 5 h (`settings abo_warn:<anbieter>`). API `/api/usage?days=`.
 - Tests: `tests/` (pytest, `conftest.drain()` arbeitet die Queue synchron ab). Neue Funktionen dort mit abdecken.
 
+## Welten und Wachstum (Hyperstead)
+- `growth.py` (reine Daten + Rechnung): `WORLDS` (guild/tycoon/gizmo: Stufen, Raenge, Begriffe, Gebaeude, Farben), `STAGE_POINTS`,
+  `STAGE_TEAM`/`STAGE_DEPTH` (Grenzen nur fuers SELBST-Anwerben), `RANK_AT`, `POINTS`. Welt nur Oberflaeche: Agenten-Prompts nie mit Spielbegriffen.
+- app.py: `project_world` (`settings world:<pid>`), `growth_limits_on` (`growth_limits:<pid>`, Std. an), `project_points` aus dem Audit-Log
+  (task_done mit tasks.rounds, inbox_closed, task_failed, inbox_rework; dadurch automatisch nachgeruestet), `agent_ranks`, `growth_check`
+  (aus `log()` bei GROWTH_EVENTS; erster Aufruf merkt `stage:<pid>` still, Aufstieg -> audit `stage_up` + Telegram einmal).
+  `recruit_team` kuerzt nach Stufe (Notiz an den Chef). API `/api/worlds`, `/api/projects/<id>/growth`, PUT `/api/projects/<id>/world`.
+  Tests `tests/test_growth.py`.
+
 ## Verbindungen (Webhooks)
 - Tabelle `connections` (Besitzer legt URL/Methode/Kopfzeilen fest, `${ENV}` in Kopfzeilen aus .env, `confirm`, `on_post`). Recht `connect`
   -> `connections_doc` im Werkzeugblock, `call_connection` in `run_with_tools` (confirm -> `approvals.kind='connect'`, Task endet `waiting_approval`).
