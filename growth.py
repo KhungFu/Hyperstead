@@ -23,7 +23,7 @@ WORLDS = {
     "guild": {
         "name": "Gilde", "tagline": "Gründe deine Gilde, bau dein Königreich.",
         "stages": [["🛖", "Hütte"], ["🏡", "Weiler"], ["🏘️", "Dorf"], ["🏰", "Burg"], ["👑", "Königreich"]],
-        "ranks": [["🌱", "Lehrling"], ["🔧", "Geselle"], ["⚒️", "Meister"], ["⭐", "Großmeister"]],
+        "ranks": [["🌱", "Lehrling"], ["🔨", "Geselle"], ["⚒️", "Meister"], ["⭐", "Großmeister"]],
         "words": {"owner": "König:in", "top": "Burgherr", "lead": "Zunftmeister:in", "member": "Zunftmitglied",
                   "team": "Zunft", "teams": "Zünfte", "task": "Schriftrolle", "tasks": "Schriftrollen",
                   "done": "besiegelt", "project": "Gilde", "world": "Gildenstadt", "points": "Ruhm"},
@@ -33,7 +33,7 @@ WORLDS = {
     "tycoon": {
         "name": "Tycoon", "tagline": "Von der Garage zum Konzern.",
         "stages": [["🛠️", "Garage"], ["🏚️", "Werkstatt"], ["🏪", "Laden"], ["🏢", "Firmensitz"], ["🏙️", "Konzern"]],
-        "ranks": [["🌱", "Neuling"], ["🔧", "Profi"], ["⚙️", "Experte"], ["⭐", "Legende"]],
+        "ranks": [["🌱", "Neuling"], ["💼", "Profi"], ["⚙️", "Experte"], ["⭐", "Legende"]],
         "words": {"owner": "Gründer:in", "top": "Boss", "lead": "Raumleitung", "member": "Mitarbeiter:in",
                   "team": "Raum", "teams": "Räume", "task": "Ticket", "tasks": "Tickets",
                   "done": "abgenommen", "project": "Firma", "world": "Firmengelände", "points": "Umsatzpunkte"},

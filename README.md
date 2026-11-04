@@ -304,6 +304,8 @@ der Oberfläche. Die Agenten arbeiten immer mit klaren Begriffen (Auftrag, Beric
 
 **Bedienung:** Die Leiste über der Fläche zeigt Stufe, Fortschritt zur nächsten Stufe und die wichtigsten Zahlen. Rechts wählst du die Welt, schaltest zwischen Hell und Dunkel um (🌓) und öffnest mit ⓘ die Übersicht über Stufen, Punkte und Ränge. Der Rang jedes Agenten steht als Symbol auf seiner Karte.
 
+**Welt-Karte:** Mit 🗺 / 📐 in der Leiste wechselst du zwischen der Welt-Karte und dem Bauplan (Knoten-Editor). Auf der Karte ist jede Führungskraft mit ihrem Team ein Gebäude, die Agenten stehen als Figuren davor, Straßen zeigen, wer wem berichtet. Rauch und Licht bedeuten „arbeitet“, 🔧 fehlgeschlagen, ✋ wartet auf deine Freigabe, ⏳ wartet auf Zulieferung, 📦 geliefert. Ein Tipp auf ein Gebäude zeigt Team und Aktionen, ein Tipp auf eine Figur öffnet den Agenten. Auf dem Handy erscheint statt der Karte eine Liste der Gebäude. Bewegung wird abgeschaltet, wenn das Gerät „Bewegung reduzieren“ verlangt.
+
 **Punkte:** Lieferung beim ersten Mal abgenommen +10, nach Überarbeitung +5, Auftrag in der Post als erledigt markiert +20,
 fehlgeschlagen −3, Nacharbeit angefordert −5. Stufen ab 0 / 100 / 300 / 700 / 1500 Punkten. Bestehende Projekte bekommen
 ihre bisherigen Erfolge automatisch angerechnet. Ein Aufstieg kommt einmal per Telegram.
