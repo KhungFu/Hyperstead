@@ -243,8 +243,9 @@ Bu liste programda her değişiklikle genişletilir. Her satır sistemin ne yapt
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` yeni dosyayı bulamaz ve pencere hata mesajıyla kapanır. | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
 | Git adresi hâlâ `KhungFu/paperclip-lite` gösteriyor | GitHub yönlendirdiği için `git pull` çalışmaya devam eder. Biri eski adla yeni bir repo oluşturursa yönlendirme biter ve `git pull` başarısız olur. | Program klasöründe bir kez `git remote set-url origin https://github.com/KhungFu/hyperstead.git` çalıştırın. |
 | `growth.py` (program dosyası) | Hyperstead başlamaz (içe aktarma hatası). | `git pull` komutunu yeniden çalıştırın, dosya programın parçasıdır. |
+| Bir projede kayıtlı eski dünya (Lonca, Tycoon, Gizmo Şehri) | Proje otomatik olarak uzayı gösterir. Puanlar, aşama ve rütbeler aynı kalır, yalnızca adlar ve simgeler değişir. | Yapılacak bir şey yok. |
 | Bugün yapay zekâ çağrısı yok (operasyon merkezi, çubukta 💶) | 0 $ veya „keine Aufrufe“ gösterir. | Yapılacak bir şey yok. Maliyetler tahminidir, kendi fiyatlarınızı `.env` içinde `PCL_PRICES` ile belirleyin. |
-| Tarayıcı hiçbir şey kaydetmiyor (gizli pencere) | Açık/koyu, dünya/plan, hareket ve yardım modu her yüklemede varsayılana döner. | Normal pencere kullanın; proje verileri bundan etkilenmez. |
+| Tarayıcı hiçbir şey kaydetmiyor (gizli pencere) | Açık/koyu, uzay/plan, hareket ve yardım modu her yüklemede varsayılana döner. | Normal pencere kullanın; proje verileri bundan etkilenmez. |
 
 ## İnternetten erişim
 
@@ -298,26 +299,28 @@ Bir patron bir görev alır ve **planlar** (alt görevleri dağıtır) ya da iş
 her şeyi özetleyip kendi patronuna bildirir. Sonuç böylece istediğiniz kadar seviye yukarı çıkar.
 „Wartet auf Team“ durumu (ekibi bekliyor) şu anlama gelir: patron ekibini bekliyor. Görevler sekmesinde tüm ağacı görürsünüz.
 
-## Dünyalar ve büyüme
+## Uzay ve büyüme
 
-Her proje, istediğiniz zaman değiştirebileceğiniz bir **dünyada** geçer. Dünya yalnızca arayüzün kelimelerini, simgelerini
-ve renklerini değiştirir. Ajanlar her zaman açık terimlerle (görev, rapor, ekip) çalışır, böylece kaliteleri aynı kalır.
+Her proje, başarılarıyla büyüyen küçük bir **evrendir**. Uzay yalnızca arayüzün kelimelerini, simgelerini ve renklerini
+değiştirir. Ajanlar her zaman açık terimlerle (görev, rapor, ekip) çalışır, böylece kaliteleri aynı kalır.
 
-| Dünya | Siz | En üstte | Ekipler | Aşamalar |
-| --- | --- | --- | --- | --- |
-| Lonca | Hükümdar | Kale beyi | Loncalar | 🛖 Kulübe → 🏡 Mezra → 🏘️ Köy → 🏰 Kale → 👑 Krallık |
-| Tycoon (varsayılan) | Kurucu | Patron | Odalar | 🛠️ Garaj → 🏚️ Atölye → 🏪 Dükkân → 🏢 Genel merkez → 🏙️ Holding |
-| Gizmo Şehri | Şehir kurucusu | Belediye başkanı | Binalar | ⛺ Kamp → 🏡 Köy → 🏘️ Kasaba → 🏛️ Şehir → 🌆 Metropol |
+| Uzayda | Ekipteki anlamı |
+| --- | --- |
+| ☀️ Güneş | en üst yönetim (ör. CEO) |
+| 🪐 Gezegen | departman veya ustabaşı, güneşin etrafında döner |
+| 🌙 Ay | çalışan, kendi gezegeninin etrafında döner (daha alttaki herkes bir ayın küçük ayıdır) |
+| Aşamalar | ☄️ Asteroit → 🪐 Gezegen → ☀️ Güneş sistemi → ✨ Yıldız kümesi → 🌌 Galaksi |
+| Ajan rütbeleri | ☄️ Kuyruklu yıldız → 🌙 Ay → 🪐 Gezegen → ⭐ Yıldız |
 
-Arayüz adları Almanca gösterir.
+Puanlara yıldız tozu, görevlere görev (Mission) denir. Eski Lonca, Tycoon ve Gizmo Şehri dünyaları artık yok; mevcut projeler uzayı otomatik olarak gösterir, puanlar ve aşamalar korunur. Arayüz adları Almanca gösterir.
 
-**Kullanım:** Çalışma alanının üstündeki çubuk aşamayı, bir sonraki aşamaya ilerlemeyi ve önemli sayıları gösterir. Sağda dünyayı seçer, açık ve koyu arasında geçiş yapar (🌓) ve ⓘ ile aşamalar, puanlar ve rütbeler hakkındaki özeti açarsınız. Her ajanın rütbesi kartında simge olarak görünür.
+**Kullanım:** Çalışma alanının üstündeki çubuk aşamayı, bir sonraki aşamaya ilerlemeyi ve önemli sayıları gösterir. Sağda açık ve koyu arasında geçiş yapar (🌓) ve ⓘ ile aşamalar, puanlar ve rütbeler hakkındaki özeti açarsınız. Her ajanın rütbesi kartında simge olarak görünür.
 
-**Dünya haritası:** Çubuktaki 🗺 / 📐 ile dünya haritası ve plan (düğüm editörü) arasında geçiş yaparsınız. Haritada her yönetici ekibiyle birlikte bir binadır, ajanlar önünde figür olarak durur, yollar kimin kime rapor verdiğini gösterir. Duman ve ışık "çalışıyor", 🔧 başarısız, ✋ onayınızı bekliyor, ⏳ alt görevleri bekliyor, 📦 teslim edildi demektir. Bir binaya dokunmak ekibi ve işlemleri gösterir, bir figüre dokunmak ajanı açar. Telefonda harita yerine binaların listesi görünür. Cihaz azaltılmış hareket isterse animasyonlar durur.
+**Güneş sistemi:** Çubuktaki 🌌 / 📐 ile uzay ve plan (düğüm editörü) arasında geçiş yaparsınız. Gezegenler ve aylar yavaşça döner; fareyle birinin üzerine geldiğinizde kolayca tıklayabilmeniz için her şey durur. Mavi yanıp sönen halka "çalışıyor", sarı halka "onayınızı bekliyor", kırmızı halka "hata", mor kesikli halka "ekibini bekliyor" demektir. Güneşe veya bir gezegene dokunmak ekibi ve eylemleri gösterir, bir aya dokunmak ajanı açar. Her aşamada gökyüzü dolar, yıldız kümesinden itibaren bulutsular parlar, galakside bir sarmal belirir. Uzay açık temada da karanlık kalır. Telefonda harita yerine bir liste görünür: güneş, altında her gezegen ve ayları. Cihaz „hareketi azalt“ isterse hareket kapanır.
 
 **Operasyon merkezi:** Kenar çubuğundaki 🛰 (veya büyüme çubuğundaki sayılara dokunmak) şu anda neyin çalıştığını ve beklediğini, hangi onayların açık olduğunu, son 7 günde neyin başarısız olduğunu (↻ Neu ile), zaman planlarını (▶ Jetzt ile), hata mesajlarını ve son olayları bir bakışta gösterir. Ayrıca bugünün ve son 7 günün tahmini yapay zekâ maliyetlerini gösterir; bugünkü maliyet çubukta 💶 olarak da görünür. Tüm sayılar mevcut görevlerden, onaylardan, zaman planlarından ve geçmişten gelir, hiçbir şey uydurulmaz.
 
-**Yükselme ve kullanım:** Bir proje yeni bir aşamaya ulaştığında, yeni aşamayı ve bir sonraki hedefi gösteren kısa bir kutlama görünür (Telegram aynı mesajı gönderir). Bir ajan rütbe atladığında kısa bir bildirim çıkar. Çubuktaki ⓘ altında bu cihaz için hareket ve kutlama efektlerini kapatabilirsiniz; cihaz „hareketi azalt“ isterse zaten her şey durağan kalır. Tüm pencereler Esc ile kapanır, haritadaki binalar ve figürler Tab ve Enter ile kullanılabilir.
+**Yükselme ve kullanım:** Bir proje yeni bir aşamaya ulaştığında, yeni aşamayı ve bir sonraki hedefi gösteren kısa bir kutlama görünür (Telegram aynı mesajı gönderir). Bir ajan rütbe atladığında kısa bir bildirim çıkar. Çubuktaki ⓘ altında bu cihaz için hareket ve kutlama efektlerini kapatabilirsiniz; cihaz „hareketi azalt“ isterse zaten her şey durağan kalır. Tüm pencereler Esc ile kapanır, uzaydaki güneş, gezegenler ve aylar Tab ve Enter ile kullanılabilir.
 
 **Kılavuz ve yardım:** Kenar çubuğunun en üstündeki 📖 Anleitung, kullanım kılavuzunu doğrudan panoda açar (açılır bölümler, arama, indirme yok, çevrimdışı da çalışır). Bir pencerenin üstündeki ⓘ ilgili bölüme atlar. Her düğme fareyle üzerine gelindiğinde kısa bir açıklama gösterir. Telefonda kılavuzda yardım modunu açın: bir düğmeye ilk dokunuş onu açıklar, ikincisi çalıştırır.
 

@@ -244,8 +244,9 @@ Diese Liste wird bei jeder Änderung am Programm ergänzt. Jede Zeile sagt, was 
 | `deploy/windows/hyperstead-start.bat` | `paperclip-start.bat` findet die neue Datei nicht und das Fenster schließt sich mit einer Fehlermeldung. | `git pull` erneut ausführen, die Datei gehört zum Programm. |
 | Git-Adresse zeigt noch auf `KhungFu/paperclip-lite` | `git pull` klappt weiter, weil GitHub umleitet. Legt jemand ein neues Repo mit dem alten Namen an, endet die Umleitung und `git pull` schlägt fehl. | Einmal `git remote set-url origin https://github.com/KhungFu/hyperstead.git` im Programmordner ausführen. |
 | `growth.py` (Programmdatei) | Hyperstead startet nicht (Fehler beim Import). | `git pull` erneut ausführen, die Datei gehört zum Programm. |
+| Frühere Welt (Gilde, Tycoon, Gizmo-Stadt) in einem Projekt gespeichert | Das Projekt zeigt automatisch das Weltall. Punkte, Stufe und Ränge bleiben gleich, nur Namen und Symbole ändern sich. | Nichts zu tun. |
 | Keine KI-Aufrufe heute (Betriebszentrale, 💶 in der Leiste) | Zeigt 0 $ bzw. „keine Aufrufe“. | Nichts zu tun. Kosten sind Schätzungen, eigene Preise per `PCL_PRICES` in `.env`. |
-| Browser speichert nichts (privates Fenster) | Hell/Dunkel, Welt/Bauplan, Bewegung und Hilfe-Modus fallen bei jedem Laden auf den Standard zurück. | Normales Fenster verwenden; die Daten der Projekte sind davon nicht betroffen. |
+| Browser speichert nichts (privates Fenster) | Hell/Dunkel, Weltall/Bauplan, Bewegung und Hilfe-Modus fallen bei jedem Laden auf den Standard zurück. | Normales Fenster verwenden; die Daten der Projekte sind davon nicht betroffen. |
 
 ## Zugriff aus dem Internet
 
@@ -299,24 +300,28 @@ Mitarbeiter fertig sind, wacht er wieder auf, **liest ihre Berichte**, gibt Män
 fasst alles zusammen und berichtet an seinen Chef. So wandert das Ergebnis über beliebig viele Ebenen nach oben.
 Status „Wartet auf Team“ heißt: der Chef wartet auf seine Leute. Im Aufgaben-Tab siehst du den ganzen Baum.
 
-## Welten und Wachstum
+## Weltall und Wachstum
 
-Jedes Projekt spielt in einer **Welt**, die du jederzeit umschaltest. Die Welt ändert nur Begriffe, Symbole und Farben
+Jedes Projekt ist ein kleines **Universum**, das mit seinen Erfolgen wächst. Das Weltall ändert nur Begriffe, Symbole und Farben
 der Oberfläche. Die Agenten arbeiten immer mit klaren Begriffen (Auftrag, Bericht, Team), damit ihre Qualität gleich bleibt.
 
-| Welt | Du bist | Oben steht | Teams heißen | Stufen |
-| --- | --- | --- | --- | --- |
-| Gilde | König:in | Burgherr | Zünfte | 🛖 Hütte → 🏡 Weiler → 🏘️ Dorf → 🏰 Burg → 👑 Königreich |
-| Tycoon (Standard) | Gründer:in | Boss | Räume | 🛠️ Garage → 🏚️ Werkstatt → 🏪 Laden → 🏢 Firmensitz → 🏙️ Konzern |
-| Gizmo-Stadt | Stadtgründer:in | Bürgermeister:in | Gebäude | ⛺ Lager → 🏡 Dorf → 🏘️ Kleinstadt → 🏛️ Stadt → 🌆 Metropole |
+| Im Weltall | Bedeutung im Team |
+| --- | --- |
+| ☀️ Sonne | oberste Leitung (z. B. der CEO) |
+| 🪐 Planet | Abteilung bzw. Vorarbeiter:in, kreist um die Sonne |
+| 🌙 Mond | Mitarbeiter:in, kreist um den eigenen Planeten (wer noch tiefer steht, ist ein kleiner Mond am Mond) |
+| Stufen | ☄️ Asteroid → 🪐 Planet → ☀️ Sonnensystem → ✨ Sternhaufen → 🌌 Galaxie |
+| Ränge der Agenten | ☄️ Komet → 🌙 Mond → 🪐 Planet → ⭐ Stern |
 
-**Bedienung:** Die Leiste über der Fläche zeigt Stufe, Fortschritt zur nächsten Stufe und die wichtigsten Zahlen. Rechts wählst du die Welt, schaltest zwischen Hell und Dunkel um (🌓) und öffnest mit ⓘ die Übersicht über Stufen, Punkte und Ränge. Der Rang jedes Agenten steht als Symbol auf seiner Karte.
+Punkte heißen Sternenstaub, Aufträge heißen Missionen. Die früheren Welten Gilde, Tycoon und Gizmo-Stadt gibt es nicht mehr; bestehende Projekte zeigen automatisch das Weltall, Punkte und Stufen bleiben erhalten.
 
-**Welt-Karte:** Mit 🗺 / 📐 in der Leiste wechselst du zwischen der Welt-Karte und dem Bauplan (Knoten-Editor). Auf der Karte ist jede Führungskraft mit ihrem Team ein Gebäude, die Agenten stehen als Figuren davor, Straßen zeigen, wer wem berichtet. Rauch und Licht bedeuten „arbeitet“, 🔧 fehlgeschlagen, ✋ wartet auf deine Freigabe, ⏳ wartet auf Zulieferung, 📦 geliefert. Ein Tipp auf ein Gebäude zeigt Team und Aktionen, ein Tipp auf eine Figur öffnet den Agenten. Auf dem Handy erscheint statt der Karte eine Liste der Gebäude. Bewegung wird abgeschaltet, wenn das Gerät „Bewegung reduzieren“ verlangt.
+**Bedienung:** Die Leiste über der Fläche zeigt Stufe, Fortschritt zur nächsten Stufe und die wichtigsten Zahlen. Rechts schaltest du zwischen Hell und Dunkel um (🌓) und öffnest mit ⓘ die Übersicht über Stufen, Punkte und Ränge. Der Rang jedes Agenten steht als Symbol auf seiner Karte.
+
+**Sonnensystem:** Mit 🌌 / 📐 in der Leiste wechselst du zwischen dem Weltall und dem Bauplan (Knoten-Editor). Planeten und Monde kreisen langsam; zeigst du mit der Maus auf einen, bleibt alles stehen, damit du ihn gut triffst. Ein blau pulsierender Ring heißt „arbeitet“, ein gelber Ring „wartet auf deine Freigabe“, ein roter Ring „Fehler“, ein lila gestrichelter Ring „wartet auf sein Team“. Ein Tipp auf Sonne oder Planet zeigt das Team und Aktionen, ein Tipp auf einen Mond öffnet den Agenten. Mit jeder Stufe wird der Himmel voller, ab Sternhaufen leuchten Nebel, als Galaxie erscheint eine Spirale. Das Weltall bleibt auch im hellen Aussehen dunkel. Auf dem Handy erscheint statt der Karte eine Liste: Sonne, darunter jeder Planet mit seinen Monden. Bewegung wird abgeschaltet, wenn das Gerät „Bewegung reduzieren“ verlangt.
 
 **Betriebszentrale:** 🛰 in der Seitenleiste (oder ein Tipp auf die Zahlen in der Wachstumsleiste) zeigt auf einen Blick, was gerade läuft und wartet, welche Freigaben offen sind, was in den letzten 7 Tagen fehlgeschlagen ist (mit ↻ Neu), die Zeitpläne (mit ▶ Jetzt), Fehlermeldungen und die letzten Ereignisse. Dazu die geschätzten KI-Kosten von heute und den letzten 7 Tagen; heute steht auch als 💶 in der Leiste. Alle Zahlen kommen aus den vorhandenen Aufgaben, Freigaben, Zeitplänen und dem Verlauf, nichts wird erfunden.
 
-**Aufstieg und Bedienung:** Erreicht ein Projekt eine neue Stufe, erscheint eine kurze Feier mit der neuen Stufe und dem nächsten Ziel (per Telegram kommt dieselbe Nachricht). Steigt ein Agent im Rang auf, meldet das eine kurze Einblendung. Unter ⓘ in der Leiste lassen sich Bewegung und Feier-Effekte für dieses Gerät abschalten; verlangt das Gerät „Bewegung reduzieren“, bleibt ohnehin alles ruhig. Alle Fenster schließen mit Esc, Gebäude und Figuren auf der Karte lassen sich mit Tab und Enter bedienen.
+**Aufstieg und Bedienung:** Erreicht ein Projekt eine neue Stufe, erscheint eine kurze Feier mit der neuen Stufe und dem nächsten Ziel (per Telegram kommt dieselbe Nachricht). Steigt ein Agent im Rang auf, meldet das eine kurze Einblendung. Unter ⓘ in der Leiste lassen sich Bewegung und Feier-Effekte für dieses Gerät abschalten; verlangt das Gerät „Bewegung reduzieren“, bleibt ohnehin alles ruhig. Alle Fenster schließen mit Esc, Sonne, Planeten und Monde im Weltall lassen sich mit Tab und Enter bedienen.
 
 **Anleitung und Hilfe:** 📖 Anleitung ganz oben in der Seitenleiste öffnet die Bedienungsanleitung direkt im Dashboard (Kapitel zum Aufklappen, mit Suche, ohne Download, auch offline). ⓘ oben in einem Fenster springt zum passenden Kapitel. Jeder Knopf zeigt beim Draufzeigen mit der Maus eine kurze Erklärung. Auf dem Handy schaltest du in der Anleitung den Hilfe-Modus ein: Das erste Tippen auf einen Knopf erklärt ihn, das zweite führt ihn aus.
 

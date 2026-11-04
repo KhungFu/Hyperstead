@@ -16,10 +16,11 @@ def test_stufen_und_raenge_rein():
     assert G.rank_of(4) == 0 and G.rank_of(5) == 1 and G.rank_of(60) == 3
     assert G.points_from_events([0, 0, 2], 1, 1, 1) == 10 + 10 + 5 + 20 - 3 - 5
     assert G.points_from_events([], 0, 5, 0) == 0  # nie negativ
-    i = G.stage_info(150, "guild")
-    assert i["name"] == "Weiler" and i["next"] == 300 and 0 < i["progress"] < 1
-    assert G.stage_info(9999, "gizmo")["next"] is None
-    assert G.world_ok("quatsch") == G.DEFAULT_WORLD
+    i = G.stage_info(150, "kosmos")
+    assert i["name"] == "Planet" and i["next"] == 300 and 0 < i["progress"] < 1
+    assert G.stage_info(9999, "kosmos")["next"] is None and G.stage_info(9999)["name"] == "Galaxie"
+    assert G.world_ok("quatsch") == G.DEFAULT_WORLD == "kosmos"
+    assert list(G.WORLDS) == ["kosmos"]  # nur noch eine Welt (Wunsch ABI 2026-11-04)
     for w in G.WORLDS.values():  # jede Welt hat alle Stufen und Raenge
         assert len(w["stages"]) == len(G.STAGE_POINTS) and len(w["ranks"]) == len(G.RANK_AT)
 
@@ -33,17 +34,26 @@ def test_punkte_aus_dem_audit_log(client):
     A.log("inbox_rework", "x", pid, ceo)   # -5
     A.log("task_failed", "x", pid, ceo)    # -3
     g = client.get(f"/api/projects/{pid}/growth").json
-    assert g["points"] == 107 and g["stage"] == 1 and g["world"] == "tycoon" and g["name"] == "Werkstatt"
+    assert g["points"] == 107 and g["stage"] == 1 and g["world"] == "kosmos" and g["name"] == "Planet"
     assert g["ranks"][str(ceo)]["rank"] == 1 and g["ranks"][str(ceo)]["done"] == 10
 
 
 def test_welt_wechseln(client):
     pid = make_project()
-    r = client.put(f"/api/projects/{pid}/world", json={"world": "guild"})
-    assert r.json["world"] == "guild" and r.json["name"] == "Hütte"
+    r = client.put(f"/api/projects/{pid}/world", json={"world": "kosmos"})
+    assert r.json["world"] == "kosmos" and r.json["name"] == "Asteroid"
+    assert client.put(f"/api/projects/{pid}/world", json={"world": "guild"}).status_code == 400
     assert client.put(f"/api/projects/{pid}/world", json={"world": "mars"}).status_code == 400
     assert client.put(f"/api/projects/{pid}/world", json={"limits": False}).json["limits"] is False
-    assert client.get("/api/worlds").json["worlds"]["gizmo"]["stages"][4][1] == "Metropole"
+    assert client.get("/api/worlds").json["worlds"]["kosmos"]["stages"][4][1] == "Galaxie"
+
+
+def test_alte_welten_werden_kosmos():
+    """Projekte mit frueherer Welt (Gilde, Tycoon, Gizmo-Stadt) zeigen automatisch Kosmos."""
+    pid = make_project()
+    for old in ("guild", "tycoon", "gizmo"):
+        A.set_setting(f"world:{pid}", old)
+        assert A.project_growth(pid)["world"] == "kosmos"
 
 
 def test_aufstieg_wird_einmal_gemeldet(monkeypatch):
@@ -54,7 +64,7 @@ def test_aufstieg_wird_einmal_gemeldet(monkeypatch):
     _done(pid, ceo, n=3)           # erster Aufruf merkt nur den Stand
     assert not sent
     _done(pid, ceo, n=7)           # 100 Punkte -> Stufe 2
-    assert len(sent) == 1 and "Werkstatt" in sent[0]
+    assert len(sent) == 1 and "Planet" in sent[0]
     _done(pid, ceo, n=1)
     assert len(sent) == 1
     assert A.q1("SELECT COUNT(*) c FROM audit WHERE event='stage_up'")["c"] == 1
@@ -113,11 +123,10 @@ def test_echter_lauf_gibt_punkte():
 def test_prompts_ohne_spielbegriffe():
     """Die Welt ist nur Oberflaeche: die Agenten-Prompts nennen keine Spielbegriffe."""
     pid = make_project()
-    A.set_setting(f"world:{pid}", "guild")
     ceo = A.q1("SELECT * FROM agents WHERE id=?", (make_agent(pid, "CEO", delegate=True),))
     make_agent(pid, "M", parent=ceo["id"])
     text = str(A.build_system(ceo, q_proj(pid), "plan"))
-    for w in ("Schriftrolle", "Zunft", "Burgherr", "Königreich"):
+    for w in ("Sonne", "Planet", "Mond", "Mission", "Sternenstaub", "Galaxie"):
         assert w not in text
 
 
