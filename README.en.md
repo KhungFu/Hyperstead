@@ -306,6 +306,8 @@ The interface shows the names in German.
 
 **Usage:** The bar above the canvas shows the stage, progress to the next stage and the key numbers. On the right you pick the world, switch between light and dark (🌓) and open the overview of stages, points and ranks with ⓘ. Each agent's rank is shown as an icon on its card.
 
+**World map:** With 🗺 / 📐 in the bar you switch between the world map and the blueprint (node editor). On the map every manager with their team is a building, the agents stand in front of it as figures, roads show who reports to whom. Smoke and light mean "working", 🔧 failed, ✋ waiting for your approval, ⏳ waiting for subtasks, 📦 delivered. Tapping a building shows the team and actions, tapping a figure opens the agent. On a phone a list of buildings replaces the map. Animations stop when the device asks for reduced motion.
+
 **Points:** delivery accepted the first time +10, after revision +5, task marked as done in the mail +20,
 failed −3, rework requested −5. Stages from 0 / 100 / 300 / 700 / 1500 points. Existing projects get
 their past successes counted automatically. A stage-up is announced once via Telegram.

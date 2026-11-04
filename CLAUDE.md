@@ -134,6 +134,10 @@ Selbst gehosteter Knoten-Editor für ein Team aus KI-Agenten (früher PaperclipL
   (aus `log()` bei GROWTH_EVENTS; erster Aufruf merkt `stage:<pid>` still, Aufstieg -> audit `stage_up` + Telegram einmal).
   `recruit_team` kuerzt nach Stufe (Notiz an den Chef). API `/api/worlds`, `/api/projects/<id>/growth`, PUT `/api/projects/<id>/world`.
   Tests `tests/test_growth.py`.
+- UI (index.html): Wachstumsleiste `#growth` (`loadGrowth` alle 10 s, `renderGrowth`), Welt-Farben per CSS-Variablen, Hell/Dunkel `data-theme`
+  (localStorage `hs-theme`). Welt-Karte `#map` (SVG im selben `#world`-Transform wie die Knoten): `teamsOf` (Gebaeude = Agent mit Unterstellten +
+  oberste Ebene), `placeTeams` (Ring um die Mitte), `buildingSvg`/`figuresSvg` je Welt, Klick ueber `mapPick` (`#bcard`), Handy <=820 px `#wlist`.
+  Ansicht `VIEW` world|plan (localStorage `hs-view`).
 
 ## Verbindungen (Webhooks)
 - Tabelle `connections` (Besitzer legt URL/Methode/Kopfzeilen fest, `${ENV}` in Kopfzeilen aus .env, `confirm`, `on_post`). Recht `connect`

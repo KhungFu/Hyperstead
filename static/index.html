@@ -103,6 +103,47 @@ button,input,select,textarea{font:inherit;color:inherit}
 .g-tools{margin-left:auto;display:flex;gap:6px;align-items:center}
 .g-tools select{width:auto;padding:4px 8px}
 .n-rank{font-size:12px;cursor:help}
+/* Welt-Ansicht (isometrische Karte) */
+#map{position:absolute;left:0;top:0;overflow:visible;display:none}
+#app.view-world #map{display:block}
+#app.view-world #edges,#app.view-world #nodes,#app.view-world #palette{display:none}
+#app.view-world #vp{background:radial-gradient(ellipse at 50% 40%,color-mix(in srgb,var(--ground) 92%,var(--accent) 8%),var(--bg) 75%) !important;background-size:100% 100% !important;background-position:0 0 !important}
+#map .tile{stroke:color-mix(in srgb,var(--ground) 70%,var(--text) 30%);stroke-opacity:.18;stroke-width:1}
+#map .road{stroke:color-mix(in srgb,var(--text) 35%,var(--ground));stroke-opacity:.45;stroke-width:10;fill:none;stroke-linecap:round;stroke-linejoin:round}
+#map .road.flow{stroke:var(--accent);stroke-opacity:.9;stroke-width:3;stroke-dasharray:4 10;animation:flow 1.2s linear infinite}
+#map .bld{cursor:pointer}
+#map .bld:hover .face{filter:brightness(1.12)}
+#map .bld.sel .face{stroke:var(--accent);stroke-width:2}
+#map .face{stroke:rgba(0,0,0,.25);stroke-width:1}
+#map .lbl{font:600 13px system-ui,sans-serif;fill:var(--text);text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+#map .lbl2{font:11px system-ui,sans-serif;fill:var(--mute);text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+#map .state{font-size:22px;text-anchor:middle}
+#map .fig{cursor:pointer}
+#map .fig:hover circle{stroke:var(--accent);stroke-width:2}
+#map .smoke{fill:color-mix(in srgb,var(--text) 40%,transparent);animation:smoke 2.4s ease-out infinite}
+#map .win{fill:#ffe9a8;opacity:.0}
+#map .bld.busy .win{opacity:.85;animation:blink 3s ease-in-out infinite}
+@keyframes smoke{0%{transform:translate(0,0) scale(.6);opacity:.8}100%{transform:translate(6px,-34px) scale(1.6);opacity:0}}
+@keyframes flow{to{stroke-dashoffset:-28}}
+@keyframes blink{50%{opacity:.45}}
+@media (prefers-reduced-motion: reduce){#map .smoke,#map .road.flow,#map .bld.busy .win{animation:none}}
+:root[data-motion="off"] #map .smoke,:root[data-motion="off"] #map .road.flow,:root[data-motion="off"] #map .bld.busy .win{animation:none}
+#bcard{position:absolute;z-index:6;display:none;width:min(320px,calc(100% - 20px));background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);padding:12px}
+#bcard.on{display:block}
+#bcard h4{margin:0 0 2px;font-size:15px}
+#bcard .mem{display:flex;gap:8px;align-items:center;width:100%;background:none;border:0;padding:6px;border-radius:8px;cursor:pointer;text-align:left;color:var(--text)}
+#bcard .mem:hover{background:var(--panel2)}
+#bcard .mem small{color:var(--mute);margin-left:auto}
+#wlist{position:absolute;inset:0;overflow:auto;padding:10px;display:none;z-index:4}
+#app.view-world.narrow #wlist{display:block}
+#app.view-world.narrow #map,#app.view-world.narrow .zoom{display:none}
+.wcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;border-left:4px solid var(--accent)}
+.wcard .wh{display:flex;gap:10px;align-items:center}
+.wcard .wh .ico{font-size:26px}
+.wcard .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.wcard .chips button{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:4px 10px;cursor:pointer;color:var(--text);font-size:13px}
+.vbtn.on{border-color:var(--accent);color:var(--accent)}
 /* Panel */
 #panel{background:var(--panel);border-left:1px solid var(--line);overflow:hidden;display:none;flex-direction:column;min-height:0}
 #app.panel-open #panel{display:flex}
@@ -257,6 +298,7 @@ a.btn.pri{color:#fff}
       <div class="g-bar" title="Fortschritt bis zur nächsten Stufe"><i id="gBar"></i></div>
       <div class="g-stats" id="gStats"></div>
       <div class="g-tools">
+        <button class="btn sm vbtn" id="gView" title="Zwischen Welt-Karte und Bauplan (Knoten-Editor) wechseln">🗺 Welt</button>
         <select id="gWorld" title="Welt dieses Projekts (ändert nur das Aussehen)"></select>
         <button class="icon-btn" id="gTheme" title="Hell / Dunkel">🌓</button>
         <button class="icon-btn" id="gInfo" title="Wie das Wachstum funktioniert">ⓘ</button>
@@ -267,7 +309,9 @@ a.btn.pri{color:#fff}
     </div>
     <div id="vp">
       <div class="zoom"><button id="zin">+</button><button id="zout">−</button><button id="zfit">Fit</button></div>
-      <div id="world"><svg id="edges"></svg><div id="nodes"></div></div>
+      <div id="world"><svg id="map" width="1" height="1"></svg><svg id="edges"></svg><div id="nodes"></div></div>
+      <div id="bcard" role="dialog" aria-label="Gebäude"></div>
+      <div id="wlist"></div>
       <div class="empty" id="empty">Wähle links ein Projekt oder lege eins mit ＋ an.</div>
     </div>
   </section>
@@ -398,6 +442,7 @@ function render(){
     nodes.appendChild(el);
   });
   drawEdges();
+  if(typeof drawMap==='function') drawMap();
 }
 function drawEdges(){
   const svg = $('#edges'); let h='';
@@ -461,6 +506,9 @@ function zoomAt(f,cx,cy){
   const ns=Math.min(2,Math.max(.3,V.s*f)); V.x=mx-(mx-V.x)*(ns/V.s); V.y=my-(my-V.y)*(ns/V.s); V.s=ns; applyView();
 }
 function fit(){
+  if(VIEW==='world' && MAP.box){ const vp=$('#vp').getBoundingClientRect(), b=MAP.box;
+    const s=Math.min(1.1,Math.max(.3,Math.min((vp.width-40)/(b.x1-b.x0),(vp.height-40)/(b.y1-b.y0))));
+    V.s=s; V.x=(vp.width-(b.x1-b.x0)*s)/2-b.x0*s; V.y=(vp.height-(b.y1-b.y0)*s)/2-b.y0*s; return applyView(); }
   const vp=$('#vp').getBoundingClientRect(); const as=S.graph?S.graph.agents:[];
   if(!as.length){ V.x=80;V.y=40;V.s=1; return applyView(); }
   const x0=Math.min(...as.map(a=>a.x)),y0=Math.min(...as.map(a=>a.y));
@@ -1320,7 +1368,9 @@ async function loadGrowth(force){
     const pid = S.pid, g = await api('/projects/'+pid+'/growth');
     if(pid!==S.pid) return;
     const before = WORLD.g && WORLD.g.pid===pid ? WORLD.g.stage : null;
+    const first = !WORLD.g || WORLD.g.pid!==pid;
     WORLD.g = {...g, pid};
+    if(first){ renderGrowth(); render(); fit(); }
     if(before!==null && g.stage>before && typeof celebrate==='function') celebrate(g);
   }catch(e){ return; }
   renderGrowth(); render();
@@ -1342,7 +1392,7 @@ function renderGrowth(){
     sel.innerHTML = Object.entries(WORLD.list.worlds).map(([k,v])=>`<option value="${k}">${esc(v.stages[0][0]+' '+v.name)}</option>`).join('');
   if(document.activeElement!==sel) sel.value = g.world;
 }
-$('#gWorld').onchange = async e=>{ if(!S.pid) return; await api('/projects/'+S.pid+'/world','PUT',{world:e.target.value}); await loadGrowth(true); loadProjects(); };
+$('#gWorld').onchange = async e=>{ if(!S.pid) return; await api('/projects/'+S.pid+'/world','PUT',{world:e.target.value}); await loadGrowth(true); fit(); loadProjects(); };
 $('#gTheme').onclick = ()=>{
   const d=document.documentElement, cur=d.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
   d.dataset.theme = cur==='light'?'dark':'light';
@@ -1369,12 +1419,165 @@ function rankBadge(a){
   return `<span class="n-rank" title="${esc(r.name)}: ${r.done} ${esc(wword('done','abgenommen'))}${r.next?' · nächster Rang ab '+r.next:''}">${r.icon}</span>`;
 }
 
+
+/* ---------- Welt-Karte (isometrisch, aus echten Daten) ---------- */
+const MAP = {TW:128, TH:64, teams:[], box:null, down:null};
+let VIEW = 'world';
+try{ VIEW = localStorage.getItem('hs-view') || 'world'; }catch(e){}
+function setView(v){
+  VIEW = v; try{ localStorage.setItem('hs-view', v); }catch(e){}
+  $('#app').classList.toggle('view-world', v==='world');
+  $('#gView').textContent = v==='world' ? '📐 Bauplan' : '🗺 Welt';
+  $('#gView').title = v==='world' ? 'Zum Bauplan (Knoten-Editor) wechseln' : 'Zur Welt-Karte wechseln';
+  hideBcard(); render(); fit();
+}
+$('#gView').onclick = ()=>setView(VIEW==='world'?'plan':'world');
+function narrowCheck(){ $('#app').classList.toggle('narrow', innerWidth<=820); }
+addEventListener('resize', narrowCheck); narrowCheck();
+
+function teamsOf(g){
+  // Ein Gebäude je Führungskraft (Agent mit Unterstellten) und eins für die oberste Ebene; Mitarbeiter ohne eigenes Team wohnen beim Vorgesetzten.
+  const kids = {}; g.agents.forEach(a=>{ if(a.parent_id) (kids[a.parent_id]=kids[a.parent_id]||[]).push(a); });
+  const roots = g.agents.filter(a=>!a.parent_id || !agentById(a.parent_id));
+  const teams = [], byLead = {};
+  const add = (lead, parentTeam)=>{ const t={lead, members:[], parent:parentTeam, kids:[]}; teams.push(t); byLead[lead.id]=t; if(parentTeam) parentTeam.kids.push(t); return t; };
+  const walk = (a, team)=>{ (kids[a.id]||[]).forEach(k=>{ if(kids[k.id]) walk(k, add(k, team)); else team.members.push(k); }); };
+  roots.forEach(r=>{ const t = add(r, null); walk(r, t); });
+  return teams;
+}
+function placeTeams(teams){
+  // Hauptgebäude in der Mitte, Teams im Ring darum, Unterteams nahe ihrem Team.
+  const used = new Set(), key=(x,y)=>x+','+y, step=4;
+  const ring = [];
+  for(let r=1;r<8;r++) for(let x=-r;x<=r;x++) for(let y=-r;y<=r;y++) if(Math.max(Math.abs(x),Math.abs(y))===r) ring.push([x*step,y*step]);
+  teams.forEach((t,i)=>{
+    let best=null, bd=1e9;
+    const px = t.parent ? t.parent.gx : 0, py = t.parent ? t.parent.gy : 0;
+    if(!t.parent && i===0 && !used.has(key(0,0))){ best=[0,0]; }
+    else for(const [x,y] of ring){ if(used.has(key(x,y))) continue; const d=Math.hypot(x-px,y-py)+Math.hypot(x,y)*.15; if(d<bd){bd=d;best=[x,y];} }
+    t.gx=best[0]; t.gy=best[1]; used.add(key(t.gx,t.gy));
+  });
+}
+function iso(gx,gy){ return {x:(gx-gy)*MAP.TW/2, y:(gx+gy)*MAP.TH/2}; }
+function teamState(t){
+  const all=[t.lead,...t.members], c={run:0,wait:0,appr:0,fail:0,done:0,paused:0};
+  all.forEach(a=>{ const k=a.counts||{}; c.run+=(k.running||0)+(k.queued||0); c.wait+=k.waiting_subtasks||0; c.appr+=k.waiting_approval||0; c.fail+=k.failed||0; c.done+=k.done||0; if(a.paused) c.paused++; });
+  c.icon = c.fail?'🔧':c.appr?'✋':c.run?'':c.wait?'⏳':c.done?'📦':'';
+  c.text = c.fail?`${c.fail} fehlgeschlagen`:c.appr?'wartet auf deine Freigabe':c.run?`${c.run} in Arbeit`:c.wait?'wartet auf Zulieferung':c.done?`${c.done} geliefert`:'bereit';
+  return c;
+}
+function shade(hex, f){ const n=parseInt(hex.slice(1),16); let r=n>>16,g=(n>>8)&255,b=n&255; const m=v=>Math.max(0,Math.min(255,Math.round(f>1? v+(255-v)*(f-1) : v*f))); return `rgb(${m(r)},${m(g)},${m(b)})`; }
+const HUES = ['#7c8aa5','#a57c7c','#7ca58a','#a5977c','#8a7ca5','#7ca3a5'];
+function buildingSvg(t, i, w){
+  const p=iso(t.gx,t.gy), hw=MAP.TW*.36, hh=MAP.TH*.36, st=teamState(t);
+  const stage=(WORLD.g&&WORLD.g.stage)||0, n=t.members.length+1;
+  const h = 34 + Math.min(n,8)*7 + stage*8 + (t.parent?0:14);
+  const base = t.parent ? HUES[i%HUES.length] : (w.colors.accent2||'#555');
+  const x=p.x, y=p.y, top=[[x,y-h-hh],[x+hw,y-h],[x,y-h+hh],[x-hw,y-h]];
+  const pts=a=>a.map(q=>q.join(',')).join(' ');
+  let roof='';
+  const wid = w===WORLD.list.worlds.guild ? 'guild' : w===WORLD.list.worlds.gizmo ? 'gizmo' : 'tycoon';
+  if(wid==='guild'){ const tip=[x,y-h-hh-34]; roof=`<polygon class="face" points="${pts([top[3],tip,top[2]])}" fill="${shade(w.colors.accent,.85)}"/><polygon class="face" points="${pts([top[2],tip,top[1]])}" fill="${shade(w.colors.accent,1.15)}"/>${t.parent?'':`<line x1="${x}" y1="${y-h-hh-34}" x2="${x}" y2="${y-h-hh-58}" stroke="${shade(w.colors.accent,.6)}" stroke-width="2"/><polygon points="${x},${y-h-hh-58} ${x+16},${y-h-hh-52} ${x},${y-h-hh-46}" fill="${w.colors.accent}"/>`}`; }
+  else if(wid==='gizmo'){ roof=`<ellipse class="face" cx="${x}" cy="${y-h}" rx="${hw*.75}" ry="${hh*.75}" fill="${shade(w.colors.accent,1.1)}"/><path class="face" d="M${x-hw*.75},${y-h} A${hw*.75},${hw*.75} 0 0 1 ${x+hw*.75},${y-h}" fill="${shade(w.colors.accent,1.25)}"/><circle cx="${x}" cy="${y-h-hw*.75-6}" r="4" fill="${w.colors.accent2}"/>`; }
+  else { roof=`<polygon class="face" points="${pts(top)}" fill="${shade(base,1.35)}"/><rect x="${x-hw*.55}" y="${y-h-hh-16}" width="${hw*1.1}" height="12" rx="3" fill="${w.colors.accent}"/>`; }
+  const wins=[]; const rows=Math.max(1,Math.floor((h-16)/18));
+  for(let r=0;r<rows;r++) for(const side of [-1,1]) for(let k=0;k<2;k++){
+    const fx = x + side*(hw*(0.25+0.4*k)), fy = y - h + 14 + r*18 + (side<0? hh*(1-(0.25+0.4*k)) : hh*(1-(0.25+0.4*k)));
+    wins.push(`<rect class="win" x="${fx-4}" y="${fy-4}" width="8" height="9" rx="1.5"/>`);
+  }
+  const smoke = st.run ? [0,0.8,1.6].map(d=>`<circle class="smoke" cx="${x+hw*.45}" cy="${y-h-hh}" r="6" style="animation-delay:${d}s"/>`).join('') : '';
+  const bname = (w.buildings[i%w.buildings.length]);
+  const title = t.parent ? (t.lead.role||bname) : wword('top','Leitung');
+  return `<g class="bld${st.run?' busy':''}${S.sel===t.lead.id?' sel':''}" data-team="${i}" tabindex="0" role="button" aria-label="${esc(t.lead.name)}: ${esc(st.text)}">
+    <polygon class="face" points="${pts([[x,y-hh*1.25],[x+hw*1.25,y],[x,y+hh*1.25],[x-hw*1.25,y]])}" fill="${shade(w.colors.accent2,.5)}" opacity=".18"/>
+    <polygon class="face" points="${pts([top[3],top[2],[x,y+hh],[x-hw,y]])}" fill="${shade(base,.82)}"/>
+    <polygon class="face" points="${pts([top[2],top[1],[x+hw,y],[x,y+hh]])}" fill="${shade(base,1.08)}"/>
+    ${wid==='tycoon'?'':`<polygon class="face" points="${pts(top)}" fill="${shade(base,1.25)}"/>`}
+    ${wins.join('')}${roof}${smoke}
+    ${st.icon?`<text class="state" x="${x}" y="${y-h-hh-(wid==='guild'?40:22)}">${st.icon}</text>`:''}
+    <text class="lbl" x="${x}" y="${y+hh+46}">${esc(t.lead.name)}</text>
+    <text class="lbl2" x="${x}" y="${y+hh+61}">${esc(title)} · ${esc(st.text)}</text>
+  </g>`;
+}
+function figuresSvg(t){
+  const p=iso(t.gx,t.gy), list=[t.lead,...t.members], out=[];
+  list.forEach((a,k)=>{
+    const n=list.length, gap=Math.min(22, (MAP.TW*1.3)/Math.max(1,n-1));
+    const fx = p.x + (k-(n-1)/2)*gap, fy = p.y + MAP.TH*.36 + 18 + (k%2)*4;
+    const c=a.counts||{}, busy=(c.running||0)+(c.queued||0);
+    const col = a.paused ? '#888' : busy ? 'var(--blue)' : (a.id===t.lead.id ? 'var(--accent)' : 'var(--accent2)');
+    const r = WORLD.g && WORLD.g.ranks && WORLD.g.ranks[a.id];
+    out.push(`<g class="fig" data-agent="${a.id}" tabindex="0" role="button" aria-label="${esc(a.name)}"><title>${esc(a.name)} – ${esc(a.role||'')}${r?' · '+r.icon+' '+r.name:''}${busy?' · arbeitet':''}</title>
+      <ellipse cx="${fx}" cy="${fy+9}" rx="7" ry="3" fill="rgba(0,0,0,.25)"/>
+      <rect x="${fx-5}" y="${fy-4}" width="10" height="12" rx="4" fill="${col}"/>
+      <circle cx="${fx}" cy="${fy-9}" r="5" fill="#f2d7b6" stroke="rgba(0,0,0,.3)"/>
+      ${r&&r.rank>0?`<text x="${fx+9}" y="${fy-8}" font-size="10">${r.icon}</text>`:''}</g>`);
+  });
+  return out.join('');
+}
+function drawMap(){
+  const g=S.graph, w=wdef(), svg=$('#map');
+  if(!g || !w || VIEW!=='world'){ svg.innerHTML=''; $('#wlist').innerHTML=''; MAP.box=null; return; }
+  const teams = teamsOf(g); placeTeams(teams); MAP.teams = teams;
+  if(!teams.length){ svg.innerHTML=''; $('#wlist').innerHTML=`<div class="wcard">Noch niemand da. Wechsle zum Bauplan (📐) und lege den ersten Agenten an.</div>`; MAP.box=null; return; }
+  const R = Math.max(4, ...teams.map(t=>Math.max(Math.abs(t.gx),Math.abs(t.gy)))+2);
+  const tiles=[];
+  for(let gx=-R;gx<=R;gx++) for(let gy=-R;gy<=R;gy++){
+    const p=iso(gx,gy), hw=MAP.TW/2, hh=MAP.TH/2;
+    tiles.push(`<polygon class="tile" points="${p.x},${p.y-hh} ${p.x+hw},${p.y} ${p.x},${p.y+hh} ${p.x-hw},${p.y}" fill="var(--ground)"/>`);
+  }
+  const roads=[];
+  teams.forEach(t=>{ if(!t.parent) return; const a=iso(t.parent.gx,t.parent.gy), b=iso(t.gx,t.gy), m=iso(t.gx,t.parent.gy);
+    const busy = teamState(t).run || teamState(t).wait;
+    const d=`M${a.x},${a.y} L${m.x},${m.y} L${b.x},${b.y}`;
+    roads.push(`<path class="road" d="${d}"/>`+(busy?`<path class="road flow" d="${d}"/>`:'')); });
+  const order = teams.map((t,i)=>[t,i]).sort((A,B)=>(A[0].gx+A[0].gy)-(B[0].gx+B[0].gy));
+  const blds = order.map(([t,i])=>buildingSvg(t,i,w)+figuresSvg(t)).join('');
+  const ps = teams.map(t=>iso(t.gx,t.gy));
+  MAP.box = {x0:Math.min(...ps.map(q=>q.x))-MAP.TW*1.1, x1:Math.max(...ps.map(q=>q.x))+MAP.TW*1.1,
+             y0:Math.min(...ps.map(q=>q.y))-230, y1:Math.max(...ps.map(q=>q.y))+90};
+  svg.innerHTML = `<g>${tiles.join('')}</g><g>${roads.join('')}</g><g>${blds}</g>`;
+  // Handy: Liste statt Karte
+  $('#wlist').innerHTML = teams.map((t,i)=>{ const st=teamState(t), title=t.parent?(t.lead.role||w.buildings[i%w.buildings.length]):wword('top','Leitung');
+    return `<div class="wcard"><div class="wh"><span class="ico">${st.icon||(t.parent?'🏠':(WORLD.g?WORLD.g.icon:'🏛'))}</span><div style="flex:1;min-width:0"><b>${esc(t.lead.name)}</b><div style="color:var(--mute);font-size:12px">${esc(title)} · ${esc(st.text)}</div></div></div>
+      <div class="chips">${[t.lead,...t.members].map(a=>{ const r=WORLD.g&&WORLD.g.ranks&&WORLD.g.ranks[a.id]; const c=a.counts||{}; const busy=(c.running||0)+(c.queued||0); return `<button data-agent="${a.id}">${r?r.icon+' ':''}${esc(a.name)}${busy?' ▶':''}${a.paused?' ⏸':''}</button>`; }).join('')}</div></div>`; }).join('');
+}
+function hideBcard(){ $('#bcard').classList.remove('on'); }
+function showBcard(i, cx, cy){
+  const t = MAP.teams[i]; if(!t) return; const w=wdef(), st=teamState(t);
+  const open = [t.lead,...t.members].reduce((n,a)=>{ const c=a.counts||{}; return n+(c.running||0)+(c.queued||0)+(c.waiting_subtasks||0)+(c.todo||0); },0);
+  const el=$('#bcard');
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><h4 style="flex:1">${esc(t.lead.name)}</h4><button class="icon-btn" id="bcx" aria-label="Schließen">✕</button></div>
+    <div style="color:var(--mute);font-size:12px;margin-bottom:8px">${esc(t.parent?(w.words.lead):(w.words.top))} · ${esc(st.text)} · ${open} offen · ${st.done} ${esc(w.words.done)}</div>
+    ${[t.lead,...t.members].map(a=>{ const r=WORLD.g&&WORLD.g.ranks&&WORLD.g.ranks[a.id]; const c=a.counts||{}; return `<button class="mem" data-agent="${a.id}">${r?r.icon:'•'} ${esc(a.name)} <small>${esc(a.role||'')}${(c.running||0)+(c.queued||0)?' · ▶':''}${a.paused?' · ⏸':''}</small></button>`; }).join('')}
+    <div class="row" style="margin-top:10px"><button class="btn sm pri" data-act="tasks">＋ ${esc(w.words.task||'Auftrag')}</button><button class="btn sm" data-act="chat">💬 Chat</button><button class="btn sm" data-act="set">Einstellungen</button></div>`;
+  const vp=$('#vp').getBoundingClientRect();
+  el.style.left = Math.max(10, Math.min(cx - vp.left + 12, vp.width - 330))+'px';
+  el.style.top = Math.max(10, Math.min(cy - vp.top - 20, vp.height - 260))+'px';
+  el.classList.add('on');
+  el.querySelector('#bcx').onclick = hideBcard;
+  el.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{ S.tab=b.dataset.act; hideBcard(); selectAgent(t.lead.id); });
+  el.querySelectorAll('.mem').forEach(b=>b.onclick=()=>{ hideBcard(); selectAgent(+b.dataset.agent); });
+}
+$('#vp').addEventListener('pointerdown', e=>{ MAP.down={x:e.clientX,y:e.clientY}; }, true);
+function mapPick(e){
+  if(MAP.down && Math.hypot(e.clientX-MAP.down.x, e.clientY-MAP.down.y)>6) return;  // war Verschieben, kein Tippen
+  const f=e.target.closest('.fig, #wlist [data-agent]'); if(f){ hideBcard(); selectAgent(+f.dataset.agent); return; }
+  const b=e.target.closest('.bld'); if(b){ showBcard(+b.dataset.team, e.clientX, e.clientY); return; }
+  if(!e.target.closest('#bcard')) hideBcard();
+}
+$('#map').addEventListener('click', mapPick);
+$('#wlist').addEventListener('click', mapPick);
+$('#map').addEventListener('keydown', e=>{ if(e.key!=='Enter' && e.key!==' ') return; const f=e.target.closest('.fig'); if(f){ e.preventDefault(); selectAgent(+f.dataset.agent); return; }
+  const b=e.target.closest('.bld'); if(b){ e.preventDefault(); const r=b.getBoundingClientRect(); showBcard(+b.dataset.team, r.left+r.width/2, r.top+r.height/2); } });
+
 /* ---------- Start ---------- */
 (async function init(){
   applyView();
   S.info = await api('/info');
   $('#btnLogout').style.display = S.info.auth ? '' : 'none';
   S.providers = await api('/providers');
+  setView(VIEW);
   await loadProjects();
   if(S.projects.length) await openProject(S.projects[0].id);
   setInterval(()=>{ if(!document.hidden) refresh(); }, 2500);

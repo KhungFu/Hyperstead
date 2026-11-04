@@ -305,6 +305,8 @@ Arayüz adları Almanca gösterir.
 
 **Kullanım:** Çalışma alanının üstündeki çubuk aşamayı, bir sonraki aşamaya ilerlemeyi ve önemli sayıları gösterir. Sağda dünyayı seçer, açık ve koyu arasında geçiş yapar (🌓) ve ⓘ ile aşamalar, puanlar ve rütbeler hakkındaki özeti açarsınız. Her ajanın rütbesi kartında simge olarak görünür.
 
+**Dünya haritası:** Çubuktaki 🗺 / 📐 ile dünya haritası ve plan (düğüm editörü) arasında geçiş yaparsınız. Haritada her yönetici ekibiyle birlikte bir binadır, ajanlar önünde figür olarak durur, yollar kimin kime rapor verdiğini gösterir. Duman ve ışık "çalışıyor", 🔧 başarısız, ✋ onayınızı bekliyor, ⏳ alt görevleri bekliyor, 📦 teslim edildi demektir. Bir binaya dokunmak ekibi ve işlemleri gösterir, bir figüre dokunmak ajanı açar. Telefonda harita yerine binaların listesi görünür. Cihaz azaltılmış hareket isterse animasyonlar durur.
+
 **Puanlar:** teslimat ilk seferde kabul +10, düzeltmeden sonra +5, görev postada tamamlandı olarak işaretlendi +20,
 başarısız −3, yeniden çalışma istendi −5. Aşamalar 0 / 100 / 300 / 700 / 1500 puandan başlar. Mevcut projelerin
 geçmiş başarıları otomatik olarak sayılır. Bir aşama atlaması Telegram ile bir kez bildirilir.

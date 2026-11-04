@@ -306,6 +306,8 @@ Interfejs prikazuje nazive na nemačkom.
 
 **Upotreba:** Traka iznad površine prikazuje nivo, napredak do sledećeg nivoa i najvažnije brojeve. Desno birate svet, prebacujete između svetlog i tamnog prikaza (🌓) i sa ⓘ otvarate pregled nivoa, poena i rangova. Rang svakog agenta je prikazan kao ikona na njegovoj kartici.
 
+**Mapa sveta:** Sa 🗺 / 📐 u traci prelazite između mape sveta i nacrta (uređivač čvorova). Na mapi je svaki rukovodilac sa svojim timom jedna zgrada, agenti stoje ispred nje kao figure, putevi pokazuju ko kome podnosi izveštaj. Dim i svetlo znače "radi", 🔧 neuspešno, ✋ čeka vaše odobrenje, ⏳ čeka podzadatke, 📦 isporučeno. Dodir na zgradu prikazuje tim i radnje, dodir na figuru otvara agenta. Na telefonu se umesto mape prikazuje lista zgrada. Animacije se zaustavljaju kada uređaj traži smanjeno kretanje.
+
 **Poeni:** isporuka prihvaćena iz prve +10, posle ispravke +5, zadatak označen kao završen u pošti +20,
 neuspešno −3, zatražena dorada −5. Nivoi od 0 / 100 / 300 / 700 / 1500 poena. Postojeći projekti automatski
 dobijaju svoje dosadašnje uspehe. Prelazak na viši nivo se jednom javlja preko Telegrama.
