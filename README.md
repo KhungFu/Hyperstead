@@ -469,6 +469,7 @@ Läuft ohne Internet und ohne Keys (Anbieter `mock`, eigene Datenbank).
 - **Selbst hochladen:** 📁 Dateien → ☁️ neben der Datei → Ziel und Ordner wählen. Du bekommst den Link.
 - **Agenten:** Recht **„Darf in die Cloud hochladen“** (setzt nur du). Werkzeug `cloud_upload`; jeder Upload wartet unter ✋ Freigaben,
   dazu kommt eine Telegram-Nachricht. Nach dem Upload steht der Link im Auftrag.
+- **Einrichtung mit dem CEO:** Frag den obersten Chef im 💬 Chat, z. B. „Hilf mir, GitHub einzurichten“. Er kennt den aktuellen Stand jedes Dienstes und die Anleitung und führt dich Schritt für Schritt durch. Tokens schreibst du nie in den Chat, sondern selbst in `.env`.
 - **Telegram:** `/datei` schickt dir Dateien bis 50 MB aufs Handy, nur wenn du es anklickst oder freigibst.
 - GitHub: bis 50 MB als Datei im Repo, größere als Anhang an das Release `paperclip-ablage` (bis 2 GB). Google Drive: nur Ordner und
   Dateien, die PaperclipLite selbst angelegt hat (Recht `drive.file`). OneDrive: jeder Ordner. Nur gegen simulierte Dienste getestet.

@@ -469,6 +469,7 @@ Runs without internet and without keys (provider `mock`, own database).
 - **Upload yourself:** 📁 Files → ☁️ next to the file → choose target and folder. You get the link.
 - **Agents:** permission **"May upload to the cloud"** (only you set it). Tool `cloud_upload`; every upload waits under ✋ Approvals,
   plus a Telegram message. After the upload the link is in the task.
+- **Setup with the CEO:** ask the top boss in 💬 Chat, e.g. "Help me set up GitHub". It knows the current status of each service and the guide and walks you through step by step. You never write tokens into the chat, you enter them in `.env` yourself.
 - **Telegram:** `/datei` sends you files up to 50 MB on your phone, only when you click or approve it.
 - GitHub: up to 50 MB as a file in the repo, larger ones as an attachment to the release `paperclip-ablage` (up to 2 GB). Google Drive: only
   folders and files that PaperclipLite created itself (scope `drive.file`). OneDrive: any folder. Only tested against simulated services.

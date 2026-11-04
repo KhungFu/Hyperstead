@@ -237,3 +237,16 @@ def test_telegram_datei_command(env, monkeypatch):
             break
         time.sleep(0.02)
     assert sorted(sent) == ["bild.png", "plan.pdf"]
+
+
+def test_ceo_chat_knows_cloud_setup(env):
+    env.setenv("GITHUB_UPLOAD_TOKEN", "ghp_x")
+    env.setenv("GITHUB_UPLOAD_REPO", "abi/ablage")
+    pid = make_project("Ablage")
+    ceo = make_agent(pid, "CEO")
+    kid = make_agent(pid, "Helfer", parent=ceo)
+    p = A.q1("SELECT * FROM projects WHERE id=?", (pid,))
+    txt = A.chat_system(A.q1("SELECT * FROM agents WHERE id=?", (ceo,)), p)
+    assert "CLOUD-UPLOAD" in txt and "GitHub: bereit" in txt and "GDRIVE_CLIENT_ID" in txt and "NIE" in txt
+    assert "ghp_x" not in txt
+    assert "CLOUD-UPLOAD" not in A.chat_system(A.q1("SELECT * FROM agents WHERE id=?", (kid,)), p)

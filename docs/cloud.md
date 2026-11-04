@@ -5,6 +5,7 @@ PaperclipLite kann fertige Dateien aus einem Projekt hochladen:
 - **Du selbst:** 📁 Dateien → Knopf ☁️ neben der Datei → Ziel und Ordner wählen → Hochladen. Danach bekommst du den Link.
 - **Agenten:** nur mit dem Recht **„Darf in die Cloud hochladen“** (setzt nur du, der CEO kann es nicht vergeben).
   Jeder Upload eines Agenten wartet unter ✋ Freigaben auf deinen Klick (dazu kommt eine Telegram-Nachricht). Der Link steht dann im Auftrag.
+- **Mit dem CEO einrichten:** Frag den obersten Chef im 💬 Chat (z. B. „Hilf mir, GitHub einzurichten“). Er kennt den Stand jedes Dienstes und diese Anleitung und führt dich Schritt für Schritt. Tokens gehören nie in den Chat, nur in `.env`.
 - **Am Handy:** `/datei` im Telegram-Chat zeigt die neuesten Dateien des Projekts als Knöpfe, `/datei plan` sucht nach „plan“.
   Telegram nimmt Dateien bis 50 MB.
 
