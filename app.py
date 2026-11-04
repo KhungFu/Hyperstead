@@ -4774,7 +4774,7 @@ CLOUD_GUIDE = {
     "github": ("1) github.com: + -> New repository, Name z. B. paperclip-ablage, Private, 'Add a README file' anhaken, Create. "
                "2) Profilbild -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens -> Generate new token: "
                "Name Hyperstead, Repository access 'Only select repositories' = das Ablage-Repo, Permissions -> Contents: Read and write. "
-               "3) In .env: GITHUB_UPLOAD_TOKEN=github_pat_... und GITHUB_UPLOAD_REPO=besitzer/paperclip-ablage. NICHT das Repo paperclip-lite nehmen."),
+               "3) In .env: GITHUB_UPLOAD_TOKEN=github_pat_... und GITHUB_UPLOAD_REPO=besitzer/paperclip-ablage. NICHT das Programm-Repo hyperstead (frueher paperclip-lite) nehmen."),
     "gdrive": ("1) console.cloud.google.com: neues Projekt Hyperstead. 2) APIs & Dienste -> Bibliothek -> Google Drive API aktivieren. "
                "3) OAuth-Zustimmungsbildschirm: Extern, App-Name, E-Mail; danach unter Zielgruppe 'App veroeffentlichen' (sonst laeuft die Anmeldung "
                "nach 7 Tagen ab). 4) Clients -> Client erstellen, Typ 'Fernseher und Geraete mit begrenzter Eingabe'. 5) In .env: GDRIVE_CLIENT_ID und "
@@ -4801,8 +4801,8 @@ def cloud_setup_block(agent, pid):
     fold = cloud_folders(pid)
     return ("\nCLOUD-UPLOAD (Stand jetzt). Fragt der Besitzer danach, fuehre ihn Schritt fuer Schritt durch die Einrichtung: immer nur EINEN "
             "Schritt nennen, auf seine Rueckmeldung warten, bei Fehlern nachfragen, was genau auf dem Bildschirm steht. Bitte ihn NIE, Tokens, "
-            "Schluessel oder Passwoerter in den Chat zu schreiben: die traegt er selbst in die Datei .env ein (Pi: ~/paperclip-lite/.env, "
-            "Laptop: .env im Hyperstead-Ordner) und startet Hyperstead danach neu. Ob es geklappt hat, zeigt das Fenster ☁️ Cloud "
+            "Schluessel oder Passwoerter in den Chat zu schreiben: die traegt er selbst in die Datei .env ein (im Hyperstead-Ordner, z. B. Pi: ~/hyperstead/.env oder "
+            "~/paperclip-lite/.env bei aelteren Installationen) und startet Hyperstead danach neu. Ob es geklappt hat, zeigt das Fenster ☁️ Cloud "
             "(oder frag ihn, dann siehst du den Stand hier beim naechsten Mal). Zielordner dieses Projekts: "
             + ", ".join(f"{CLOUD_LABELS[k]} {v or 'oberste Ebene'}" for k, v in fold.items()) + ". Ausfuehrliche Anleitung: docs/cloud.md.\n"
             + "\n".join(lines))
